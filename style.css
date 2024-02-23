@@ -1,1 +1,33 @@
+/* Base Fonts */
+body, main {
+    font-family: 'Inter', sans-serif; /* Set your preferred font stack */
+    font-size: 16px; /* Set base font size */
+    line-height: 1.6; /* Set line height */
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Suez One', sans-serif; /* Example: Set headings font */
+    /* Additional styles for headings if needed */
+}
+
+p {
+    /* Additional styles for paragraphs if needed */
+}
+
+/* Base Colors */
+body {
+    color: #333; /* Set default text color */
+    background-color: #fff; /* Set default background color */
+}
+
+a {
+    color: #007bff; /* Set link color */
+    text-decoration: none; /* Remove underline by default */
+}
+
+a:hover {
+    text-decoration: underline; /* Underline links on hover */
+}
+
+/* Additional styles for other elements */
 
