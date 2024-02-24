@@ -1,10 +1,103 @@
-/* navbar.css */
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
 .navbar {
-    display: inline-flex;
-    position: absolute;
-    width: 952px;
-    height: 103px;
-    left: -22px;
-    top: 0px;
-  }
-  
+  background-color: #fff;
+  color: black;
+  padding: 10px 20px;
+  width: 100%;
+  box-sizing: border-box;
+  display:flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Base Fonts */
+body, main {
+  font-family: 'Inter', sans-serif; /* Set your preferred font stack */
+  font-size: 16px; /* Set base font size */
+  line-height: 1.6; /* Set line height */
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Suez One', sans-serif; /* Example: Set headings font */
+  /* Additional styles for headings if needed */
+}
+
+.navbar img {
+  height: 40px; /* Adjust the height of the logo as needed */
+  margin-right: 10px; /* Add some spacing between the logo and the text */
+}
+
+.navbar h1 {
+  margin: 0;
+  font-size: 42px;
+  margin-right: 10rem;
+}
+
+.nav-links {
+  list-style: none; /* Remove bullet points from the list */
+  margin: 0;
+  padding: 0;
+}
+
+.nav-links li {
+  display: inline-block; /* Display list items horizontally */
+  margin-right: 20px; /* Add some spacing between each navigation link */
+}
+
+.nav-links li:last-child {
+  margin-right: 0; /* Remove margin from the last navigation link */
+}
+
+.nav-links li a {
+  color: black;
+  text-decoration: none;
+  background: #F49097;
+  padding: 2px 4px;
+  border-radius: 10%;
+  font-size: 1.5rem;
+  border-bottom: 2px solid black;
+}
+
+.nav-links li a:hover {
+  text-decoration: underline; /* Underline navigation links on hover */
+}
+
+
+
+
+
+
+/* Highlight
+
+People
+*/
+
+/* Primary
+
+Ferns
+*/
+border-bottom: 2px solid #804A31;
+border-radius: 4px;
+
+
+/* Route */
+
+position: absolute;
+left: 2.13%;
+right: 0%;
+top: 0%;
+bottom: 0%;
+
+font-family: 'Inter';
+font-style: normal;
+font-weight: 300;
+font-size: 24px;
+line-height: 29px;
+
+/* Dark */
+color: #060607;
+

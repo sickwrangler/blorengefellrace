@@ -1,8 +1,26 @@
+:root {
+    --main-color: #804A31;
+    --secondary-color:#78A04F;
+    --highlight-color: #F49097;
+    --light-color: #E9F1F7;
+    --dark-color: #060607;
+  }
+
 /* Base Fonts */
 body, main {
     font-family: 'Inter', sans-serif; /* Set your preferred font stack */
     font-size: 16px; /* Set base font size */
     line-height: 1.6; /* Set line height */
+    overflow-x: hidden;
+    width: 100%;
+}
+
+main {
+    width: 80%; /* Set the width of the main element */
+    margin: 0 auto; /* Center the main element horizontally */
+    position: absolute; /* Position the main element */
+    left: 50%; /* Move the main element horizontally to the center */
+    transform: translateX(-50%); /* Correct the position by moving the element back 50% of its own width */
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -18,7 +36,18 @@ p {
 body {
     color: #333; /* Set default text color */
     background-color: #fff; /* Set default background color */
+    background-image: url('images/blorenge_contour_lines.png');
+    background-repeat: repeat-y;
+    background-size: auto;
+
+    
 }
+
+/* Flip every other repetition of the image */
+body:nth-child(odd) {
+    transform: scaleY(-1);
+}
+
 
 a {
     color: #007bff; /* Set link color */
@@ -31,3 +60,30 @@ a:hover {
 
 /* Additional styles for other elements */
 
+/* Intro block */ 
+.homeintro {
+    display: flex;
+}
+
+.homeintro_summary {
+padding: 15px;
+margin: 10px;
+border: 3px var(--secondary-color) solid;
+}
+
+.homeintro_img {
+width:40rem;
+height:20rem;
+object-fit: cover;
+object-position: 80% 20%;
+}
+
+/* Footer */ 
+.footer-iframe {
+    position: absolute; /* Position the iframe relative to the viewport */
+    bottom: 0; /* Align the iframe to the bottom of the viewport */
+    left: 0; /* Align the iframe to the left side of the viewport */
+    width: 100%; /* Set the width of the iframe to span the entire viewport */
+    height: 200px; /* Set the heigh t of the iframe */
+    border: none; /* Remove border */
+}

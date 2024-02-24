@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Your Fell Race</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="style.css">
     <link href='https://fonts.googleapis.com/css?family=Inter' rel='stylesheet'>
     <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,9 +14,10 @@
     <!-- Your content goes here -->
     <script src="script.js"></script>
     <!-- Include the navigation bar component -->
-    <iframe src="components/navbar/navbar.html" frameborder="0" scrolling="no"></iframe>
+    <iframe src="components/navbar/navbar.html" frameborder="0" scrolling="no" width="100%"></iframe>
     <main>
-    <div>
+    <div class="homeintro">
+        <div class="homeintro_summary">
         <p>Information <svg id='Info_24' width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink'><rect width='24' height='24' stroke='none' fill='#000000' opacity='0'/>
 
 
@@ -37,10 +38,11 @@
 <br>
 Cost - £5.50 <br>
 Minimum age - 16 </p>
-    </div>
-    <div>
+</div>
+            <div>
         <p>Welcome to The Blorenge, where the spirit of fell running meets the thrill of conquering untamed landscapes. If you're already familiar with the exhilaration of navigating rugged terrain and crave the rush of challenging ascents and descents, this is the event for you.</p>
-        <img src="images/blorenge_ascent_male_group.jpeg" alt="Runner leading group up blorenge ascent">
+        <img class="homeintro_img" src="images/blorenge_ascent_male_group.jpeg" alt="Runner leading group up blorenge ascent">
+        </div>
     </div>
     <div>
         <h2>Determination</h2>
@@ -60,9 +62,10 @@ Minimum age - 16 </p>
     <div>
         <img src="images/blorenge_paraglider.jpeg" alt="Paraglider above the blorenge">
     </div>
-</main>
+
       <!-- Footer -->
-    <iframe src="components/footer/footer.html" frameborder="0" scrolling="no"></iframe>
+    <iframe class="footer-iframe" src="components/footer/footer.html" frameborder="0" scrolling="no"></iframe>
+</main>
 </body>
 </html>
 
