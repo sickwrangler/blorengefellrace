@@ -16,7 +16,7 @@ body, main {
 }
 
 main {
-    width: 80%; /* Set the width of the main element */
+    width: 70%; /* Set the width of the main element */
     margin: 0 auto; /* Center the main element horizontally */
     position: absolute; /* Position the main element */
     left: 50%; /* Move the main element horizontally to the center */
@@ -30,6 +30,7 @@ h1, h2, h3, h4, h5, h6 {
 
 p {
     /* Additional styles for paragraphs if needed */
+    word-wrap: break-word;
 }
 
 /* Base Colors */
@@ -76,6 +77,32 @@ width:40rem;
 height:20rem;
 object-fit: cover;
 object-position: 80% 20%;
+}
+
+.homeintro_p1 {
+    margin: 0rem 1rem;
+}
+
+.home_banner { 
+ display:flex;
+ align-items: center;
+ background-color: var(--secondary-color);
+}
+
+.home_banner > h2{
+  margin-right: 10rem;
+  margin-left: 5rem; 
+  color:  var(--main-color)
+}
+.home_banner > p{
+    margin:1rem; 
+  }
+
+.home_banner_img { 
+    width: 100%;
+    height:20rem;
+    object-fit: cover;
+    object-position: 80% 20%;
 }
 
 /* Footer */ 

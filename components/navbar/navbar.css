@@ -12,6 +12,7 @@ body, html {
   display:flex;
   align-items: center;
   justify-content: space-between;
+  border-bottom: 3px #804A31 solid;
 }
 
 /* Base Fonts */
@@ -67,37 +68,4 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 
-
-
-
-
-/* Highlight
-
-People
-*/
-
-/* Primary
-
-Ferns
-*/
-border-bottom: 2px solid #804A31;
-border-radius: 4px;
-
-
-/* Route */
-
-position: absolute;
-left: 2.13%;
-right: 0%;
-top: 0%;
-bottom: 0%;
-
-font-family: 'Inter';
-font-style: normal;
-font-weight: 300;
-font-size: 24px;
-line-height: 29px;
-
-/* Dark */
-color: #060607;
 
