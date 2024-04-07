@@ -1,0 +1,52 @@
+.arrow_LR {
+    position: absolute;
+    max-width: 50%;
+    height: auto;
+}
+
+@media (min-width: 750px) {
+    .arrow_LR {
+        width: 100%;
+    }
+}
+
+.arrow_RL {
+    position: absolute; 
+    max-width: 40%;
+    height: auto;
+}
+
+@media (min-width: 750px) {
+    .arrow_RL {
+        width: 100%;
+    }
+}
+
+.route_img { 
+    max-width:120%;
+    height:auto;
+    object-fit: cover;
+    object-position: 80% 20%;
+}
+
+.route_container { 
+max-height: 100%;
+max-width: 100%;
+}
+
+.assessment-iframe-container {
+    display: flex;
+    justify-content: center; /* Center horizontally */
+    align-items: center; /* Center vertically */
+}
+
+.assessment-iframe {
+height: 4300px;
+width: 80%;
+}
+
+@media (min-width: 750px) {
+    .assessment-iframe  {
+        height: 2400px;
+    }
+}

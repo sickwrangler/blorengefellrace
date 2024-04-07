@@ -32,10 +32,22 @@ h1, h2, h3, h4, h5, h6 {
   margin-right: 10px; /* Add some spacing between the logo and the text */
 }
 
+@media (max-width: 795px) {
+  .logo_navbar {
+      display: none; /* Hide the element on mobile devices */
+  }
+}
+
 .navbar h1 {
   margin: 0;
   font-size: 42px;
-  margin-right: 10rem;
+  margin-right: 15vw;
+}
+
+@media screen and (max-width: 950px) {
+  .navbar h1 {
+      margin-right: 5vw; /* Decrease margin for smaller screens */
+  }
 }
 
 .nav-links {
