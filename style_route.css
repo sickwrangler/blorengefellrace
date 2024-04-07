@@ -6,8 +6,12 @@
 
 @media (min-width: 750px) {
     .arrow_LR {
-        width: 100%;
+        max-width: 100%;
     }
+}
+
+figcaption{
+    margin-bottom: 10vh;
 }
 
 .arrow_RL {
@@ -23,16 +27,23 @@
 }
 
 .route_img { 
-    max-width:120%;
-    height:auto;
+    max-width:60%;
+    height: auto;
     object-fit: cover;
     object-position: 80% 20%;
 }
 
 .route_container { 
-max-height: 100%;
-max-width: 100%;
+display: flex;
+flex-direction: row;
+max-height: 65vh;
 }
+
+.route_centre_text { 
+  align-content: center ;
+flex:1;
+margin-left:10vh;
+  }
 
 .assessment-iframe-container {
     display: flex;
@@ -50,3 +61,4 @@ width: 80%;
         height: 2400px;
     }
 }
+

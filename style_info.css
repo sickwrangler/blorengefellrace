@@ -3,5 +3,9 @@
         height:30rem;
         object-fit: cover;
         object-position: 60% 100%;
-
 }
+
+.transport_map_img {
+        max-width: 75%;
+        max-height: 75%;
+    }

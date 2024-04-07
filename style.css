@@ -80,10 +80,11 @@ a:hover {
     column-count: 2; /* Divide content into two columns */
     column-gap: 20px; /* Add space between columns */
     display: flex;
+    max-height: 20% ;
 }
 
 .column {
-    width: 100%;
+    width: 100%;    
     display: flex; /* Use flexbox */
     flex-direction: column; /* Stack items vertically */
     align-items: flex-start; /* Align items to the start of the column */
@@ -92,20 +93,22 @@ a:hover {
 }
 
 .map_img{
-    width: 80%;
+    max-width: 65%;
     height:auto;    
+}
+
+figure{
+    display: contents;
 }
 
 .center-wrapper {
     display: flex;
     justify-content: center; /* Horizontally center the content */
     align-items: center; /* Vertically center the content */
+    flex-direction: column;
   }
   
-  .center-wrapper img {
-    max-width: 100%; /* Ensure the image doesn't exceed its container's width */
-    max-height: 100%; /* Ensure the image doesn't exceed its container's height */
-  }
+
 
   .centre_text { 
     display: flex;
