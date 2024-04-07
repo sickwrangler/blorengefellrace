@@ -1,9 +1,10 @@
 :root {
-    --main-color: #804A31;
-    --secondary-color:#78A04F;
-    --highlight-color: #F49097;
-    --light-color: #E9F1F7;
-    --dark-color: #060607;
+    --main-color: rgb(128, 74, 49);
+    --secondary-color:rgb(120, 160, 79);
+    --secondary-color-code:120, 160, 79;
+    --highlight-color: rgb(244, 144, 151);
+    --light-color: rgb(233, 241, 247);
+    --dark-color: rgb(6, 6, 7);
   }
 
 /* Base Fonts */
@@ -16,9 +17,9 @@ body, main {
 }
 
 main {
-    width: 70%; /* Set the width of the main element */
+    width: 100%; /* Set the width of the main element */
     margin: 0 auto; /* Center the main element horizontally */
-    position: absolute; /* Position the main element */
+    position: relative; /* Position the main element */
     left: 50%; /* Move the main element horizontally to the center */
     transform: translateX(-50%); /* Correct the position by moving the element back 50% of its own width */
 }
@@ -27,6 +28,7 @@ h1, h2, h3, h4, h5, h6 {
     font-family: 'Suez One', sans-serif; /* Example: Set headings font */
     /* Additional styles for headings if needed */
 }
+
 
 p {
     /* Additional styles for paragraphs if needed */
@@ -40,8 +42,9 @@ body {
     background-image: url('images/blorenge_contour_lines.png');
     background-repeat: repeat-y;
     background-size: auto;
-
-    
+    display: flex;
+    flex-direction: column;
+    margin: 0;
 }
 
 /* Flip every other repetition of the image */
@@ -59,17 +62,45 @@ a:hover {
     text-decoration: underline; /* Underline links on hover */
 }
 
+
+/*re-usable spacing*/
+
+.space {
+    padding: 2rem 8rem;
+}
+
+.doublecolumn{
+    column-count: 2; /* Divide content into two columns */
+    column-gap: 20px; /* Add space between columns */
+}
+
+.column {
+    width: 100%;
+    display: flex; /* Use flexbox */
+    flex-direction: column; /* Stack items vertically */
+    align-items: flex-start; /* Align items to the start of the column */
+    min-height: 0; /* Ensure that the column can shrink if necessary */
+}
+
 /* Additional styles for other elements */
 
 /* Intro block */ 
 .homeintro {
     display: flex;
+    flex-direction: column;
+}
+
+@media (min-width: 900px) {
+    .homeintro {
+        flex-direction: row; /* When screen is wider, put items in a row */
+    }
 }
 
 .homeintro_summary {
 padding: 15px;
 margin: 10px;
 border: 3px var(--secondary-color) solid;
+text-align: center;
 }
 
 .homeintro_img {
@@ -86,9 +117,15 @@ object-position: 80% 20%;
 .home_banner { 
  display:flex;
  align-items: center;
- background-color: var(--secondary-color);
+ background-color: rgba(var(--secondary-color-code), 0.5);
+ flex-direction: column; /* By default, stack items */
 }
 
+@media (min-width: 700px) {
+    .home_banner {
+        flex-direction: row; /* When screen is wider, put items in a row */
+    }
+}
 .home_banner > h2{
   margin-right: 10rem;
   margin-left: 5rem; 
@@ -98,6 +135,10 @@ object-position: 80% 20%;
     margin:1rem; 
   }
 
+  .home_banner_img_div {
+    display:flex;
+  }
+
 .home_banner_img { 
     width: 100%;
     height:20rem;
@@ -105,9 +146,14 @@ object-position: 80% 20%;
     object-position: 80% 20%;
 }
 
+/* Nav */
+.nav-iframe{
+
+}
+
 /* Footer */ 
 .footer-iframe {
-    position: absolute; /* Position the iframe relative to the viewport */
+    position: relative; /* Position the iframe relative to the viewport */
     bottom: 0; /* Align the iframe to the bottom of the viewport */
     left: 0; /* Align the iframe to the left side of the viewport */
     width: 100%; /* Set the width of the iframe to span the entire viewport */

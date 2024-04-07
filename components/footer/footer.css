@@ -1,5 +1,35 @@
 .footer-content { 
     display: flex;
-
+    flex-direction: row;
+    align-items: center;
+    background-color: var(--secondary-color);
+    flex-direction: column; /* By default, stack items */
+    justify-content: center;
+    padding: 10px 10px 10px 10px;
 }
 
+@media (min-width: 600px) {
+    .footer-content{
+        flex-direction: row; /* When screen is wider, put items in a row */
+    }
+}
+.footer-content h3{
+    color: var(--main-color);
+}
+.footer-content li{
+color: var(--light-color);
+}
+
+.footer-content-left {
+    padding-right: 20px ;
+    border-right: 1px solid var(--light-color);
+}
+   .footer-content-right {
+    padding: 1rem 2rem;
+   }
+
+
+
+   body{
+    margin: 0;
+   }
