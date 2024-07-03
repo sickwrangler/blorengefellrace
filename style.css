@@ -116,6 +116,19 @@ figure{
   align-items: center; /* Center vertically */
   }
 
+
+  /* Base styles */
+.mobile-hidden {
+    display: block; /* Ensure the element is displayed by default */
+}
+
+/* Media query for mobile devices */
+@media (max-width: 767px) {
+    .mobile-hidden {
+        display: none !important ; /* Hide the element on devices with a width of 767px or less */
+    }
+}
+
 /* Additional styles for other elements */
 
 /* Intro block */ 
@@ -204,3 +217,4 @@ object-position: 80% 80%;
         height: 200px;
     }
 }
+
