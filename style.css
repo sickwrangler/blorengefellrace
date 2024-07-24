@@ -1,8 +1,10 @@
 :root {
     --main-color: rgb(128, 74, 49);
+    --main-color-code: 128, 74, 49;
     --secondary-color:rgb(120, 160, 79);
     --secondary-color-code:120, 160, 79;
     --highlight-color: rgb(244, 144, 151);
+    --highlight-color-code: 244, 144, 151;
     --light-color: rgb(233, 241, 247);
     --dark-color: rgb(6, 6, 7);
   }
@@ -10,7 +12,7 @@
 /* Base Fonts */
 body, main {
     font-family: 'Inter', sans-serif; /* Set your preferred font stack */
-    font-size: 16px; /* Set base font size */
+    font-size: 18px; /* Set base font size */
     line-height: 1.6; /* Set line height */
     overflow-x: hidden;
     width: 100%;
@@ -43,6 +45,18 @@ p {
     word-wrap: break-word;
 }
 
+p.noteAlt
+{
+     background-color: rgba(var(--highlight-color-code),0.5);
+     background-position: 9px 0px;
+     background-repeat: no-repeat;
+     border-left: solid 4px var(--main-color);
+     line-height: 18px;
+     overflow: hidden;
+     padding: 15px 60px;
+     font-weight: 900;
+}
+
 /* Base Colors */
 body {
     color: #333; /* Set default text color */
@@ -50,6 +64,7 @@ body {
     background-image: url('images/blorenge_contour_lines.png');
     background-repeat: repeat-y;
     background-size: auto;
+    background-position: center; /* Center the background image */
     display: flex;
     flex-direction: column;
     margin: 0;
