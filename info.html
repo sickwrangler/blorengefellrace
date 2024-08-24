@@ -18,12 +18,20 @@
   <!-- Header -->
   <!-- Include the navigation bar component here -->
   <iframe class="nav-iframe" src="components/navbar/navbar.html" frameborder="0" scrolling="no" width="100%"></iframe>
-
+  <header>
+    <div class="space">
+    <button onclick="scrollToSection('travel')"><h1>Travel</h1></button>
+    <button onclick="scrollToSection('kit')"><h1>Kit list</h1></button>
+    <button onclick="scrollToSection('kit swap')"><h1>Kit swap</h1></button>
+    <button onclick="scrollToSection('recce')"><h1>Recce</h1></button>
+    <!--<button onclick="scrollToSection('volunteer')"><h1>Volunteering</h1></button> -->
+    </div>
+  </header>
   <!-- Main Content -->
   <main>
-    <section>
+    <section id="travel">
       <div class="space">
-        <h1>Information</h1>
+       
         <h2>Getting to the start</h2>
         <p>How you get to the event matters! Our travel has the greatest impact on the environment. Over 90% of an event’s carbon footprint comes from a runner’s travel. Please consider an alternative lower impact form of transport to turn up to The Blorenge fell race. </p>
         </div>
@@ -41,7 +49,6 @@
 <h3>Public transport</h3>
 <h4>Train</h4>
 <p>Abergavenny train station is a 35 minute walk or 20 minute jog from the start. Abergavenny runs trains to and from: </p>
-
 <div class="doublecolumn">
   <div class="column">
 <ul>
@@ -60,14 +67,17 @@
 </ul>
 </div>
 </div>
+<p>For up-to-date train schedules and to book your tickets, visit <a href="https://www.thetrainline.com/search" target="_blank" rel="noopener noreferrer">Trainline</a>. It offers a comprehensive overview of train times and ticket options.</p>
+
 <h4>Bus</h4>
 <p>There are buses available to both Llanfoist and Abergaveny. Travel in style and get a jog in before the race.</p>
 <ul>
-  <li>X25 - Cardiff to Abergavenny via Merthyr - Once an hour </li>
-  <li>3 - Brynmawr to Abergavenny - One every 2 hours</li>
-  <li>X43 Brecon to Abergavenny - Once every 2 hours</li>
-  <li>X3 Cardiff to Abergavenny via Pontypool - Once an hour </li>
-</ul>
+  <li> <a href="https://www.stagecoachbus.com/plan-a-journey/journey-results/journey-details?a%5Blabel%5D=Cardiff%20City%20Centre%2C%20Cardiff&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.1777810399345694&a%5BGeocode%5D%5BLatitude%5D=51.48015731856602&a%5BFullText%5D=Cardiff%20City%20Centre%2C%20Cardiff&a%5BLocalityData%5D%5BLocalityId%5D=ZYX4036&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.033849498306547&b%5BGeocode%5D%5BLatitude%5D=51.81370851262217&b%5BFullText%5D=Llanfoist%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX25121&b%5Bid%5D=Llanfoist%2C%20Monmouthshire&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Cardiff%20City%20Centre%2C%20Cardiff&f=Llanfoist%2C%20Monmouthshire&i=Cardiff&h=Balanced%7C2024-04-27T12%3A40%3A00%7C2024-04-27T14%3A13%3A59" target="_blank">X25 - Cardiff to Abergavenny via Merthyr</a> </li>
+  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.1738223018156644&a%5BGeocode%5D%5BLatitude%5D=51.797468505700735&a%5BFullText%5D=Brynmawr%20Bus%20Station%2C%20Blaenau%20Gwent&a%5BLocalityData%5D%5BLocalityId%5D=ZYX3928&a%5Bid%5D=Brynmawr%20Bus%20Station%2C%20Blaenau%20Gwent&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.033849498306547&b%5BGeocode%5D%5BLatitude%5D=51.81370851262217&b%5BFullText%5D=Llanfoist%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX25121&b%5Bid%5D=Llanfoist%2C%20Monmouthshire&c=true&d=2024-04-27T11%3A30%3A00.000Z&e=Brynmawr%20Bus%20Station%2C%20Blaenau%20Gwent&f=Llanfoist%2C%20Monmouthshire&g%5BADULT%5D=1&g%5Btotal%5D=1&i=" target="_blank">3 - Brynmawr to Llanfoist</a></li>
+  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5Blabel%5D=Brecon%20Bus%20Station%2C%20Powys&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.3863311182082345&a%5BGeocode%5D%5BLatitude%5D=51.94676924126315&a%5BFullText%5D=Brecon%20Bus%20Station%2C%20Powys&a%5BLocalityData%5D%5BLocalityId%5D=ZYX25127&b%5Blabel%5D=Abergavenny%2C%20Monmouthshire&b%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&b%5Bicon%5D%5Bkey%5D=&b%5Bicon%5D%5Bref%5D=&b%5Bicon%5D%5Bprops%5D%5Btype%5D=location&b%5Bicon%5D%5B_owner%5D=&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.0175853347546093&b%5BGeocode%5D%5BLatitude%5D=51.82261693500055&b%5BFullText%5D=Abergavenny%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX3635&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Brecon%20Bus%20Station%2C%20Powys&f=Abergavenny%2C%20Monmouthshire&i=Brecon" target="_blank">X43 Brecon to Abergavenny</a></li>
+  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5Blabel%5D=Monmouth%2C%20Monmouthshire&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-2.714699253139374&a%5BGeocode%5D%5BLatitude%5D=51.81122666199038&a%5BFullText%5D=Monmouth%2C%20Monmouthshire&a%5BLocalityData%5D%5BLocalityId%5D=ZYX5483&b%5Blabel%5D=Abergavenny%2C%20Monmouthshire&b%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&b%5Bicon%5D%5Bkey%5D=&b%5Bicon%5D%5Bref%5D=&b%5Bicon%5D%5Bprops%5D%5Btype%5D=location&b%5Bicon%5D%5B_owner%5D=&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.0175853347546093&b%5BGeocode%5D%5BLatitude%5D=51.82261693500055&b%5BFullText%5D=Abergavenny%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX3635&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Monmouth%2C%20Monmouthshire&f=Abergavenny%2C%20Monmouthshire&i=Monmouth" target="_blank">Monmouth to Abergavenny</a></li>
+  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5Blabel%5D=Pontypool%2C%20Torfaen&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.040400041673907&a%5BGeocode%5D%5BLatitude%5D=51.70187848744442&a%5BFullText%5D=Pontypool%2C%20Torfaen&a%5BLocalityData%5D%5BLocalityId%5D=ZYX5990&b%5Blabel%5D=Abergavenny%2C%20Monmouthshire&b%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&b%5Bicon%5D%5Bkey%5D=&b%5Bicon%5D%5Bref%5D=&b%5Bicon%5D%5Bprops%5D%5Btype%5D=location&b%5Bicon%5D%5B_owner%5D=&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.0175853347546093&b%5BGeocode%5D%5BLatitude%5D=51.82261693500055&b%5BFullText%5D=Abergavenny%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX3635&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Pontypool%2C%20Torfaen&f=Abergavenny%2C%20Monmouthshire&i=Pontypool" target="_blank">Pontypool to Abergavenny</a></li>
+  </ul>
 <h4>Car</h4>
 <p>  There is limited parking available. Please please consider car sharing to not only reduce your carbon emissions but also ensure we have enough parking available for those who need it.
       </div>
@@ -77,7 +87,8 @@
     <figcaption>Transport map for blorenge fell race</figcaption>
     </div>
   </figure>
- 
+ </section>
+ <section id="kit">
     <div class="space">
       <h2>Bring full kit</h2>
       <p>Worried about not being able to run because you are not sure what kit you need. Well here is a list of what this event constitutes as “full kit”. And I’d recommend bringing the lot just encase the weather takes a turn for the worse.</p>
@@ -101,17 +112,54 @@
     <li>Compass</li>
     <li>Whistle</li>
 </ul>    
+
 </div>
-</div>
-<div class="space">
+<div>
 <h4>Electronics</h4>
 <p>You are allowed to run with a GPS watch and a phone. But, if you use any form of navigational assitance from these devices you must inform the race organiser to be counted as a Non-competitive runner. 
 </div>
+</div>
     </section>
+    <section id="kit swap">
+      <div class="space">
+      <h2>Kit swap</h2>
+      <div class="doublecolumn">
+        <img src="images/kitswap.png" alt="KitSwap Image" style="width: 300px; height: 300px;padding:100px 0">
+        <div>
+      <p>Looking to declutter your running gear collection or find some new-to-you items for your next run? Our Kit Swap is the perfect solution! Here's what you need to know: </p>
+        <p> 🔄 Purpose: Our Kit Swap promotes sustainability within our running community by encouraging the reuse and recycling of gently used gear. It's a chance for us to share resources, support each other, and reduce our environmental impact together. </p>
+          <p> 🛍️ How It Works: Bring your unwanted or lightly used running gear to the race. You can browse through the items available and take what you need, or contribute your own gear to the swap. </p>
+            <p>👟 Items Accepted: We accept a wide range of running-related gear, including shoes, clothing, hydration vests, hats, gloves, and more. </p>
+              <p> 🌟 Benefits: By participating in the Kit Swap, you'll declutter your gear collection, find new items for your runs, and connect with fellow runners in our community. Plus, you'll be helping to reduce waste and support sustainability efforts. </p>
+                <p>📜 Guidelines: Please follow our guidelines for the Kit Swap to ensure its success. Items should be clean and in good condition. </p>
+                  <p>🌈 Post-Event: Any remaining items from the Kit Swap will be donated to charity or organizations that support runners in need. You're also welcome to take back any items you contributed but did not exchange.      </p>
+                </div>
+                </div>
+                </div>
+    </section>
+    <section id="recce">
+      <div class="space">
+      
+      <h2>Walking course recce and litter pick</h2>
+      <div class="doublecolumn">
+      <p>On Thursday, 21st November, we’ll be holding an early evening route recce and litter pick in preparation for the upcoming fell race. We’ll walk the 5.7km route to familiarise ourselves with it and ensure everything is in good condition. During the walk, we’ll also be collecting any litter we find to help keep our trails clean and enjoyable for all. Your involvement will not only help us prepare the route but also contribute to preserving our beautiful landscape. We look forward to seeing you there!</p>
+      <img src="images/litterpickwalk.png" alt="Litter Pick Walk Image" style="width: 300px; height: auto; padding:0 200px">
+    </div>
+  </div>
+    </section>
+    <!--<section id="volunteer">
+      <div class="space">
+      <h2>Volunteering</h2>
+      <p>We're on the lookout for enthusiastic volunteers to join our team and help make this event a huge success. Even if running isn't your thing, we would greatly appreciate any help you can offer in ensuring the smooth running of the day.</p>
+        <p>From marshaling the course and cheering on participants to assisting with registration and making tea, there are plenty of roles that can be filled to suit your interests and skills. Volunteering at the fell race is not only a fantastic way to contribute to our community but also a great opportunity to meet new people, soak up the atmosphere, and make lasting memories.</p>
+       <p>No previous experience is necessary – all we ask is that you bring your energy, enthusiasm, and willingness to lend a helping hand. Whether you can spare a few hours or the whole day, we would really appreciate it.</p>
+        </p>
+      </div>
+    </section>-->
   </main>
 
   <!-- Footer -->
   <iframe class="footer-iframe" src="components/footer/footer.html" frameborder="0" scrolling="no"width="100%" height="100%"></iframe>
-
+  <script src="script.js"></script>
 </body>
 </html>
