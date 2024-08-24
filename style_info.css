@@ -18,5 +18,11 @@
     button {
         margin: 0 10px;
     }
-    
-    
+    #litterwalk {
+        padding-left: 200px;
+    }
+    @media (max-width: 1000px) {
+    #litterwalk {
+        padding:0;
+    }
+}

@@ -98,6 +98,12 @@ a:hover {
     max-height: 20% ;
 }
 
+@media (max-width: 767px) {
+.doublecolumn {
+    display: inline;
+}
+}
+
 .column {
     width: 100%;    
     display: flex; /* Use flexbox */
