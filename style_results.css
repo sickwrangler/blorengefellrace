@@ -63,3 +63,34 @@ tr:nth-child(even) {
 .collapsible-btn:hover {
     background-color: #45a049;
 }
+
+@media screen and (max-width: 600px) {
+    table, thead, tbody, th, td, tr {
+      display: block;
+      display: none; /* Initially hidden (collapsed) */
+    }
+  
+    thead {
+      display: none;
+    }
+  
+    tr {
+      margin-bottom: 1rem;
+      border: 1px solid #ccc;
+      padding: 10px;
+    }
+  
+    td {
+      text-align: right;
+      padding-left: 50%;
+      position: relative;
+    }
+  
+    td::before {
+      content: attr(data-label);
+      position: absolute;
+      left: 10px;
+      text-align: left;
+      font-weight: bold;
+    }
+  }
