@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-82X36PHB8L"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-82X36PHB8L');
+</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blorenge Fell Race</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style_results.css">
+  <link href='https://fonts.googleapis.com/css?family=Inter' rel='stylesheet'>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Suez+One&display=swap" rel="stylesheet">
+<script src="https://kit.fontawesome.com/db043483b5.js" crossorigin="anonymous"></script>
+<link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/x-icon">
+</head>
+<body>
+
+  <!-- Header -->
+  <!-- Include the navigation bar component here -->
+  <iframe class="nav-iframe" src="components/navbar/navbar.html" frameborder="0" scrolling="no" width="100%"></iframe>
+
+  <!-- Main Content -->
+  <main>
+<div class="space">
+    <h1>Results</h1>
+ 
+  <div id="tables-container"></div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <iframe class="footer-iframe" src="components/footer/footer.html" frameborder="0" scrolling="no"width="100%" height="100%"></iframe>
+
+  <!-- JS for retrieving data from google sheets 2024 results-->
+  <script>
+   
+
+        // Fetch data from Google Sheets
+        const sheetUrl = 'https://opensheet.elk.sh/1Wm5IYEP7OD6FaeOls4pKFRjeGyAL5mufD0V44_R8pnw/Historical Results';
+
+        async function fetchData() {
+            try {
+                const response = await fetch(sheetUrl);
+                const data = await response.json();
+
+                // Group data by year
+                const groupedByYear = data.reduce((acc, row) => {
+                    const year = row.Year;
+                    if (!acc[year]) acc[year] = [];
+                    acc[year].push(row);
+                    return acc;
+                }, {});
+
+                 // Sort years in descending order (most recent first)
+                const sortedYears = Object.keys(groupedByYear).sort((a, b) => b - a);
+
+                // Generate tables for each year
+                const tablesContainer = document.getElementById('tables-container');
+                sortedYears.forEach(year => {
+                    const results = groupedByYear[year];
+                    const table = createTableForYear(year, results);
+                    tablesContainer.appendChild(table);
+                });
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        }
+
+        // Create HTML table for a specific year
+        function createTableForYear(year, results) {
+            
+            // Create a container for the collapsible section
+            const section = document.createElement('div');
+
+            // Create the collapsible button
+            const button = document.createElement('button');
+            button.classList.add('collapsible-btn');
+            button.textContent = `Show Results for ${year}`;
+            button.setAttribute('aria-expanded', 'false');
+         
+            const table = document.createElement('table');
+
+            // Add the caption with the year
+            const caption = document.createElement('caption');
+            caption.textContent = `Race Results for ${year}`;
+            table.appendChild(caption);
+           
+
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = `
+                <th>Position</th>
+                <th>Name</th>
+                <th>Club</th>
+                <th>Category</th>
+                <th>Category Position</th>
+                <th>Time</th>
+            `;
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement('tbody');
+            results.forEach(result => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${result.Pos}</td>
+                    <td>${result.Name}</td>
+                    <td>${result.Club}</td>
+                    <td>${result['Lookup category']}</td>
+                    <td>${result['Category Pos']}</td>
+                    <td>${result['Formatted time']}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            // Append the table and button to the section
+            section.appendChild(button);
+            section.appendChild(table);
+
+            // Add event listener to toggle table visibility
+            button.addEventListener('click', () => {
+                const isExpanded = button.getAttribute('aria-expanded') === 'true';
+                button.setAttribute('aria-expanded', !isExpanded);
+                table.style.display = isExpanded ? 'none' : 'table'; // Toggle table visibility
+                button.textContent = isExpanded ? `Show Results for ${year}` : `Hide Results for ${year}`;
+            });
+
+            return section;
+        }
+        
+
+        // Call fetchData to load and display the tables
+        fetchData();
+
+
+    
+  
+    fetchResults();
+  </script>
+  
+</body>
+</html>
