@@ -67,7 +67,12 @@ tr:nth-child(even) {
 @media screen and (max-width: 600px) {
     table, thead, tbody, th, td, tr {
       display: block;
-      display: none; /* Initially hidden (collapsed) */
+     
+    }
+
+    table
+    {
+        display: none; /* Initially hidden (collapsed) */
     }
   
     thead {
