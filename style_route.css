@@ -62,3 +62,54 @@ width: 80%;
     }
 }
 
+/* Mobile styles for route section */
+@media (max-width: 768px) {
+    /* Hide arrows on mobile - more specific selectors */
+    .arrow_LR,
+    img.arrow_LR,
+    .route_centre_text .arrow_LR {
+      display: none !important;
+    }
+    
+    /* Stack route containers vertically on mobile */
+    .route_container {
+      flex-direction: column !important;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    
+    /* Ensure images and text take full width and stack */
+    .route_img,
+    .route_centre_text {
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+    }
+    
+    /* Add spacing between stacked elements */
+    .route_img {
+      margin-bottom: 1rem;
+    }
+    
+    /* Ensure text is centered and readable */
+    .route_centre_text h2 {
+      margin: 0.5rem 0;
+      text-align: center;
+    }
+  }
+  
+  /* For very small screens */
+  @media (max-width: 480px) {
+    .route_container {
+      margin-bottom: 1.5rem;
+    }
+    
+    .route_img {
+      margin-bottom: 0.75rem;
+    }
+    
+    .route_centre_text h2 {
+      font-size: 1.2rem;
+    }
+  }

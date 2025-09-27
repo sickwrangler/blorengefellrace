@@ -21,6 +21,8 @@
 <script src="https://kit.fontawesome.com/db043483b5.js" crossorigin="anonymous"></script>
 <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/x-icon">
 </head>
+
+
 <body>
 
   <!-- Header -->
@@ -31,18 +33,27 @@
   <main>
     <div class="space">
       <h1> Entry</h1>
-      <div>
-        <p>Entry is not currently open for the 2025 event. Please check back closer to the race date. </p>
+      <div class="responsive-iframe">
+        <iframe id="google-form-iframe" src="https://docs.google.com/forms/d/e/1FAIpQLScJVbcf-X41_TTRfElqdz5rljLNUQk_PRaWVoQZ9hwH1U98Cg/viewform?embedded=true" style="width:100%; height:3400px; border:none;" Loading…> </iframe>
     </div>
     
   </div>
-    
-  
     
   </main>
 
   <!-- Footer -->
   <iframe class="footer-iframe" src="components/footer/footer.html" frameborder="0" scrolling="no"width="100%" height="100%"></iframe>
 
+  <script>
+    const iframe = document.getElementById('google-form-iframe');
+  
+    iframe.addEventListener('load', () => {
+      // Check if the iframe's URL has changed (indicating form submission)
+      if (iframe.src.includes('formResponse')) {
+        // Scroll to the top of the page
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+  </script>
 </body>
 </html>

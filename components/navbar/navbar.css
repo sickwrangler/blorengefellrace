@@ -32,7 +32,7 @@ h1, h2, h3, h4, h5, h6 {
   width: 150px;
 }
 
-@media (max-width: 795px) {
+@media (max-width: 840px) {
   .logo_navbar {
       display: none; /* Hide the element on mobile devices */
   }
@@ -41,19 +41,7 @@ h1, h2, h3, h4, h5, h6 {
 .navbar h1 {
   margin: 0;
   font-size: 42px;
-  margin-right: 40vw;
-}
-@media screen and (min-width: 980px) and (max-width: 1300px) {
-  .navbar h1 {
-      margin-right: 20vw; /* Decrease margin for smaller screens */
-  }
-  
-}
-@media screen and (max-width: 980px) {
-  .navbar h1 {
-      margin-right: 1vw; /* Decrease margin for smaller screens */
-  }
-  
+  margin-right: 35vw;
 }
 
 .nav-links {
@@ -65,6 +53,25 @@ h1, h2, h3, h4, h5, h6 {
 .nav-links li {
   display: inline-block; /* Display list items horizontally */
   margin-right: 20px; /* Add some spacing between each navigation link */
+}
+
+@media screen and (min-width: 980px) and (max-width: 1300px) {
+  .navbar h1 {
+      margin-right: 10vw; /* Decrease margin for smaller screens */
+  }
+  .nav-links li {
+    margin-right: 1px; /* Add some spacing between each navigation link */
+
+}
+}
+@media screen and (max-width: 980px) {
+  .navbar h1 {
+      margin-right: 0vw; /* Decrease margin for smaller screens */
+  }
+  .nav-links li {
+    margin-right: 1px; /* Add some spacing between each navigation link */
+
+}
 }
 
 .nav-links li:last-child {

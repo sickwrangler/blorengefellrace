@@ -31,6 +31,29 @@
   <!-- Main Content -->
   <main>
 <div class="space">
+  <h1> Start list 2025</h1>
+  <ul id="start-list"></ul>
+
+<script>
+fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4aQvc6ivf2Ct_l8_so_qZVUQe0DigVD_Jwjmhyn3PRpjHZOmDnemc8d/pub?gid=0&single=true&output=csv')
+  .then(response => response.text())
+  .then(data => {
+    // Split the CSV by new lines into an array
+    const names = data.trim().split('\n');
+
+    // Add each name as an <li> to the HTML list
+    const listContainer = document.getElementById('start-list');
+    names.forEach(name => {
+      const li = document.createElement('li');
+      li.textContent = name;
+      listContainer.appendChild(li);
+    });
+
+    console.log(names); // This is your array of names
+  })
+  .catch(err => console.error('Error fetching CSV:', err));
+</script>
+
     <h1>Results</h1>
  
   <div id="tables-container"></div>
@@ -40,6 +63,10 @@
   <!-- Footer -->
   <iframe class="footer-iframe" src="components/footer/footer.html" frameborder="0" scrolling="no"width="100%" height="100%"></iframe>
 
+
+  
+
+  </script>
   <!-- JS for retrieving data from google sheets 2024 results-->
   <script>
    

@@ -45,6 +45,11 @@ p {
     word-wrap: break-word;
 }
 
+strong, b {
+    font-weight: bold;
+  }
+  
+
 p.noteAlt
 {
      background-color: rgba(var(--highlight-color-code),0.5);
@@ -114,7 +119,7 @@ a:hover {
 }
 
 .map_img{
-    max-width: 65%;
+    max-width: 100%;
     height:auto;    
 }
 
@@ -147,6 +152,9 @@ figure{
 @media (max-width: 767px) {
     .mobile-hidden {
         display: none !important ; /* Hide the element on devices with a width of 767px or less */
+    }
+    .space {
+        padding: 1% 1% !important;
     }
 }
 
@@ -181,7 +189,7 @@ object-position: 80% 80%;
 .homeintro_p1 {
     margin: 0rem 1rem;
     max-width: 100%;
-    max-height: 712px;
+    max-height: 856px;
     overflow:hidden;
 }
 
@@ -192,9 +200,12 @@ object-position: 80% 80%;
  flex-direction: column; /* By default, stack items */
 }
 
-@media (min-width: 700px) {
+@media (min-width: 900px) {
     .home_banner {
         flex-direction: row; /* When screen is wider, put items in a row */
+    }
+    .homeintro_p1 {
+
     }
 }
 .home_banner > h2{
@@ -238,4 +249,75 @@ object-position: 80% 80%;
         height: 200px;
     }
 }
+.tab-container {
+    display: flex;
+    justify-content: center;
+    background-color: #f4f4f4;
+    border-bottom: 2px solid #ccc;
+    padding: 10px 0;
+  }
+  
+  .tab-content.stats.tab.active {
+    display: block;
+    unicode-bidi: isolate;
+  }
+  .tabs {
+    list-style: none;
+    display: flex;
+    padding: 0;
+    margin: 0;
+    gap: 15px; /* Adds spacing between tabs */
+  }
+  
+  .tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 18px;
+    border: 1px solid #ccc; /* Adds a border around each tab */
+    border-radius: 5px; /* Rounds the corners of the tabs */
+    background-color: #fff; /* Sets a white background for the tabs */
+    transition: background-color 0.3s, box-shadow 0.3s;
+  }
+  
+  .tab:hover {
+    background-color: #e6e6e6; /* Changes background color on hover */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Adds a subtle shadow on hover */
+  }
+  
+  .tab.active {
+    border: 1px solid #007BFF; /* Highlights the active tab with a blue border */
+    background-color: #007BFF; /* Sets a blue background for the active tab */
+    color: #fff; /* Changes text color to white for the active tab */
+    font-weight: bold;
+  }
+  
+  .tab-content {
+    display: none;
+    padding: 20px;
+    border: 1px solid #ccc; /* Adds a border around the content area */
+    border-radius: 5px; /* Rounds the corners of the content area */
+    margin-top: 10px; /* Adds spacing between the tabs and content */
+    background-color: #fff; /* Sets a white background for the content area */
+  }
+  
+  .tab-content.active {
+    display: block;
+  }
 
+  /* Responsive Design for Mobile */
+@media (max-width: 768px) {
+    .tabs {
+      flex-direction: column; /* Stack tabs vertically on smaller screens */
+      gap: 10px; /* Reduce spacing between tabs */
+    }
+  
+    .tab {
+      font-size: 16px; /* Slightly smaller font size for mobile */
+      padding: 10px; /* Adjust padding for smaller screens */
+    }
+  
+    .tab-content {
+      padding: 15px; /* Adjust content padding for smaller screens */
+    }
+  }
