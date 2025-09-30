@@ -39,7 +39,11 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
   .then(response => response.text())
   .then(data => {
     // Split the CSV by new lines into an array
-    const names = data.trim().split('\n');
+    const names = data
+  .trim()
+  .split('\n')
+  .map(line => line.trim()) // clean whitespace
+  .filter(line => line !== '');
 
     // Add each name as an <li> to the HTML list
     const listContainer = document.getElementById('start-list');
