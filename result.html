@@ -31,10 +31,13 @@
   <!-- Main Content -->
   <main>
 <div class="space">
-  <h1> Start list 2025</h1>
-  <ul id="start-list"></ul>
+  <h1>Results 2025</h1>
+    <!-- NEW: Container for the 2025 table -->
+    <div id="results-2025"></div>
 
-<script>
+    <h1>Results</h1>
+    <div id="tables-container"></div>
+  </div><!-- <script>
 fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4aQvc6ivf2Ct_l8_so_qZVUQe0DigVD_Jwjmhyn3PRpjHZOmDnemc8d/pub?gid=0&single=true&output=csv')
   .then(response => response.text())
   .then(data => {
@@ -56,7 +59,7 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
     console.log(names); // This is your array of names
   })
   .catch(err => console.error('Error fetching CSV:', err));
-</script>
+</script> -->
 
     <h1>Results</h1>
  
@@ -69,8 +72,6 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
 
 
   
-
-  </script>
   <!-- JS for retrieving data from google sheets 2024 results-->
   <script>
    
@@ -172,11 +173,46 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
         // Call fetchData to load and display the tables
         fetchData();
 
+        // --- NEW: Fetch data for 2025 from its own Google Sheet ---
 
-    
-  
-    fetchResults();
-  </script>
+    // CSV export URL for your 2025 sheet (same ID as your iframe, but using output=csv)
+    const sheet2025CsvUrl =
+        'https://docs.google.com/spreadsheets/d/e/2 PACX-1vRNyPVgaBzZOrQ59N5KyBRUI3tQAP8WPU8Gi2idvlUVv_jKuYdAZ8xgJbZ92PnzVguOvuC6ZnqCCIOR/pub?gid=0&single=true&output=csv';
+
+    async function fetchResults2025() {
+        try {
+            const response = await fetch(sheet2025CsvUrl);
+            const csvText = await response.text();
+
+            // Basic CSV parsing
+            const rows = csvText
+                .trim()
+                .split('\n')
+                .map(line => line.split(','));
+
+            const headers = rows[0].map(h => h.replace(/^"|"$/g, '').trim());
+            const dataRows = rows.slice(1);
+
+            const results = dataRows.map(cols => {
+                const obj = {};
+                headers.forEach((header, index) => {
+                    obj[header] = (cols[index] || '').replace(/^"|"$/g, '').trim();
+                });
+                return obj;
+            });
+
+            // Use the same table creation function, but pin it to the 2025 container
+            const results2025Container = document.getElementById('results-2025');
+            const table2025 = createTableForYear(2025, results);
+            results2025Container.appendChild(table2025);
+        } catch (error) {
+            console.error('Error fetching 2025 data:', error);
+        }
+    }
+
+    // Call both fetches
+    fetchResults2025();
+</script>
   
 </body>
 </html>
