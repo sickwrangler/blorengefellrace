@@ -35,6 +35,11 @@ h1 {
     font-size: 28px;
 }
 
+.result-heading {
+    font-size: 28px;
+    margin-block: 0.67em;
+}
+
 h1 a {
     color: var(--main-color);
     text-decoration: none;
@@ -48,6 +53,18 @@ p {
 strong, b {
     font-weight: bold;
   }
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
   
 
 p.noteAlt
@@ -271,6 +288,7 @@ object-position: 80% 80%;
   
   .tab {
     padding: 10px 20px;
+    margin: 0;
     cursor: pointer;
     font-family: 'Inter', sans-serif;
     font-size: 18px;
@@ -278,6 +296,16 @@ object-position: 80% 80%;
     border-radius: 5px; /* Rounds the corners of the tabs */
     background-color: #fff; /* Sets a white background for the tabs */
     transition: background-color 0.3s, box-shadow 0.3s;
+    line-height: inherit;
+    color: inherit;
+    text-align: inherit;
+  }
+
+  .tab:focus-visible,
+  a:focus-visible,
+  button:focus-visible {
+    outline: 3px solid var(--dark-color);
+    outline-offset: 3px;
   }
   
   .tab:hover {

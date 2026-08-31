@@ -27,9 +27,10 @@
 
   <!-- Header -->
   <!-- Include the navigation bar component here -->
-  <iframe class="nav-iframe" src="components/navbar/navbar.html" frameborder="0" scrolling="no" width="100%"></iframe>
+  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" frameborder="0" scrolling="no" width="100%"></iframe>
 
   <!-- Main Content -->
+  <main>
   <div class="space">
   <h1>Entry</h1>
   <p> Blorenge fell race 2026 is planned for the 28th of November <br>
@@ -48,12 +49,12 @@ I will look to open entries early September </p>
   </main>
 
   <!-- Footer -->
-  <iframe class="footer-iframe" src="components/footer/footer.html" frameborder="0" scrolling="no"width="100%" height="100%"></iframe>
+  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" frameborder="0" scrolling="no" width="100%" height="100%"></iframe>
 
   <script>
     const iframe = document.getElementById('google-form-iframe');
   
-    iframe.addEventListener('load', () => {
+    iframe?.addEventListener('load', () => {
       // Check if the iframe's URL has changed (indicating form submission)
       if (iframe.src.includes('formResponse')) {
         // Scroll to the top of the page

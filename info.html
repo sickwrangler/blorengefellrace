@@ -27,22 +27,23 @@
 
   <!-- Header -->
   <!-- Include the navigation bar component here -->
-  <iframe class="nav-iframe" src="components/navbar/navbar.html" frameborder="0" scrolling="no" width="100%"></iframe>
+  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" frameborder="0" scrolling="no" width="100%"></iframe>
   <header>
     <div class="tab-container">
-      <ul class="tabs">
-        <li class="tab active" onclick="showTab('travel')">Travel</li>
-        <li class="tab" onclick="showTab('kit')">Kit list</li>
-        <li class="tab" onclick="showTab('kit-swap')">Kit swap</li>
-        <li class="tab" onclick="showTab('recce')">Group route recce</li>
-        <li class="tab" onclick="showTab('race-report')">2024 Race Report</li> <!-- New Tab -->
-        <li class="tab" onclick="showTab('stats')">Race stats</li> <!-- New Tab -->
+      <ul class="tabs" role="tablist" aria-label="Information sections">
+        <li><button type="button" class="tab active" id="tab-travel" role="tab" aria-controls="travel" aria-selected="true" onclick="showTab('travel')">Travel</button></li>
+        <li><button type="button" class="tab" id="tab-kit" role="tab" aria-controls="kit" aria-selected="false" onclick="showTab('kit')">Kit list</button></li>
+        <li><button type="button" class="tab" id="tab-kit-swap" role="tab" aria-controls="kit-swap" aria-selected="false" onclick="showTab('kit-swap')">Kit swap</button></li>
+        <li><button type="button" class="tab" id="tab-recce" role="tab" aria-controls="recce" aria-selected="false" onclick="showTab('recce')">Group route recce</button></li>
+        <li><button type="button" class="tab" id="tab-race-report" role="tab" aria-controls="race-report" aria-selected="false" onclick="showTab('race-report')">2024 Race Report</button></li>
+        <li><button type="button" class="tab" id="tab-stats" role="tab" aria-controls="stats" aria-selected="false" onclick="showTab('stats')">Race stats</button></li>
       </ul>
     </div>
   </header>
   <!-- Main Content -->
-  <!-- <main> -->
-    <section id="travel" class="tab-content active">
+  <main>
+    <h1 class="visually-hidden">Blorenge Fell Race information</h1>
+    <section id="travel" class="tab-content active" role="tabpanel" aria-labelledby="tab-travel">
       <div class="space">
        
         <h2>Getting to the start</h2>
@@ -84,23 +85,21 @@
 <h4>Bus</h4>
 <p>There are buses available to both Llanfoist and Abergaveny. Travel in style and get a jog in before the race.</p>
 <ul>
-  <li> <a href="https://www.stagecoachbus.com/plan-a-journey/journey-results/journey-details?a%5Blabel%5D=Cardiff%20City%20Centre%2C%20Cardiff&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.1777810399345694&a%5BGeocode%5D%5BLatitude%5D=51.48015731856602&a%5BFullText%5D=Cardiff%20City%20Centre%2C%20Cardiff&a%5BLocalityData%5D%5BLocalityId%5D=ZYX4036&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.033849498306547&b%5BGeocode%5D%5BLatitude%5D=51.81370851262217&b%5BFullText%5D=Llanfoist%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX25121&b%5Bid%5D=Llanfoist%2C%20Monmouthshire&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Cardiff%20City%20Centre%2C%20Cardiff&f=Llanfoist%2C%20Monmouthshire&i=Cardiff&h=Balanced%7C2024-04-27T12%3A40%3A00%7C2024-04-27T14%3A13%3A59" target="_blank">X25 - Cardiff to Abergavenny via Merthyr</a> </li>
-  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.1738223018156644&a%5BGeocode%5D%5BLatitude%5D=51.797468505700735&a%5BFullText%5D=Brynmawr%20Bus%20Station%2C%20Blaenau%20Gwent&a%5BLocalityData%5D%5BLocalityId%5D=ZYX3928&a%5Bid%5D=Brynmawr%20Bus%20Station%2C%20Blaenau%20Gwent&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.033849498306547&b%5BGeocode%5D%5BLatitude%5D=51.81370851262217&b%5BFullText%5D=Llanfoist%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX25121&b%5Bid%5D=Llanfoist%2C%20Monmouthshire&c=true&d=2024-04-27T11%3A30%3A00.000Z&e=Brynmawr%20Bus%20Station%2C%20Blaenau%20Gwent&f=Llanfoist%2C%20Monmouthshire&g%5BADULT%5D=1&g%5Btotal%5D=1&i=" target="_blank">3 - Brynmawr to Llanfoist</a></li>
-  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5Blabel%5D=Brecon%20Bus%20Station%2C%20Powys&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.3863311182082345&a%5BGeocode%5D%5BLatitude%5D=51.94676924126315&a%5BFullText%5D=Brecon%20Bus%20Station%2C%20Powys&a%5BLocalityData%5D%5BLocalityId%5D=ZYX25127&b%5Blabel%5D=Abergavenny%2C%20Monmouthshire&b%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&b%5Bicon%5D%5Bkey%5D=&b%5Bicon%5D%5Bref%5D=&b%5Bicon%5D%5Bprops%5D%5Btype%5D=location&b%5Bicon%5D%5B_owner%5D=&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.0175853347546093&b%5BGeocode%5D%5BLatitude%5D=51.82261693500055&b%5BFullText%5D=Abergavenny%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX3635&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Brecon%20Bus%20Station%2C%20Powys&f=Abergavenny%2C%20Monmouthshire&i=Brecon" target="_blank">X43 Brecon to Abergavenny</a></li>
-  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5Blabel%5D=Monmouth%2C%20Monmouthshire&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-2.714699253139374&a%5BGeocode%5D%5BLatitude%5D=51.81122666199038&a%5BFullText%5D=Monmouth%2C%20Monmouthshire&a%5BLocalityData%5D%5BLocalityId%5D=ZYX5483&b%5Blabel%5D=Abergavenny%2C%20Monmouthshire&b%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&b%5Bicon%5D%5Bkey%5D=&b%5Bicon%5D%5Bref%5D=&b%5Bicon%5D%5Bprops%5D%5Btype%5D=location&b%5Bicon%5D%5B_owner%5D=&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.0175853347546093&b%5BGeocode%5D%5BLatitude%5D=51.82261693500055&b%5BFullText%5D=Abergavenny%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX3635&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Monmouth%2C%20Monmouthshire&f=Abergavenny%2C%20Monmouthshire&i=Monmouth" target="_blank">Monmouth to Abergavenny</a></li>
-  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5Blabel%5D=Pontypool%2C%20Torfaen&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.040400041673907&a%5BGeocode%5D%5BLatitude%5D=51.70187848744442&a%5BFullText%5D=Pontypool%2C%20Torfaen&a%5BLocalityData%5D%5BLocalityId%5D=ZYX5990&b%5Blabel%5D=Abergavenny%2C%20Monmouthshire&b%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&b%5Bicon%5D%5Bkey%5D=&b%5Bicon%5D%5Bref%5D=&b%5Bicon%5D%5Bprops%5D%5Btype%5D=location&b%5Bicon%5D%5B_owner%5D=&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.0175853347546093&b%5BGeocode%5D%5BLatitude%5D=51.82261693500055&b%5BFullText%5D=Abergavenny%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX3635&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Pontypool%2C%20Torfaen&f=Abergavenny%2C%20Monmouthshire&i=Pontypool" target="_blank">Pontypool to Abergavenny</a></li>
+<li> <a href="https://www.stagecoachbus.com/plan-a-journey/journey-results/journey-details?a%5Blabel%5D=Cardiff%20City%20Centre%2C%20Cardiff&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.1777810399345694&a%5BGeocode%5D%5BLatitude%5D=51.48015731856602&a%5BFullText%5D=Cardiff%20City%20Centre%2C%20Cardiff&a%5BLocalityData%5D%5BLocalityId%5D=ZYX4036&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.033849498306547&b%5BGeocode%5D%5BLatitude%5D=51.81370851262217&b%5BFullText%5D=Llanfoist%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX25121&b%5Bid%5D=Llanfoist%2C%20Monmouthshire&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Cardiff%20City%20Centre%2C%20Cardiff&f=Llanfoist%2C%20Monmouthshire&i=Cardiff&h=Balanced%7C2024-04-27T12%3A40%3A00%7C2024-04-27T14%3A13%3A59" target="_blank" rel="noopener noreferrer">X25 - Cardiff to Abergavenny via Merthyr</a> </li>
+  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.1738223018156644&a%5BGeocode%5D%5BLatitude%5D=51.797468505700735&a%5BFullText%5D=Brynmawr%20Bus%20Station%2C%20Blaenau%20Gwent&a%5BLocalityData%5D%5BLocalityId%5D=ZYX3928&a%5Bid%5D=Brynmawr%20Bus%20Station%2C%20Blaenau%20Gwent&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.033849498306547&b%5BGeocode%5D%5BLatitude%5D=51.81370851262217&b%5BFullText%5D=Llanfoist%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX25121&b%5Bid%5D=Llanfoist%2C%20Monmouthshire&c=true&d=2024-04-27T11%3A30%3A00.000Z&e=Brynmawr%20Bus%20Station%2C%20Blaenau%20Gwent&f=Llanfoist%2C%20Monmouthshire&g%5BADULT%5D=1&g%5Btotal%5D=1&i=" target="_blank" rel="noopener noreferrer">3 - Brynmawr to Llanfoist</a></li>
+  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5Blabel%5D=Brecon%20Bus%20Station%2C%20Powys&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.3863311182082345&a%5BGeocode%5D%5BLatitude%5D=51.94676924126315&a%5BFullText%5D=Brecon%20Bus%20Station%2C%20Powys&a%5BLocalityData%5D%5BLocalityId%5D=ZYX25127&b%5Blabel%5D=Abergavenny%2C%20Monmouthshire&b%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&b%5Bicon%5D%5Bkey%5D=&b%5Bicon%5D%5Bref%5D=&b%5Bicon%5D%5Bprops%5D%5Btype%5D=location&b%5Bicon%5D%5B_owner%5D=&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.0175853347546093&b%5BGeocode%5D%5BLatitude%5D=51.82261693500055&b%5BFullText%5D=Abergavenny%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX3635&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Brecon%20Bus%20Station%2C%20Powys&f=Abergavenny%2C%20Monmouthshire&i=Brecon" target="_blank" rel="noopener noreferrer">X43 Brecon to Abergavenny</a></li>
+  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5Blabel%5D=Monmouth%2C%20Monmouthshire&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-2.714699253139374&a%5BGeocode%5D%5BLatitude%5D=51.81122666199038&a%5BFullText%5D=Monmouth%2C%20Monmouthshire&a%5BLocalityData%5D%5BLocalityId%5D=ZYX5483&b%5Blabel%5D=Abergavenny%2C%20Monmouthshire&b%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&b%5Bicon%5D%5Bkey%5D=&b%5Bicon%5D%5Bref%5D=&b%5Bicon%5D%5Bprops%5D%5Btype%5D=location&b%5Bicon%5D%5B_owner%5D=&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.0175853347546093&b%5BGeocode%5D%5BLatitude%5D=51.82261693500055&b%5BFullText%5D=Abergavenny%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX3635&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Monmouth%2C%20Monmouthshire&f=Abergavenny%2C%20Monmouthshire&i=Monmouth" target="_blank" rel="noopener noreferrer">Monmouth to Abergavenny</a></li>
+  <li><a href="https://www.stagecoachbus.com/plan-a-journey/journey-results?a%5Blabel%5D=Pontypool%2C%20Torfaen&a%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&a%5Bicon%5D%5Bkey%5D=&a%5Bicon%5D%5Bref%5D=&a%5Bicon%5D%5Bprops%5D%5Btype%5D=location&a%5Bicon%5D%5B_owner%5D=&a%5BCategory%5D=locality&a%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&a%5BGeocode%5D%5BLongitude%5D=-3.040400041673907&a%5BGeocode%5D%5BLatitude%5D=51.70187848744442&a%5BFullText%5D=Pontypool%2C%20Torfaen&a%5BLocalityData%5D%5BLocalityId%5D=ZYX5990&b%5Blabel%5D=Abergavenny%2C%20Monmouthshire&b%5Bicon%5D%5B%24%24typeof%5D=Symbol%28react.element%29&b%5Bicon%5D%5Bkey%5D=&b%5Bicon%5D%5Bref%5D=&b%5Bicon%5D%5Bprops%5D%5Btype%5D=location&b%5Bicon%5D%5B_owner%5D=&b%5BCategory%5D=locality&b%5BGeocode%5D%5BGrid%5D%5Bvalue%5D=WGS84&b%5BGeocode%5D%5BLongitude%5D=-3.0175853347546093&b%5BGeocode%5D%5BLatitude%5D=51.82261693500055&b%5BFullText%5D=Abergavenny%2C%20Monmouthshire&b%5BLocalityData%5D%5BLocalityId%5D=ZYX3635&d=2024-04-27T11%3A30%3A00.000Z&c=true&g%5BADULT%5D=1&g%5Btotal%5D=1&e=Pontypool%2C%20Torfaen&f=Abergavenny%2C%20Monmouthshire&i=Pontypool" target="_blank" rel="noopener noreferrer">Pontypool to Abergavenny</a></li>
   </ul>
 <h4>Car</h4>
-<p>  There is limited parking available. Please please consider car sharing to not only reduce your carbon emissions but also ensure we have enough parking available for those who need it.
+<p>There is limited parking available. Please please consider car sharing to not only reduce your carbon emissions but also ensure we have enough parking available for those who need it.</p>
       </div>
-    </div>
-    <figure>     <div class="center-wrapper">
+    <figure class="center-wrapper">
       <img class="transport_map_img" src="images/transportmap.png" alt="Transport map for blorenge fell race">
     <figcaption>Transport map for blorenge fell race</figcaption>
-    </div>
   </figure>
  </section>
- <section id="kit" class="tab-content">
+ <section id="kit" class="tab-content" role="tabpanel" aria-labelledby="tab-kit">
     <div class="space">
       <h2>Bring full kit</h2>
       <p>Worried about not being able to run because you are not sure what kit you need. Well here is a list of what this event constitutes as “full kit”. And I’d recommend bringing the lot just encase the weather takes a turn for the worse.</p>
@@ -134,7 +133,7 @@
 </div>
 </div>
     </section>
-    <section id="kit-swap" class="tab-content">
+    <section id="kit-swap" class="tab-content" role="tabpanel" aria-labelledby="tab-kit-swap">
       <div class="space">
       <h2>Kit swap</h2>
       <div class="doublecolumn">
@@ -154,7 +153,7 @@
                 </div>
                 </div>
     </section>
-    <section id="recce" class="tab-content">
+    <section id="recce" class="tab-content" role="tabpanel" aria-labelledby="tab-recce">
       <div class="space">
       
       <h2>Walking course recce and litter pick</h2>
@@ -168,7 +167,7 @@
     </section>
 
 
-    <section id="race-report" class="tab-content"> <!-- New Content -->
+    <section id="race-report" class="tab-content" role="tabpanel" aria-labelledby="tab-race-report">
       <div class="space">
       <h2>2024 Race Report</h2>
       <h3>Results</h3>
@@ -356,7 +355,7 @@
     
     </section>
 
-    <section id="stats" class="tab-content stats"> 
+    <section id="stats" class="tab-content stats" role="tabpanel" aria-labelledby="tab-stats">
       <div class="space">
     <div class='tableauPlaceholder' id='viz1758473330010' style='position: relative'><noscript><a href='#'><img
       alt='Blorenge over the years '
@@ -377,8 +376,8 @@
   <param name='display_count' value='yes' />
   <param name='language' value='en-GB' />
 </object></div>
+</div>
 </section>
-</div> 
 <script
 type='text/javascript'>                    
 var divElement = document.getElementById('viz1758473330010'); 
@@ -402,23 +401,28 @@ var scriptElement = document.createElement('script'); scriptElement.src = 'https
         </p>
       </div>
     </section>-->
-  <!-- </main> -->
+  </main>
 
   
 
   <!-- Footer -->
-  <iframe class="footer-iframe" src="components/footer/footer.html" frameborder="0" scrolling="no"width="100%" height="100%"></iframe>
+  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" frameborder="0" scrolling="no" width="100%" height="100%"></iframe>
   <script src="script.js"></script>
   <script>
     // Function to show a specific tab
     function showTab(tabId) {
       // Remove active class from all tabs
-      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+        tab.setAttribute('aria-selected', 'false');
+      });
       // Remove active class from all tab contents
       document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
   
       // Add active class to the clicked tab
-      document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
+      const selectedTab = document.getElementById(`tab-${tabId}`);
+      selectedTab.classList.add('active');
+      selectedTab.setAttribute('aria-selected', 'true');
       // Add active class to the corresponding tab content
       document.getElementById(tabId).classList.add('active');
     }
@@ -427,16 +431,20 @@ var scriptElement = document.createElement('script'); scriptElement.src = 'https
     function activateTabFromHash() {
       const hash = window.location.hash.substring(1); // Get the hash without the '#' symbol
       if (hash) {
-        const tab = document.querySelector(`.tab[onclick="showTab('${hash}')"]`);
+        const tab = document.getElementById(`tab-${hash}`);
         const content = document.getElementById(hash);
   
         if (tab && content) {
           // Remove active class from all tabs and contents
-          document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+          document.querySelectorAll('.tab').forEach(tab => {
+            tab.classList.remove('active');
+            tab.setAttribute('aria-selected', 'false');
+          });
           document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
   
           // Add active class to the matching tab and content
           tab.classList.add('active');
+          tab.setAttribute('aria-selected', 'true');
           content.classList.add('active');
         }
       }
