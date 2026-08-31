@@ -5,7 +5,7 @@
 | File | User-facing purpose | Main dependencies |
 |---|---|---|
 | `index.html` | Homepage, event summary, community and environmental content | Global CSS, analytics, weather widget, YouTube, images |
-| `enter.html` | 2026 entry status; contains a currently commented Google Form embed | Global CSS, analytics, Google Forms when enabled |
+| `enter.html` | Race entry page with an embedded Google Form | Global CSS, analytics, Google Forms |
 | `result.html` | Current and historical race results | Global/results CSS, OpenSheet, published Google Sheet |
 | `route.html` | Course explanation, map, photos and assessment | Global/route CSS, published Google Doc |
 | `info.html` | Travel, kit, recce, report, statistics and winner information in tabs | Global/info/winners CSS, inline tab JavaScript, images and external links |
@@ -37,7 +37,7 @@ Because iframe content is a separate document, parent-page CSS and JavaScript do
 - `info.html` contains inline logic for switching tab sections and reading URL fragments.
 - `result.html` contains inline fetch, grouping, CSV parsing and table-rendering logic.
 - Analytics initialization is duplicated inline in each top-level page.
-- `enter.html` contains logic intended to react to the embedded form loading; the form markup is currently commented out.
+- `enter.html` contains the embedded registration form and logic intended to react to the form loading.
 
 ## Static assets
 
@@ -53,6 +53,4 @@ When replacing an image, preserve the filename if the page should update without
 | Historical results | Public Google Sheet exposed through OpenSheet |
 | 2025 results | Published Google Sheet CSV |
 | Risk/environmental assessment | Published Google Doc linked from `route.html` |
-| Race entry form | Google Form URL currently commented in `enter.html` |
-| Deployment configuration | GitHub Actions workflow and GitHub Actions secret |
-
+| Race entry form | Embedded Google Form in `enter.html` |

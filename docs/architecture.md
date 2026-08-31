@@ -1,74 +1,62 @@
-# System architecture
+# Architecture
 
-## Purpose and scope
+## Overview
 
-This repository contains the public Blorenge Fell Race information site. It is a small static website: GitHub stores the source, GitHub Actions deploys it, and Azure Static Web Apps serves it. There is no server-side application or database in this repository.
-
-## Context
+The Blorenge Fell Race website is a static, browser-rendered site. Azure Static Web Apps serves HTML, CSS, JavaScript, and images directly. There is no application server, API, or database in this repository.
 
 ```mermaid
-flowchart TD
-    Visitor[Website visitor] --> Azure[Azure Static Web Apps]
-    Azure --> Static[HTML, CSS, JavaScript and images]
-    Static --> Google[Google services]
-    Static --> OpenSheet[OpenSheet results API]
-    Static --> Media[Fonts, Font Awesome, YouTube and weather widget]
-    Maintainer[Site maintainer] --> GitHub[GitHub repository]
-    GitHub --> Actions[GitHub Actions]
-    Actions --> Azure
+flowchart LR
+    U[User / browser]
+    SITE[Public static website<br/>HTML / CSS / JavaScript / images]
+    AZ[Azure Static Web Apps]
+    GH[GitHub repository]
+    GA[GitHub Actions deployment]
+    FORM[Google Form<br/>registration]
+    RESULTS[Google Sheets and OpenSheet<br/>race results]
+    DOCS[Google Docs<br/>published race documents]
+    TAB[Tableau Public<br/>race statistics]
+    ANALYTICS[Google Analytics]
+    MEDIA[Fonts, icons, weather,<br/>video and location services]
+
+    U --> AZ --> SITE
+    GH --> GA --> AZ
+    SITE --> FORM
+    SITE --> RESULTS
+    SITE --> DOCS
+    SITE --> TAB
+    SITE --> ANALYTICS
+    SITE --> MEDIA
 ```
 
-## Deployment architecture
+## Components
 
-```mermaid
-flowchart TD
-    Dev[codex/development] --> PR[Pull request to main]
-    PR --> Preview[Temporary Azure preview]
-    PR --> Review[Visual and content checks]
-    Review --> Merge[Merge to main]
-    Merge --> Workflow[GitHub Actions workflow]
-    Workflow --> Production[Live Azure Static Web App]
-```
+| Component | Location | Responsibility |
+|---|---|---|
+| Home | `index.html` | Event summary, location, and community and environmental content |
+| Information | `info.html` | Travel, kit, race information, images, and statistics |
+| Route | `route.html` | Route narrative, map, images, and published assessment |
+| Entry | `enter.html` | Embeds the external registration form |
+| Results | `result.html` | Loads and presents current and historical published results |
+| Privacy | `privacy.html` | Public privacy information and contact details |
+| Shared navigation and footer | `components/` | Common page navigation and footer content |
+| Styling | `style*.css` and component CSS | Layout, responsive presentation, tables, route, and winner styling |
+| Behaviour | `script.js` and inline scripts | Page interaction, results rendering, analytics, and public embeds |
+| Media | `images/` | Logos, maps, event photographs, and winner photographs |
 
-The workflow is `.github/workflows/azure-static-web-apps-ambitious-bay-0339ed203.yml`. Its production trigger is a push to `main`. Pull requests targeting `main` receive Azure preview deployments, and closing a pull request removes its preview.
+## Data flow
 
-The workflow uses:
+- General event content and images are committed as static files.
+- Registration is completed through an embedded Google Form.
+- Results are loaded in the visitor's browser from published Google Sheets and OpenSheet endpoints.
+- Tableau Public provides race statistics.
+- Google Analytics receives website usage events from the browser.
+- Public contact links open the visitor's email application; the website does not send email itself.
 
-- `app_location: /` — the repository root is the site root.
-- Empty `api_location` — there is no Azure Functions API.
-- Empty `output_location` — files are served directly; there is no compilation/build output.
-- The repository secret `AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_BAY_0339ED203` — authenticates deployment to Azure. Its value is not stored in the source.
+The repository contains no server-side payment, email, database, or storage implementation.
 
-## Runtime data flows
+## Deployment flow
 
-Most content is committed directly in HTML. The important exception is `result.html`, which loads results in the visitor's browser:
+GitHub stores the source. GitHub Actions publishes reviewed website versions to Azure Static Web Apps. Pull-request previews provide a separate URL for checking proposed changes before production approval.
 
-1. Historical results are requested as JSON from OpenSheet, backed by a public Google Sheet.
-2. 2025 results are requested as CSV from a published Google Sheet.
-3. Browser JavaScript converts those responses into collapsible HTML tables.
-
-If either external endpoint is unavailable, the page catches and logs the error, but does not show a visitor-facing fallback message.
-
-Other third-party browser dependencies include Google Analytics (`G-82X36PHB8L`), Google Fonts, Font Awesome, YouTube, weatherwidget.io, What3Words, and published Google Docs/Forms.
-
-## Routing
-
-`routes.json` contains a catch-all rule that serves `/index.html` with HTTP 200 for unknown paths. Named pages are plain `.html` files. The navbar and footer are separate HTML documents embedded into every page with iframes.
-
-## Security and privacy boundaries
-
-- The site itself has no authentication and is publicly accessible.
-- No application secrets are present in the browser code; deployment credentials remain in GitHub Actions secrets.
-- Google Analytics and third-party embeds make browser requests outside Azure. Privacy/cookie behaviour should be reviewed when tracking or embeds change.
-- Results data is public and client-rendered. Do not publish fields in the source sheets that should not be publicly retrievable.
-- `main` currently has no repository ruleset. The development runbook therefore treats merge discipline as the protection against accidental production changes.
-
-## Known architectural constraints
-
-- Page layout and common metadata are duplicated across several HTML files.
-- Navbar/footer iframe documents add layout and accessibility complexity and require an HTTP server during local testing.
-- The site has no package manifest, automated tests, linting, link checker, or build validation.
-- `routes.json` can hide missing-page errors by returning the homepage with status 200.
-- Results depend on third parties at page-load time.
-- The repository includes large original images and macOS `.DS_Store` files, increasing repository size.
+Detailed operational and security review information is maintained separately from the public website.
 
