@@ -16,14 +16,21 @@ Then open <http://localhost:8000/>. Use an HTTP server instead of opening files 
 
 ## Checks
 
-The repository does not require a build. Useful checks include:
+The repository does not require a build. Run the dependency-free site validator
+from the repository root:
 
 ```sh
 git status --short --branch
-node --check script.js
+node scripts/validate-site.mjs
 ```
 
-Manual review should cover:
+The validator checks every HTML document for balanced structural elements,
+duplicate IDs, required document metadata, image alternative text, iframe
+titles, accessible link names, safe new-window links, local links and assets
+(including CSS assets and filename case), JavaScript and JSON syntax, and the custom 404
+configuration. It uses only the Node.js standard library.
+
+The automated checks complement manual browser review, which should cover:
 
 - home, information, route, entry, results, and privacy pages;
 - navbar and footer links;
@@ -49,4 +56,3 @@ Do not submit registration forms, enter personal data, or trigger external trans
 - Obtain explicit approval before merging a production change.
 
 Detailed operational and security review information is maintained separately from the public website.
-
