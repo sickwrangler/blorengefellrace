@@ -4,71 +4,49 @@
 
 No framework, package manager, dependency installation, compilation, or environment file is required. A modern browser is sufficient. Node.js is optional for JavaScript syntax checking, and any simple static HTTP server can serve the site locally.
 
-Runtime environment variables: none.
-
-CI secret names, which are not needed for local development:
-
-- `AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_BAY_0339ED203`
-- `GITHUB_TOKEN`
-
 ## Run locally
 
-From the repository root, start a static server. One example, if Python 3 is already installed, is:
+From `<repository-root>`, start a static HTTP server. For example, if Python 3 is already installed:
 
 ```sh
 python3 -m http.server 8000
 ```
 
-Then open `http://localhost:8000/`. Use an HTTP server rather than opening files directly so absolute paths, iframes, and browser fetch behaviour resemble production.
+Then open <http://localhost:8000/>. Use an HTTP server instead of opening files directly so absolute paths, embedded components, and browser requests behave more like the deployed website.
 
-No local server command is defined by the repository itself. Do not add dependencies merely to view the site.
+## Checks
 
-## Existing checks
-
-There is no configured test, lint, type-check, or build command. The following read-only checks are suitable today:
+The repository does not require a build. Useful checks include:
 
 ```sh
 git status --short --branch
 node --check script.js
-tidy -errors -quiet index.html
-tidy -errors -quiet info.html
-tidy -errors -quiet route.html
-tidy -errors -quiet enter.html
-tidy -errors -quiet result.html
-tidy -errors -quiet privacy.html
 ```
 
-The installed macOS `tidy` used in the audit has incomplete HTML5 awareness, so errors about elements such as `main`, `section`, `figure`, `nav`, and `footer` are not reliable. Structural messages about duplicate document/body elements, unmatched closing tags, or stray closing tags should still be investigated with a current HTML5 validator.
-
-For manual checks, verify:
+Manual review should cover:
 
 - home, information, route, entry, results, and privacy pages;
-- navbar/footer links from both top-level pages and component iframes;
-- images at case-sensitive paths;
+- navbar and footer links;
+- images and case-sensitive paths;
 - desktop and mobile widths;
-- registration form display without submission;
-- current and historical results loading;
-- browser console and network failures;
-- Tableau, weather, video, fonts, and analytics behaviour as appropriate; and
-- an unknown path, noting that current routing returns the homepage with status 200.
+- registration form display without submitting it;
+- current and historical results;
+- browser console and network errors; and
+- public embeds such as statistics, weather, video, fonts, and documents.
 
-## External dependencies during development
+## External services
 
-The site makes live public requests even when served locally:
+When the site is served locally, it still contacts public external services used for registration, results, statistics, analytics, and embedded content.
 
-- Google Form for registration;
-- Google Sheets CSV publications and OpenSheet for results;
-- Tableau Public for statistics;
-- Google Analytics, Google Fonts, Font Awesome, weatherwidget.io, YouTube, Google Docs, and what3words.
+Do not submit registration forms, enter personal data, or trigger external transactions during routine smoke testing.
 
-Do not submit the registration form, use real personal data, or trigger any external transaction during a smoke test. Browser privacy/ad-blocking settings may cause third-party failures that do not reproduce for every visitor.
+## Git workflow
 
-## Git safety
+- Make changes on a non-production branch.
+- Review the worktree before switching branches or synchronizing changes.
+- Use a pull request and its preview deployment for review.
+- Do not commit credentials, private entrant details, or unpublished spreadsheet data.
+- Obtain explicit approval before merging a production change.
 
-- `main` deploys automatically when pushed; treat it as production.
-- Fetch before comparing, but do not pull, merge, reset, or switch branches until worktree status and intent are understood.
-- There is currently no `.gitignore`; check carefully for `.DS_Store`, environment files, exports, credentials, and registration data before staging.
-- Never add Google Form/Sheet exports containing personal registration data.
-- The remote `codex/development` branch and open PR #1 already contain documentation work. Reconcile it before making overlapping documentation changes.
-- Keep changes on a development branch and review the Azure PR preview before any approved merge.
+Detailed operational and security review information is maintained separately from the public website.
 
