@@ -35,8 +35,11 @@ The automated checks complement manual browser review, which should cover:
 - home, information, route, entry, results, and privacy pages;
 - navbar and footer links;
 - images and case-sensitive paths;
-- desktop and mobile widths;
-- registration form display without submitting it;
+- approximately 320, 375, 430, 768 and 1440 pixel widths, checking for horizontal overflow;
+- the mobile navigation open and closed states, including 44px touch targets;
+- information tabs with touch, Tab and arrow-key input;
+- results tables using keyboard and horizontal scrolling;
+- entry publication state (the previous registration form remains commented reference only);
 - current and historical results;
 - browser console and network errors; and
 - public embeds such as statistics, weather, video, fonts, and documents.

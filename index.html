@@ -1,98 +1,144 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-82X36PHB8L"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-82X36PHB8L');
-</script>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blorenge Fell Race 2026</title>
-    <meta name="description" content="Blorenge Fell Race on Saturday 28 November 2026: 5.7 km with 485 m ascent, starting at 1:00 pm in Llanfoist.">
-    <link rel="stylesheet" href="style.css">
-    <link href='https://fonts.googleapis.com/css?family=Inter:400,bold' rel='stylesheet'>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Suez+One&display=swap" rel="stylesheet">
-<script src="https://kit.fontawesome.com/db043483b5.js" crossorigin="anonymous"></script>
-<link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/x-icon">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-82X36PHB8L"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-82X36PHB8L');
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blorenge Fell Race 2026</title>
+  <meta name="description" content="Blorenge Fell Race on Saturday 28 November 2026: 5.7 km with 485 m ascent, starting at 1:00 pm in Llanfoist.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;650;750&amp;family=Suez+One&amp;display=swap" rel="stylesheet">
+  <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+  <script src="script.js" defer></script>
 </head>
 <body>
-    <!-- Your content goes here -->
-    <script src="script.js"></script>
-    <!-- Include the navigation bar component -->
-    <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" frameborder="0" scrolling="no" width="100%"></iframe>
-    <main>
-    <h1 class="visually-hidden">Blorenge Fell Race</h1>
-<script>
-!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src='https://weatherwidget.io/js/widget.min.js';fjs.parentNode.insertBefore(js,fjs);}}(document,'script','weatherwidget-io-js');
-</script>
-    <div class="homeintro space">
-        <div class="homeintro_summary">
-            <h2>2026 race information</h2>
-            <p><strong>Date</strong> - Saturday 28 November 2026<br>
-                <strong>Race start</strong> - 1:00 pm<br>
-                <strong>Race HQ</strong> - Llanfoist Community Hall<br>
-                <strong>Race start location</strong> - bottom of Church Lane, Llanfoist<br>
-                <strong>Distance</strong> - 5.7 km<br>
-                <strong>Ascent</strong> - 485 m<br>
-                <strong>Entry fee</strong> - £6<br>
-                <strong>Entry limit</strong> - 110 runners<br>
-                <strong>Minimum age</strong> - 16<br>
-                <strong>Entries on the day</strong> - none</p>
-            <p>Entry opening and closing dates have not yet been confirmed. Further details will be published before entries open.</p>
-            <p>Parking is available but limited. Please walk, cycle, use public transport or lift-share where possible.</p>
-            <p><a href="info.html#kit">2026 kit information</a></p>
-</div>
-        <div class="homeintro_p1">
-        <p>Croeso i’r Blorenge, a great (but also tough) beginner-friendly fell race. This race is a real test on the thighs as you climb 485 m over the 5.7 km course.</p>
-        <p class="noteAlt"><strong>Saturday 28 November 2026, 1:00 pm.</strong> Entries are limited to 110 runners and there will be no entries on the day.</p>
-        <figure>
-            <figcaption>Photo by Matt Phillips Photography</figcaption>
-            <img class="homeintro_img" src="images/homepagemain.jpg" alt="Runner leading group up blorenge ascent">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" scrolling="no"></iframe>
+
+  <main id="main-content">
+    <section class="race-hero" aria-labelledby="race-title">
+      <div class="race-hero__copy">
+        <p class="eyebrow">Saturday 28 November 2026 · Llanfoist</p>
+        <h1 id="race-title">Blorenge Fell Race</h1>
+        <p class="race-hero__intro">Croeso i’r Blorenge, a great (but also tough) beginner-friendly fell race. This race is a real test on the thighs as you climb 485 m over the 5.7 km course.</p>
+
+        <dl class="race-facts" aria-label="2026 race facts">
+          <div><dt>Start</dt><dd>1:00 pm</dd></div>
+          <div><dt>Distance</dt><dd>5.7 km</dd></div>
+          <div><dt>Ascent</dt><dd>485 m</dd></div>
+          <div><dt>Entry</dt><dd>£6</dd></div>
+          <div><dt>Limit</dt><dd>110 runners</dd></div>
+          <div><dt>Minimum age</dt><dd>16</dd></div>
+        </dl>
+
+        <div class="actions" aria-label="Race actions">
+          <a class="button" href="enter.html">Entry information</a>
+          <a class="button button--quiet" href="route.html">Explore the route</a>
+          <a class="button button--quiet" href="info.html">Runner information</a>
+          <a class="button button--quiet" href="result.html">Race results</a>
+        </div>
+      </div>
+      <figure class="race-hero__media">
+        <img src="images/homepagemain.jpg" width="1328" height="888" alt="A line of fell runners climbing steeply through woodland" fetchpriority="high">
+        <figcaption>Photo by Matt Phillips Photography</figcaption>
+      </figure>
+    </section>
+
+    <section class="story-section" aria-labelledby="race-information-title">
+      <div class="section-shell race-details">
+        <div class="story-copy">
+          <p class="kicker">Race day essentials</p>
+          <h2 id="race-information-title">2026 race information</h2>
+          <p>Entry opening and closing dates have not yet been confirmed. Further details will be published before entries open.</p>
+          <p class="notice"><strong>There will be no entries on the day.</strong></p>
+          <div class="actions">
+            <a href="info.html#kit">2026 kit information</a>
+            <a href="info.html#travel">Travel information</a>
+          </div>
+        </div>
+        <dl class="detail-list">
+          <div><dt>Race HQ</dt><dd>Llanfoist Community Hall</dd></div>
+          <div><dt>Race start</dt><dd>Bottom of Church Lane, Llanfoist</dd></div>
+          <div><dt>Parking</dt><dd>Available but limited</dd></div>
+          <div><dt>Travel</dt><dd>Please walk, cycle, use public transport or lift-share where possible.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="story-section story-section--dark" aria-labelledby="determination-title">
+      <div class="section-shell story-grid">
+        <div class="story-copy">
+          <p class="kicker">The race</p>
+          <h2 id="determination-title">Enderfyniad<br>Determination</h2>
+          <p lang="cy">Blwyddyn dwetha, dechreuodd 98 o redwyr ac gorffen nhw ras fell y Blorenge. Oedrannau o 16 i 80 oed. Roedd rhedwyr o bob gallu gwahanol yn cymryd rhan - rhai profiadol a rhai newydd. Roedd hi'n wlyb ac yn niwlog, ond gorffennodd pawb y ras yn ddiogel.</p>
+        </div>
+        <figure class="story-media">
+          <img src="images/blorenge_top_female.jpeg" width="1972" height="1613" loading="lazy" alt="A runner descending through autumn bracken on the Blorenge">
+        </figure>
+      </div>
+    </section>
+
+    <section class="story-section" aria-labelledby="community-title">
+      <div class="section-shell story-grid story-grid--reverse">
+        <div class="story-copy">
+          <p class="kicker">Together on the hill</p>
+          <h2 id="community-title">Cymuned<br>Community</h2>
+          <p lang="cy">Dw i'n credu bod pawb wedi cael amser gwych - rhedeg, cerdded, sgwrsio, bwyta - jest dod at ei gilydd. Roedd y gymuned yn anhygoel, pobl leol a rhedwyr o bell yn rhannu straeon ac yn helpu ei gilydd. Roedd bwyd da, cwmni da, a chroeso cynnes i bawb.</p>
+        </div>
+        <div class="photo-pair" aria-label="Blorenge Fell Race community photographs">
+          <img src="images/optimized/home/banner22.jpg" width="1800" height="766" loading="lazy" alt="Runners and organisers gathered at the start line">
+          <img src="images/banner1.jpeg" width="1715" height="1224" loading="lazy" alt="A runner and a fell-running dog crossing open hillside">
+        </div>
+      </div>
+    </section>
+
+    <section class="story-section" aria-labelledby="environment-title">
+      <div class="section-shell">
+        <div class="story-grid">
+          <div class="story-copy">
+            <p class="kicker">Care for the mountain</p>
+            <h2 id="environment-title">Amgylchedd<br>Environment</h2>
+            <p>The spring and summer of 2025 have brought devastating wildfires to the heart of the Bannau Brycheiniog, with flames tearing across beloved landscapes from the Blorenge to Sugar Loaf, and a particularly stubborn peat fire at Clydach Dingle that burnt relentlessly for over a month. These fires have consumed thousands of acres, releasing carbon stored for centuries while destroying fragile mountain ecosystems that take decades to recover.</p>
+          </div>
+          <figure class="story-media">
+            <img src="images/optimized/home/environment1.jpg" width="1600" height="748" loading="lazy" alt="A firefighter tackling wildfire on the Blorenge">
+            <figcaption>Wildfire on the Blorenge</figcaption>
           </figure>
         </div>
-    </div>
-    <div class="home_banner space">
-        <h2>Enderfyniad Determination</h2>
-        <p>Blwyddyn dwetha, dechreuodd 98 o redwyr ac gorffen nhw ras fell y Blorenge. Oedrannau o 16 i 80 oed. Roedd rhedwyr o bob gallu gwahanol yn cymryd rhan - rhai profiadol a rhai newydd. Roedd hi'n wlyb ac yn niwlog, ond gorffennodd pawb y ras yn ddiogel. </p>
-    </div>
-    <div class="home_banner_img_div">
-        <img class="home_banner_img"src="images/banner1.jpeg" alt="Dog racing the blorenge fell race"></div>
-    <div class="home_banner space">
-    <p>Dw i'n credu bod pawb wedi cael amser gwych - rhedeg, cerdded, sgwrsio, bwyta - jest dod at ei gilydd. Roedd y gymuned yn anhygoel, pobl leol a rhedwyr o bell yn rhannu straeon ac yn helpu ei gilydd. Roedd bwyd da, cwmni da, a chroeso cynnes i bawb. </p>
-    <h2>Cymuned Community</h2>
-    </div>
-    <div class="home_banner_img_div">
-        <img class="home_banner_img" src="images/banner2.JPG" alt="Runners tying up shoes">
-        <img class="home_banner_img" src="images/banner22.JPG" alt="Runners at the start line">
-    </div>
-    <div class="home_banner space">
-        <h2>Amgylchedd Environment</h2>
-        <p>The spring and summer of 2025 have brought devastating wildfires to the heart of the Bannau Brycheiniog, with flames tearing across beloved landscapes from the Blorenge to Sugar Loaf, and a particularly stubborn peat fire at Clydach Dingle that burnt relentlessly for over a month. These fires have consumed thousands of acres, releasing carbon stored for centuries while destroying fragile mountain ecosystems that take decades to recover. <br><br>
+        <div class="story-grid story-grid--reverse story-grid--spaced">
+          <div class="story-copy">
+            <p>For those who cherish these ancient hills – who know the joy of running the Blorenge, watching red kites soar above heathered slopes, or finding solace in these timeless peaks – the sight of smoke rising from our mountains should serve as both heartbreak and call to action. Our responsibility extends beyond simply loving these places; we must actively protect them by reporting suspicious activity, following fire safety guidelines, supporting conservation efforts, and advocating for the resources needed to prevent and fight these devastating blazes that threaten the very soul of our Welsh landscape.</p>
+            <p>Local community charity focused on woodland creation – <a href="https://stumpupfortrees.org">Stump Up For Trees</a>.</p>
+          </div>
+          <figure class="story-media">
+            <img src="images/optimized/home/environment2.jpg" width="1600" height="936" loading="lazy" alt="Smoke and fire spreading along the Blorenge hillside">
+            <figcaption>Wildfire above the local community</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
 
-            For those who cherish these ancient hills – who know the joy of running the Blorenge, watching red kites soar above heathered slopes, or finding solace in these timeless peaks – the sight of smoke rising from our mountains should serve as both heartbreak and call to action. Our responsibility extends beyond simply loving these places; we must actively protect them by reporting suspicious activity, following fire safety guidelines, supporting conservation efforts, and advocating for the resources needed to prevent and fight these devastating blazes that threaten the very soul of our Welsh landscape. 
-        <br><br>Local community charity focused on woodland creation -<a href="https://stumpupfortrees.org">  Stump up for Trees</a></p>
-    </div>
-    <div class="home_banner_img_div">
-        <img class="home_banner_img" src="images/environment1.jpg" alt="Wildfire on the blorenge">
-        <img class="home_banner_img" src="images/environment2.jpg" alt="Another image of the Wildfire on the blorenge">
-    </div>
-    <div class="space">
-    <div class="center-wrapper">
-        <iframe width="560" height="315" src="https://www.youtube.com/embed/2ufl8l2C-R4?si=S0ZCNHcl-K_QMpTB" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-    </div>
-</div>
-</main>
-  <!-- Footer -->
-    <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" frameborder="0" scrolling="no" width="100%" height="100%"></iframe>
+    <section class="story-section" aria-labelledby="film-title">
+      <div class="section-shell">
+        <p class="kicker">From the fell</p>
+        <h2 id="film-title">Watch the race</h2>
+        <iframe class="video-frame" src="https://www.youtube.com/embed/2ufl8l2C-R4?si=S0ZCNHcl-K_QMpTB" title="Blorenge Fell Race video" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+      </div>
+    </section>
+  </main>
 
-    
-     
+  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" scrolling="no"></iframe>
+  <script>
+    !function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src='https://weatherwidget.io/js/widget.min.js';fjs.parentNode.insertBefore(js,fjs);}}(document,'script','weatherwidget-io-js');
+  </script>
 </body>
 </html>

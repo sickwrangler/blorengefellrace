@@ -5,21 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Page not found | Blorenge Fell Race</title>
   <link rel="stylesheet" href="style.css">
-  <link href="https://fonts.googleapis.com/css?family=Inter" rel="stylesheet">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Suez+One&display=swap" rel="stylesheet">
-  <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/x-icon">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;650;750&amp;family=Suez+One&amp;display=swap" rel="stylesheet">
+  <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+  <script src="script.js" defer></script>
 </head>
 <body>
-  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" frameborder="0" scrolling="no" width="100%"></iframe>
-  <main>
-    <section class="space center-wrapper">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" scrolling="no"></iframe>
+  <main id="main-content">
+    <section class="space not-found">
+      <p class="eyebrow">404 · Off route</p>
       <h1>Page not found</h1>
       <p>Sorry, the page you requested could not be found.</p>
-      <p><a href="/index.html">Return to the Blorenge Fell Race homepage</a></p>
+      <p><a class="button" href="/index.html">Return to the race homepage</a></p>
     </section>
   </main>
-  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" frameborder="0" scrolling="no" width="100%" height="100%"></iframe>
+  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" scrolling="no"></iframe>
 </body>
 </html>

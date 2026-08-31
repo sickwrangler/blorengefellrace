@@ -1,96 +1,35 @@
-body, html {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-}
+:root { --paper:#f5f1e8; --forest:#173126; --forest-light:#234b3a; --bracken:#c47a50; --focus:#e7a62c; }
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin:0; color:var(--paper); background:var(--forest); font-family:"Inter",system-ui,sans-serif; }
 .navbar {
-  background-color: #fff;
-  color: black;
-  padding: 0px 20px 0px 20px;
-  width: 100%;
-  box-sizing: border-box;
-  display:flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 3px #804A31 solid;
+  display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center;
+  width:min(100% - 2rem,72rem); min-height:5.25rem; margin-inline:auto;
+  border-bottom:1px solid rgba(245,241,232,.35);
 }
-
-/* Base Fonts */
-body, main {
-  font-family: 'Inter', sans-serif; /* Set your preferred font stack */
-  font-size: 16px; /* Set base font size */
-  line-height: 1.6; /* Set line height */
+.brand-heading { min-width:0; margin:0; font:inherit; }
+.brand { display:inline-flex; align-items:center; gap:.75rem; min-height:2.75rem; color:var(--paper); text-decoration:none; }
+.logo_navbar { width:3.15rem; height:3.15rem; }
+.brand__name { font-family:"Suez One",Georgia,serif; font-size:clamp(1.15rem,2.5vw,1.55rem); line-height:1; }
+.menu-toggle {
+  display:none; min-width:2.75rem; min-height:2.75rem; padding:.55rem .8rem;
+  border:1px solid rgba(245,241,232,.6); border-radius:.2rem;
+  color:var(--paper); background:transparent; font:700 .9rem/1 "Inter",sans-serif;
 }
-
-h1, h2, h3, h4, h5, h6 {
-  font-family: 'Suez One', sans-serif; /* Example: Set headings font */
-  /* Additional styles for headings if needed */
+.nav-links { display:flex; justify-content:flex-end; gap:.25rem; padding:0; margin:0; list-style:none; }
+.nav-links a {
+  display:inline-flex; align-items:center; min-height:2.75rem; padding:.45rem .8rem;
+  border-bottom:.2rem solid transparent; color:var(--paper); font-size:.92rem; font-weight:700; text-decoration:none;
 }
-
-.navbar img {
-  height: auto; /* Adjust the height of the logo as needed */
-  width: 150px;
+.nav-links a:hover, .nav-links a[aria-current="page"] { border-bottom-color:var(--bracken); }
+a:focus-visible, button:focus-visible { outline:.2rem solid var(--focus); outline-offset:.15rem; }
+@media (max-width:47.99rem) {
+  .navbar { align-content:start; width:calc(100% - 1.25rem); min-height:4.5rem; padding-top:.35rem; }
+  .logo_navbar { width:2.75rem; height:2.75rem; }
+  .menu-toggle { display:block; }
+  .nav-links { display:none; grid-column:1/-1; grid-template-columns:1fr 1fr; gap:0; padding:.5rem 0 1rem; }
+  .navbar.is-open .nav-links { display:grid; }
+  .nav-links li { border-top:1px solid rgba(245,241,232,.25); }
+  .nav-links li:nth-child(odd) { border-right:1px solid rgba(245,241,232,.25); }
+  .nav-links a { min-height:3.35rem; padding-inline:1rem; border-bottom:0; }
+  .nav-links a:hover, .nav-links a[aria-current="page"] { color:var(--paper); background:var(--forest-light); }
 }
-
-@media (max-width: 840px) {
-  .logo_navbar {
-      display: none; /* Hide the element on mobile devices */
-  }
-}
-
-.navbar h1 {
-  margin: 0;
-  font-size: 42px;
-  margin-right: 35vw;
-}
-
-.nav-links {
-  list-style: none; /* Remove bullet points from the list */
-  margin: 0;
-  padding: 0;
-}
-
-.nav-links li {
-  display: inline-block; /* Display list items horizontally */
-  margin-right: 20px; /* Add some spacing between each navigation link */
-}
-
-@media screen and (min-width: 980px) and (max-width: 1300px) {
-  .navbar h1 {
-      margin-right: 10vw; /* Decrease margin for smaller screens */
-  }
-  .nav-links li {
-    margin-right: 1px; /* Add some spacing between each navigation link */
-
-}
-}
-@media screen and (max-width: 980px) {
-  .navbar h1 {
-      margin-right: 0vw; /* Decrease margin for smaller screens */
-  }
-  .nav-links li {
-    margin-right: 1px; /* Add some spacing between each navigation link */
-
-}
-}
-
-.nav-links li:last-child {
-  margin-right: 0; /* Remove margin from the last navigation link */
-}
-
-.nav-links li a {
-  color: black;
-  text-decoration: none;
-  background: #F49097;
-  padding: 2px 4px;
-  border-radius: 10%;
-  font-size: 1.5rem;
-  border-bottom: 2px solid black;
-}
-
-.nav-links li a:hover {
-  text-decoration: underline; /* Underline navigation links on hover */
-}
-
-
-

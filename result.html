@@ -12,30 +12,34 @@
 </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blorenge Fell Race</title>
+  <title>Results | Blorenge Fell Race</title>
+  <meta name="description" content="Current and historical results for the Blorenge Fell Race.">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="style_results.css">
-  <link href='https://fonts.googleapis.com/css?family=Inter' rel='stylesheet'>
   <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Suez+One&display=swap" rel="stylesheet">
-<script src="https://kit.fontawesome.com/db043483b5.js" crossorigin="anonymous"></script>
-<link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/x-icon">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;650;750&amp;family=Suez+One&amp;display=swap" rel="stylesheet">
+<link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+<script src="script.js" defer></script>
 </head>
 <body>
-
-  <!-- Header -->
-  <!-- Include the navigation bar component here -->
-  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" frameborder="0" scrolling="no" width="100%"></iframe>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" scrolling="no"></iframe>
 
   <!-- Main Content -->
-  <main>
-<div class="space">
-  <h1>Results 2025</h1>
+  <main id="main-content" class="results-page">
+<div class="page-shell">
+  <div class="results-intro">
+    <p class="eyebrow">Blorenge Fell Race</p>
+    <h1>Race results</h1>
+    <p class="lede">Browse the latest and historical race results.</p>
+  </div>
+  <h2 class="result-heading">2025 results</h2>
+  <p id="results-status" class="results-status" role="status" aria-live="polite">Loading results…</p>
     <!-- NEW: Container for the 2025 table -->
     <div id="results-2025"></div>
 
-    <h2 class="result-heading">Results</h2>
+    <h2 class="result-heading">Historical results</h2>
     <div id="tables-container"></div>
   </div><!-- <script>
 fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4aQvc6ivf2Ct_l8_so_qZVUQe0DigVD_Jwjmhyn3PRpjHZOmDnemc8d/pub?gid=0&single=true&output=csv')
@@ -64,7 +68,7 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
   </main>
 
   <!-- Footer -->
-  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" frameborder="0" scrolling="no" width="100%" height="100%"></iframe>
+  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" scrolling="no"></iframe>
 
 
   
@@ -100,6 +104,7 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
                 });
             } catch (error) {
                 console.error('Error fetching data:', error);
+                document.getElementById('results-status').textContent = 'Some historical results could not be loaded. Please try again later.';
             }
         }
 
@@ -107,7 +112,7 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
         function createTableForYear(year, results) {
             
             // Create a container for the collapsible section
-            const section = document.createElement('div');
+            const section = document.createElement('section');
 
             // Create the collapsible button
             const button = document.createElement('button');
@@ -115,6 +120,10 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
             button.textContent = `Show Results for ${year}`;
             button.setAttribute('aria-expanded', 'false');
          
+            const tableScroll = document.createElement('div');
+            tableScroll.className = 'table-scroll';
+            tableScroll.tabIndex = 0;
+            tableScroll.setAttribute('aria-label', `Scrollable results table for ${year}`);
             const table = document.createElement('table');
 
             // Add the caption with the year
@@ -126,12 +135,12 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
             const thead = document.createElement('thead');
             const headerRow = document.createElement('tr');
             headerRow.innerHTML = `
-                <th>Position</th>
-                <th>Name</th>
-                <th>Club</th>
-                <th>Category</th>
-                <th>Category Position</th>
-                <th>Time</th>
+                <th scope="col">Position</th>
+                <th scope="col">Name</th>
+                <th scope="col">Club</th>
+                <th scope="col">Category</th>
+                <th scope="col">Category Position</th>
+                <th scope="col">Time</th>
             `;
             thead.appendChild(headerRow);
             table.appendChild(thead);
@@ -152,16 +161,19 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
             table.appendChild(tbody);
             // Append the table and button to the section
             section.appendChild(button);
-            section.appendChild(table);
+            tableScroll.appendChild(table);
+            section.appendChild(tableScroll);
 
             // Add event listener to toggle table visibility
             button.addEventListener('click', () => {
                 const isExpanded = button.getAttribute('aria-expanded') === 'true';
                 button.setAttribute('aria-expanded', !isExpanded);
                 table.style.display = isExpanded ? 'none' : 'table'; // Toggle table visibility
+                tableScroll.hidden = isExpanded;
                 button.textContent = isExpanded ? `Show Results for ${year}` : `Hide Results for ${year}`;
             });
 
+            tableScroll.hidden = true;
             return section;
         }
         
@@ -201,8 +213,10 @@ fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vQlPI-osit391xX7p8KK60kj4
             const results2025Container = document.getElementById('results-2025');
             const table2025 = createTableForYear(2025, results);
             results2025Container.appendChild(table2025);
+            document.getElementById('results-status').textContent = 'Results loaded.';
         } catch (error) {
             console.error('Error fetching 2025 data:', error);
+            document.getElementById('results-status').textContent = 'The 2025 results could not be loaded. Please try again later.';
         }
     }
 

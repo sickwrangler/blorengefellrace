@@ -2,111 +2,85 @@
 <html lang="en">
 <head>
   <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-82X36PHB8L"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-82X36PHB8L');
-</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-82X36PHB8L"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-82X36PHB8L');
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 Route | Blorenge Fell Race</title>
   <meta name="description" content="Route information for the 5.7 km Blorenge Fell Race, with 485 m ascent and a start at the bottom of Church Lane, Llanfoist.">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="style_route.css">
-  <link href='https://fonts.googleapis.com/css?family=Inter' rel='stylesheet'>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Suez+One&display=swap" rel="stylesheet">
-<script src="https://kit.fontawesome.com/db043483b5.js" crossorigin="anonymous"></script>
-<link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;650;750&amp;family=Suez+One&amp;display=swap" rel="stylesheet">
+  <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+  <script src="script.js" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" scrolling="no"></iframe>
 
-  <!-- Header -->
-  <!-- Include the navigation bar component here -->
-  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" frameborder="0" scrolling="no" width="100%"></iframe>
+  <main id="main-content">
+    <div class="page-shell">
+      <section class="route-intro" aria-labelledby="route-title">
+        <div>
+          <p class="eyebrow">5.7 km · 485 m ascent</p>
+          <h1 id="route-title">Route<br><span lang="cy">Llwybr</span></h1>
+          <p class="lede">The 2026 race starts at the bottom of Church Lane, Llanfoist.</p>
+        </div>
+        <img class="route-intro__image" src="images/optimized/route/ascent.jpg" width="1600" height="1398" alt="Fell runners climbing the steep open slope of the Blorenge" fetchpriority="high">
+      </section>
 
-  <!-- Main Content -->
-  <main>
-    <section>
-      <div class="space">
-      <h1>Route / Llwybr</h1>
-      <p>The 2026 race is 5.7 km with 485 m of ascent. The race starts at the bottom of Church Lane, Llanfoist.</p>
-      <p class="noteAlt">The authoritative 2026 route and map have not yet been published. Further details will be published before entries open. The guide and photographs below show the route used previously and should not be relied on as the confirmed 2026 route.</p>
+      <p class="noteAlt section-top">The authoritative 2026 route and map have not yet been published. Further details will be published before entries open. The guide and photographs below show the route used previously and should not be relied on as the confirmed 2026 route.</p>
 
-   
-      <figure class="center-wrapper">
-    <img class="map_img" src="images/OS Map blorenge.png" alt="Previous Blorenge Fell Race route guide">
- 
-    <figcaption>Previous Blorenge Fell Race route guide, shown for context only</figcaption>
-  </figure>
- 
+      <figure class="route-map">
+        <img class="map_img" src="images/OS Map blorenge.png" width="1452" height="1288" loading="lazy" alt="Previous Blorenge Fell Race route guide">
+        <figcaption>Previous Blorenge Fell Race route guide, shown for context only</figcaption>
+      </figure>
 
-    <div class="route_container">
-      <img class="route_img" src="images/blorenge_pauld.jpeg" alt="Start line briefing">
-      <div class="route_centre_text"><h2>The start / Y cychwyn</h2>
-        <img class="arrow_LR" src="images/arrow_LR.svg" alt="">
-      </div>
-      </div>
+      <section aria-labelledby="previous-route-title">
+        <p class="kicker">Previous route guide</p>
+        <h2 id="previous-route-title">From village to summit and back</h2>
+        <ol class="route-journey">
+          <li class="route-step">
+            <div class="route-step__copy"><h2>The start<br><span lang="cy">Y cychwyn</span></h2></div>
+            <img src="images/optimized/route/start.jpg" width="900" height="1200" loading="lazy" alt="Runners listening to the start-line briefing">
+          </li>
+          <li class="route-step">
+            <div class="route-step__copy"><h2>The tunnel<br><span lang="cy">Y twnnel</span></h2></div>
+            <img src="images/optimized/route/tunnel.jpg" width="900" height="1200" loading="lazy" alt="The wet stone tunnel on the previous race route">
+          </li>
+          <li class="route-step">
+            <div class="route-step__copy"><h2>The tram road<br><span lang="cy">Y ffordd drams</span></h2></div>
+            <img src="images/blorenge_tramroad_wyndham.jpeg" width="2048" height="1536" loading="lazy" alt="A runner climbing a muddy wooded section beside a fallen tree">
+          </li>
+          <li class="route-step">
+            <div class="route-step__copy"><h2>The steep bit<br><span lang="cy">Y rhan serth</span></h2></div>
+            <img src="images/optimized/route/climb.jpg" width="1600" height="1066" loading="lazy" alt="A group of runners climbing a steep grassy bank">
+          </li>
+          <li class="route-step">
+            <div class="route-step__copy"><h2>The trig, and now back down<br><span lang="cy">Y trig, ac yn awr yn ôl i lawr</span></h2></div>
+            <img src="images/Blorenge_trig.webp" width="1267" height="950" loading="lazy" alt="The Blorenge trig point beneath a broad cloudy sky">
+          </li>
+          <li class="route-step">
+            <div class="route-step__copy"><h2>The finish<br><span lang="cy">Y gorffen</span></h2></div>
+            <img src="images/optimized/route/finish.jpg" width="1600" height="1066" loading="lazy" alt="A runner approaching the finish along a stone-walled lane">
+          </li>
+        </ol>
+      </section>
 
-
-    <div class="route_container">
-      <div class="route_centre_text">
-      <h2>The tunnel / Y twnnel</h2>
-      <img class="arrow_LR" src="images/arrow_RL.svg" alt="">
+      <section class="route-documents" aria-labelledby="route-documents-title">
+        <h2 id="route-documents-title">2026 route documents</h2>
+        <p>The confirmed route map and any public assessment information will be published when available.</p>
+      </section>
     </div>
-      <img class="route_img" src="images/blorenge_tunnel.jpeg" alt="Cannal tunnel">
-    </div>
-  
-
-      <div class="route_container">
-      <img class="route_img" src="images/blorenge_tramroad_wyndham.jpeg" alt="lead male tramroad">
-      <div class="route_centre_text">
-      <h2>The tram road / Y ffordd drams</h2>
-      <img class="arrow_LR" src="images/arrow_LR.svg" alt="">
-    </div>
-  </div>
-  
-      <div class="route_container">
-        <div class="route_centre_text">
-      <h2>The steep bit / Y rhan serth</h2>
-      <img class="arrow_LR" src="images/arrow_RL.svg" alt="">
-    </div>
-      <img class="route_img" src="images/blorenge_climb_ladies.jpeg" alt="lead male steep part">
-    </div>
-
-      <div class="route_container">
-      <img class="route_img" src="images/Blorenge_trig.webp" alt="the trig">
-      <div class="route_centre_text">
-      <h2>The trig, and now back down. / Y trig, ac yn awr yn ôl i lawr.</h2>
-      <img class="arrow_LR" src="images/arrow_LR.svg" alt="">
-    </div>
-  </div>
-
-  <div class="route_container">
-    <div class="route_centre_text">
-    <h2>The finish / Y gorffen</h2>
-  </div>
-    <img class="route_img" src="images/blorenge_finisher_flora.jpeg" alt="The finish line">
-
-</div>
-  <br>
-  <br>
-  <hr>
-  <br>
-  <div class="space">
-  <h2>2026 route documents</h2>
-  <p>The confirmed route map and any public assessment information will be published when available.</p>
-</div>
-  </div>
-    </section>
   </main>
 
-  <!-- Footer -->
-  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" frameborder="0" scrolling="no" width="100%" height="100%"></iframe>
-
+  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" scrolling="no"></iframe>
 </body>
 </html>

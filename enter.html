@@ -15,34 +15,35 @@
   <title>2026 Entry | Blorenge Fell Race</title>
   <meta name="description" content="Entry information for the Blorenge Fell Race on Saturday 28 November 2026.">
   <link rel="stylesheet" href="style.css">
-  <link href='https://fonts.googleapis.com/css?family=Inter' rel='stylesheet'>
   <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Suez+One&display=swap" rel="stylesheet">
-<script src="https://kit.fontawesome.com/db043483b5.js" crossorigin="anonymous"></script>
-<link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/x-icon">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;650;750&amp;family=Suez+One&amp;display=swap" rel="stylesheet">
+<link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+<script src="script.js" defer></script>
 </head>
 
 
 <body>
-
-  <!-- Header -->
-  <!-- Include the navigation bar component here -->
-  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" frameborder="0" scrolling="no" width="100%"></iframe>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" scrolling="no"></iframe>
 
   <!-- Main Content -->
-  <main>
-  <div class="space">
-  <h1>2026 entry</h1>
-  <p>The Blorenge Fell Race takes place on Saturday 28 November 2026, starting at 1:00 pm.</p>
-  <ul>
-    <li>Entry fee: £6</li>
-    <li>Entry limit: 110 runners</li>
-    <li>Minimum age: 16</li>
-    <li>No entries on the day</li>
-  </ul>
-  <p>Entry opening and closing dates, the registration service and the payment method have not yet been confirmed. Further details will be published before entries open.</p>
-</div>
+  <main id="main-content">
+  <div class="page-shell">
+    <div class="page-heading">
+      <p class="eyebrow">Saturday 28 November 2026</p>
+      <h1>2026 entry</h1>
+      <p class="lede">The Blorenge Fell Race starts at 1:00 pm.</p>
+    </div>
+    <h2 class="section-top">Entry details</h2>
+    <ul class="content-list">
+      <li><strong>Entry fee</strong><span>£6</span></li>
+      <li><strong>Entry limit</strong><span>110 runners</span></li>
+      <li><strong>Minimum age</strong><span>16</span></li>
+      <li><strong>Entries on the day</strong><span>None</span></li>
+    </ul>
+    <p class="notice">Entry opening and closing dates, the registration service and the payment method have not yet been confirmed. Further details will be published before entries open.</p>
+  </div>
   <!-- Previous registration form retained for reference only. It is not confirmed for 2026.
   <main>
     <div class="space">
@@ -57,7 +58,7 @@
   </main>
 
   <!-- Footer -->
-  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" frameborder="0" scrolling="no" width="100%" height="100%"></iframe>
+  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" scrolling="no"></iframe>
 
   <script>
     const iframe = document.getElementById('google-form-iframe');
