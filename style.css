@@ -35,6 +35,11 @@ h1 {
     font-size: 28px;
 }
 
+.result-heading {
+    font-size: 28px;
+    margin-block: 0.67em;
+}
+
 h1 a {
     color: var(--main-color);
     text-decoration: none;
