@@ -17,47 +17,46 @@
   <link rel="stylesheet" href="style_info.css">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="style_winners.css">
-  <link href='https://fonts.googleapis.com/css?family=Inter:400,bold' rel='stylesheet'>
   <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Suez+One&display=swap" rel="stylesheet">
-<script src="https://kit.fontawesome.com/db043483b5.js" crossorigin="anonymous"></script>
-<link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/x-icon">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;650;750&amp;family=Suez+One&amp;display=swap" rel="stylesheet">
+<link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
 </head>
 <body>
-
-  <!-- Header -->
-  <!-- Include the navigation bar component here -->
-  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" frameborder="0" scrolling="no" width="100%"></iframe>
-  <header>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" scrolling="no"></iframe>
+  <header class="info-header">
+    <div class="section-shell">
+      <p class="eyebrow">Blorenge Fell Race</p>
+      <h1>Race information</h1>
+    </div>
     <div class="tab-container">
       <ul class="tabs" role="tablist" aria-label="Information sections">
-        <li><button type="button" class="tab active" id="tab-travel" role="tab" aria-controls="travel" aria-selected="true" onclick="showTab('travel')">Travel</button></li>
-        <li><button type="button" class="tab" id="tab-kit" role="tab" aria-controls="kit" aria-selected="false" onclick="showTab('kit')">Kit list</button></li>
-        <li><button type="button" class="tab" id="tab-race-report" role="tab" aria-controls="race-report" aria-selected="false" onclick="showTab('race-report')">2024 Race Report</button></li>
-        <li><button type="button" class="tab" id="tab-stats" role="tab" aria-controls="stats" aria-selected="false" onclick="showTab('stats')">Race stats</button></li>
+        <li><button type="button" class="tab active" id="tab-travel" role="tab" aria-controls="travel" aria-selected="true" tabindex="0" onclick="showTab('travel')">Travel</button></li>
+        <li><button type="button" class="tab" id="tab-kit" role="tab" aria-controls="kit" aria-selected="false" tabindex="-1" onclick="showTab('kit')">Kit list</button></li>
+        <li><button type="button" class="tab" id="tab-race-report" role="tab" aria-controls="race-report" aria-selected="false" tabindex="-1" onclick="showTab('race-report')">2024 Race Report</button></li>
+        <li><button type="button" class="tab" id="tab-stats" role="tab" aria-controls="stats" aria-selected="false" tabindex="-1" onclick="showTab('stats')">Race stats</button></li>
       </ul>
     </div>
   </header>
   <!-- Main Content -->
-  <main>
-    <h1 class="visually-hidden">Blorenge Fell Race information</h1>
-    <section id="travel" class="tab-content active" role="tabpanel" aria-labelledby="tab-travel">
+  <main id="main-content">
+    <section id="travel" class="tab-content active" role="tabpanel" aria-labelledby="tab-travel" tabindex="0">
       <div class="space">
         <h2>Travel for 2026</h2>
         <p>Race HQ is at Llanfoist Community Hall. The race itself starts at the bottom of Church Lane, Llanfoist.</p>
         <p>Parking is available but limited. Please walk, cycle, use public transport or lift-share where possible.</p>
         <p>Detailed public-transport directions will be published before entries open.</p>
       </div>
-      <img class="info-banner-img" src="images/activetravelbanner.png" alt="Runners, walkers, cyclists and public transport are the future">
+      <img class="info-banner-img" src="images/blorenge_finish_line_group.jpeg" width="2048" height="1365" loading="lazy" alt="Runners gathering near the race venue after finishing">
     </section>
- <section id="kit" class="tab-content" role="tabpanel" aria-labelledby="tab-kit">
+ <section id="kit" class="tab-content" role="tabpanel" aria-labelledby="tab-kit" tabindex="0">
     <div class="space">
       <h2>2026 kit requirements</h2>
       <p>The mandatory and recommended kit requirements for 2026 have not yet been confirmed. Further details will be published before entries open.</p>
     </div>
   </section>
-    <section id="race-report" class="tab-content" role="tabpanel" aria-labelledby="tab-race-report">
+    <section id="race-report" class="tab-content" role="tabpanel" aria-labelledby="tab-race-report" tabindex="0">
       <div class="space">
       <h2>2024 Race Report</h2>
       <h3>Results</h3>
@@ -66,7 +65,7 @@
         <div class="podium">
           <div class="place second">
             <div class="bar second">
-              <img src="/images/winnersphotos/2025/katieironside.JPG" alt="Katie Ironside">
+              <img src="/images/optimized/winners/katieironside.JPG" width="1703" height="1761" loading="lazy" alt="Katie Ironside">
               <div class="details">
                 <span>2nd</span>
                 <span>Katie Ironside</span>
@@ -76,7 +75,7 @@
           </div>
           <div class="place first">
             <div class="bar first">
-              <img src="/images/winnersphotos/2025/bethanlogan.JPG" alt="Bethan Logan">
+              <img src="/images/optimized/winners/bethanlogan.JPG" width="1515" height="1596" loading="lazy" alt="Bethan Logan">
               <div class="details">
                 <span>1st</span>
                 <span>Bethan Logan</span>
@@ -86,7 +85,7 @@
           </div>
           <div class="place third">
             <div class="bar third">
-              <img src="/images/winnersphotos/2025/sandrahelk.JPG" alt="Sandra Helk">
+              <img src="/images/optimized/winners/sandrahelk.JPG" width="1703" height="1819" loading="lazy" alt="Sandra Helk">
               <div class="details">
                 <span>3rd</span>
                 <span>Sandra Helk</span>
@@ -99,25 +98,25 @@
         <h4>Women's Category Winners</h4>
         <div class="category-winners">
           <div class="category">
-            <div class="cat-photo"><img src="/images/winnersphotos/2025/katiehinsh.JPG" alt="Katie Hinshelwood"></div>
+            <div class="cat-photo"><img src="/images/optimized/winners/katiehinsh.JPG" width="1647" height="1362" loading="lazy" alt="Katie Hinshelwood"></div>
             <div><strong>Junior</strong></div>
             <div>Katy Hinshelwood</div>
             <div>57:40</div>
           </div>
           <div class="category">
-            <div class="cat-photo"><img src="/images/winnersphotos/2025/donnagrant.JPG" alt="Donna Grant"></div>
+            <div class="cat-photo"><img src="/images/optimized/winners/donnagrant.JPG" width="1092" height="1572" loading="lazy" alt="Donna Grant"></div>
             <div><strong>40-49</strong></div>
             <div>Donna Grant</div>
             <div>48:55</div>
           </div>
           <div class="category">
-            <div class="cat-photo"><img src="/images/winnersphotos/2025/debbiestenner.JPG" alt="Debbie Stenner"></div>
+            <div class="cat-photo"><img src="/images/optimized/winners/debbiestenner.JPG" width="1834" height="1795" loading="lazy" alt="Debbie Stenner"></div>
             <div><strong>50-59</strong></div>
             <div>Debbie Stenner</div>
             <div>49:34 RECORD</div>
           </div>
           <div class="category">
-            <div class="cat-photo"><img src="/images/winnersphotos/2025/floregunner.JPG" alt="Flora Gunner"></div>
+            <div class="cat-photo"><img src="/images/winnersphotos/2025/floregunner.JPG" width="508" height="590" loading="lazy" alt="Flora Gunner"></div>
             <div><strong>60-69</strong></div>
             <div>Flora Gunner</div>
             <div>57:40</div>
@@ -129,7 +128,7 @@
           <div class="podium">
             <div class="place second">
               <div class="bar second">
-                <img src="/images/winnersphotos/2025/wilfevans.JPG" alt="Wilf Evans">
+                <img src="/images/optimized/winners/wilfevans.JPG" width="1703" height="1579" loading="lazy" alt="Wilf Evans">
                 <div class="details">
                   <span>2nd</span>
                   <span>Wilf Evans</span>
@@ -139,7 +138,7 @@
             </div>
             <div class="place first">
               <div class="bar first">
-                <img src="/images/winnersphotos/2025/jonford.JPG" alt="Jonathon Ford">
+                <img src="/images/optimized/winners/jonford.JPG" width="1703" height="1619" loading="lazy" alt="Jonathon Ford">
                 <div class="details">
                   <span>1st</span>
                   <span>Jonathon Ford</span>
@@ -149,7 +148,7 @@
             </div>
             <div class="place third">
               <div class="bar third">
-                <img src="/images/winnersphotos/2025/ryanjones.JPG" alt="Ryan Jones">
+                <img src="/images/optimized/winners/ryanjones.JPG" width="1703" height="1437" loading="lazy" alt="Ryan Jones">
                 <div class="details">
                   <span>3rd</span>
                   <span>Ryan Jones</span>
@@ -162,31 +161,31 @@
           <h4>Men's Category Winners</h4>
           <div class="category-winners">
             <div class="category">
-              <div class="cat-photo"><img src="images/winnersphotos/2025/reubenlawson.JPG" alt="Reuben Lawson"></div>
+              <div class="cat-photo"><img src="images/optimized/winners/reubenlawson.JPG" width="1468" height="1846" loading="lazy" alt="Reuben Lawson"></div>
               <div><strong>Junior</strong></div>
               <div>Reuben Lawson</div>
               <div>42:16</div>
             </div>
             <div class="category">
-              <div class="cat-photo"><img src="images/winnersphotos/2025/richardfoster.JPG" alt="Richard Foster"></div>
+              <div class="cat-photo"><img src="images/winnersphotos/2025/richardfoster.JPG" width="350" height="331" loading="lazy" alt="Richard Foster"></div>
               <div><strong>40-49</strong></div>
               <div>Richard Foster</div>
               <div>41:24</div>
             </div>
             <div class="category">
-              <div class="cat-photo"><img src="images/winnersphotos/2025/paulmurrin.JPG" alt="Paul Murrin"></div>
+              <div class="cat-photo"><img src="images/optimized/winners/paulmurrin.JPG" width="1624" height="1690" loading="lazy" alt="Paul Murrin"></div>
               <div><strong>50-59</strong></div>
               <div>Paul Murrin</div>
               <div>39:37</div>
             </div>
             <div class="category">
-              <div class="cat-photo"><img src="images/winnersphotos/2025/simondarke.JPG" alt="Simon Darke"></div>
+              <div class="cat-photo"><img src="images/optimized/winners/simondarke.JPG" width="1327" height="1634" loading="lazy" alt="Simon Darke"></div>
               <div><strong>60-69</strong></div>
               <div>Simon Darke</div>
               <div>47:54</div>
             </div>
             <div class="category">
-              <div class="cat-photo"><img src="images/winnersphotos/2025/guywhitmarsh.JPG" alt="Guy Whitmarsh"></div>
+              <div class="cat-photo"><img src="images/winnersphotos/2025/guywhitmarsh.JPG" width="251" height="377" loading="lazy" alt="Guy Whitmarsh"></div>
               <div><strong>70+</strong></div>
               <div>Guy Whitmarsh</div>
               <div>01:00:03</div>
@@ -198,7 +197,7 @@
           <h4>Team & Environment Awards</h4>
           <div class="category-winners">
             <div class="category">
-              <div class="cat-photo"><img src="images/winnersphotos/2025/mensteam.JPG" alt="Abergavenny Running Club"></div>
+              <div class="cat-photo"><img src="images/optimized/winners/mensteam.JPG" width="4608" height="3456" loading="lazy" alt="Mynydd Du men's team"></div>
               <div><strong>Men's team</strong></div>
               <div>Mynydd Du</div>
               <div>Jonathon Ford<br>
@@ -207,7 +206,7 @@
               </div>
             </div>
             <div class="category">
-              <div class="cat-photo"><img src="images/winnersphotos/2025/womenteam.JPG" alt="Cwmcarn Harriers"></div>
+              <div class="cat-photo"><img src="images/optimized/winners/womenteam.JPG" width="4608" height="3456" loading="lazy" alt="Mynydd Du women's team"></div>
               <div><strong>Women's team</strong></div>
               <div>Mynydd Du</div>
               <div>Bethan Logan<br>
@@ -215,14 +214,14 @@
                 Katie Donnelly</div>
             </div>
             <div class="category">
-              <div class="cat-photo"><img src="images/winnersphotos/2025/publictransport.JPG" alt="Brecon Beacons Fell Runners"></div>
+              <div class="cat-photo"><img src="images/optimized/winners/publictransport.JPG" width="4608" height="3456" loading="lazy" alt="Public transport award winners"></div>
               <div><strong>Furtherest by public transport</strong></div>
               <div>Max Adamson <br>
               Martin Bull</div>
               <div>Am Llundain</div>
             </div>
             <div class="category">
-              <div class="cat-photo"><img src="images/winnersphotos/2025/activetravel.JPG" alt="Brecon Beacons Fell Runners"></div>
+              <div class="cat-photo"><img src="images/optimized/winners/activetravel.JPG" width="4608" height="3456" loading="lazy" alt="Active travel award winner"></div>
               <div><strong>Furtherest by active travel</strong></div>
               <div>Paul Colley-Davies</div>
               <div>Am Aberhondi</div>
@@ -237,7 +236,7 @@
         We are committed to making this event as low impact as possible and will continue to improve our practices year on year. We would like to thank everyone who took part in the event and helped us achieve this award. <br> <br> 
       </p>
 
-      <p>“Incredible efforts to minimise the impact of their race on, and promote awareness of, the environment and ways in which we as runners and ROs can ‘do our bit’. They had thought of everything […] Even more incredible is that they were first-time ROs. The fell running world needs more Patricks and Kanis!”</p>
+      <blockquote>“Incredible efforts to minimise the impact of their race on, and promote awareness of, the environment and ways in which we as runners and ROs can ‘do our bit’. They had thought of everything […] Even more incredible is that they were first-time ROs. The fell running world needs more Patricks and Kanis!”</blockquote>
       <a href="https://www.welshfellrunnersassociation.org.uk/en/news/environment-awards-2025-winners">Welsh fell runners Environment awards 2025</a>
       <h3>Stats</h3>
       <div class='tableauPlaceholder' id='viz1758480247275' style='position: relative'><noscript><a href='#'><img alt='Latest Year Summary ' src='https:&#47;&#47;public.tableau.com&#47;static&#47;images&#47;Bl&#47;BlorengeFellRaceLatestYearInfographics&#47;LatestYearSummary&#47;1_rss.png' style='border: none' /></a></noscript><object class='tableauViz'  style='display:none;'><param name='host_url' value='https%3A%2F%2Fpublic.tableau.com%2F' /> <param name='embed_code_version' value='3' /> <param name='site_root' value='' /><param name='name' value='BlorengeFellRaceLatestYearInfographics&#47;LatestYearSummary' /><param name='tabs' value='no' /><param name='toolbar' value='yes' /><param name='static_image' value='https:&#47;&#47;public.tableau.com&#47;static&#47;images&#47;Bl&#47;BlorengeFellRaceLatestYearInfographics&#47;LatestYearSummary&#47;1.png' /> <param name='animate_transition' value='yes' /><param name='display_static_image' value='yes' /><param name='display_spinner' value='yes' /><param name='display_overlay' value='yes' /><param name='display_count' value='yes' /><param name='language' value='en-GB' /></object></div>                <script type='text/javascript'>                    var divElement = document.getElementById('viz1758480247275');                    var vizElement = divElement.getElementsByTagName('object')[0];                    if ( divElement.offsetWidth > 800 ) { vizElement.style.width='100%';vizElement.style.height=(divElement.offsetWidth*0.75)+'px';} else if ( divElement.offsetWidth > 500 ) { vizElement.style.width='100%';vizElement.style.height=(divElement.offsetWidth*0.75)+'px';} else { vizElement.style.width='100%';vizElement.style.height='2177px';}                     var scriptElement = document.createElement('script');                    scriptElement.src = 'https://public.tableau.com/javascripts/api/viz_v1.js';                    vizElement.parentNode.insertBefore(scriptElement, vizElement);                </script>
@@ -245,7 +244,7 @@
     
     </section>
 
-    <section id="stats" class="tab-content stats" role="tabpanel" aria-labelledby="tab-stats">
+    <section id="stats" class="tab-content stats" role="tabpanel" aria-labelledby="tab-stats" tabindex="0">
       <div class="space">
     <div class='tableauPlaceholder' id='viz1758473330010' style='position: relative'><noscript><a href='#'><img
       alt='Blorenge over the years '
@@ -296,7 +295,7 @@ var scriptElement = document.createElement('script'); scriptElement.src = 'https
   
 
   <!-- Footer -->
-  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" frameborder="0" scrolling="no" width="100%" height="100%"></iframe>
+  <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" scrolling="no"></iframe>
   <script src="script.js"></script>
   <script>
     // Function to show a specific tab
@@ -305,6 +304,7 @@ var scriptElement = document.createElement('script'); scriptElement.src = 'https
       document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.remove('active');
         tab.setAttribute('aria-selected', 'false');
+        tab.setAttribute('tabindex', '-1');
       });
       // Remove active class from all tab contents
       document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
@@ -313,6 +313,7 @@ var scriptElement = document.createElement('script'); scriptElement.src = 'https
       const selectedTab = document.getElementById(`tab-${tabId}`);
       selectedTab.classList.add('active');
       selectedTab.setAttribute('aria-selected', 'true');
+      selectedTab.setAttribute('tabindex', '0');
       // Add active class to the corresponding tab content
       document.getElementById(tabId).classList.add('active');
     }
@@ -329,12 +330,14 @@ var scriptElement = document.createElement('script'); scriptElement.src = 'https
           document.querySelectorAll('.tab').forEach(tab => {
             tab.classList.remove('active');
             tab.setAttribute('aria-selected', 'false');
+            tab.setAttribute('tabindex', '-1');
           });
           document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
   
           // Add active class to the matching tab and content
           tab.classList.add('active');
           tab.setAttribute('aria-selected', 'true');
+          tab.setAttribute('tabindex', '0');
           content.classList.add('active');
         }
       }
@@ -342,6 +345,24 @@ var scriptElement = document.createElement('script'); scriptElement.src = 'https
   
     // Call the function on page load
     window.addEventListener('DOMContentLoaded', activateTabFromHash);
+
+    document.querySelector('.tabs').addEventListener('keydown', (event) => {
+      const tabs = [...document.querySelectorAll('.tab')];
+      const currentIndex = tabs.indexOf(document.activeElement);
+      if (currentIndex < 0) return;
+
+      let nextIndex;
+      if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
+      if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = tabs.length - 1;
+      if (nextIndex === undefined) return;
+
+      event.preventDefault();
+      const tabId = tabs[nextIndex].id.replace('tab-', '');
+      showTab(tabId);
+      tabs[nextIndex].focus();
+    });
   </script>
 
   

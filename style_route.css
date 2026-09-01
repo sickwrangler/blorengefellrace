@@ -1,115 +1,92 @@
-.arrow_LR {
-    position: absolute;
-    max-width: 50%;
-    height: auto;
+.route-intro {
+  display: grid;
+  gap: var(--space-6);
+  padding-bottom: var(--space-7);
+  border-bottom: 2px solid var(--colour-forest);
 }
 
-@media (min-width: 750px) {
-    .arrow_LR {
-        max-width: 100%;
-    }
+.route-intro__image {
+  width: 100%;
+  height: clamp(18rem, 55vw, 34rem);
+  object-fit: cover;
+  object-position: center 45%;
 }
 
-figcaption{
-    margin-bottom: 10vh;
+.route-map {
+  margin: var(--space-7) 0 var(--space-9);
 }
 
-.arrow_RL {
-    position: absolute; 
-    max-width: 40%;
-    height: auto;
+.map_img {
+  width: 100%;
+  height: auto;
+  border: var(--border);
+  background: var(--colour-paper-light);
 }
 
-@media (min-width: 750px) {
-    .arrow_RL {
-        width: 100%;
-    }
+.route-journey {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  border-top: 2px solid var(--colour-forest);
+  list-style: none;
+  counter-reset: route-step;
 }
 
-.route_img { 
-    max-width:60%;
-    height: auto;
-    object-fit: cover;
-    object-position: 80% 20%;
+.route-step {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-6) 0;
+  margin: 0;
+  border-bottom: var(--border);
+  counter-increment: route-step;
 }
 
-.route_container { 
-display: flex;
-flex-direction: row;
-max-height: 65vh;
+.route-step__copy {
+  align-self: center;
 }
 
-.route_centre_text { 
-  align-content: center ;
-flex:1;
-margin-left:10vh;
+.route-step__copy::before {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--colour-bracken);
+  content: "0" counter(route-step);
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.route-step h2 {
+  margin: 0;
+  font-size: clamp(1.55rem, 4vw, 2.5rem);
+}
+
+.route-step img {
+  width: 100%;
+  height: clamp(16rem, 62vw, 29rem);
+  object-fit: cover;
+}
+
+.route-documents {
+  max-width: var(--reading-width);
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: 2px solid var(--colour-forest);
+}
+
+@media (min-width: 48rem) {
+  .route-intro {
+    grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr);
+    align-items: center;
+    gap: clamp(2.5rem,6vw,6rem);
   }
 
-.assessment-iframe-container {
-    display: flex;
-    justify-content: center; /* Center horizontally */
-    align-items: center; /* Center vertically */
-}
-
-.assessment-iframe {
-height: 4300px;
-width: 80%;
-}
-
-@media (min-width: 750px) {
-    .assessment-iframe  {
-        height: 2400px;
-    }
-}
-
-/* Mobile styles for route section */
-@media (max-width: 768px) {
-    /* Hide arrows on mobile - more specific selectors */
-    .arrow_LR,
-    img.arrow_LR,
-    .route_centre_text .arrow_LR {
-      display: none !important;
-    }
-    
-    /* Stack route containers vertically on mobile */
-    .route_container {
-      flex-direction: column !important;
-      align-items: center;
-      text-align: center;
-      margin-bottom: 2rem;
-    }
-    
-    /* Ensure images and text take full width and stack */
-    .route_img,
-    .route_centre_text {
-      width: 100%;
-      max-width: 100%;
-      margin: 0;
-    }
-    
-    /* Add spacing between stacked elements */
-    .route_img {
-      margin-bottom: 1rem;
-    }
-    
-    /* Ensure text is centered and readable */
-    .route_centre_text h2 {
-      margin: 0.5rem 0;
-      text-align: center;
-    }
+  .route-step {
+    grid-template-columns: minmax(11rem,.55fr) minmax(0,1.45fr);
+    align-items: center;
+    gap: clamp(2rem,5vw,5rem);
+    padding-block: var(--space-7);
   }
-  
-  /* For very small screens */
-  @media (max-width: 480px) {
-    .route_container {
-      margin-bottom: 1.5rem;
-    }
-    
-    .route_img {
-      margin-bottom: 0.75rem;
-    }
-    
-    .route_centre_text h2 {
-      font-size: 1.2rem;
-    }
-  }
+
+  .route-step:nth-child(even) .route-step__copy { order: 2; }
+  .route-step:nth-child(even) img { order: 1; }
+}
