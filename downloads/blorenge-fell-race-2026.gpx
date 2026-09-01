@@ -2,7 +2,7 @@
 <gpx version="1.1" creator="Blorenge Fell Race" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
   <metadata>
     <name>Blorenge Fell Race 2026</name>
-    <desc>Confirmed 2026 route geometry. Official race figures are 5.7 km with 485 m ascent. This file contains no elevation profile.</desc>
+    <desc>Confirmed 2026 Blorenge Fell Race route.</desc>
     <bounds minlat="51.8005200" minlon="-3.0602100" maxlat="51.8132300" maxlon="-3.0369400"/>
   </metadata>
   <wpt lat="51.8132300" lon="-3.0369400"/>

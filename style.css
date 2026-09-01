@@ -183,7 +183,6 @@ hr { height: 1px; margin: var(--space-7) 0; border: 0; background: var(--colour-
 .photo-pair { display: grid; gap: var(--space-3); }
 .photo-pair figure { min-width: 0; margin: 0; }
 .photo-pair img { width: 100%; height: 18rem; object-fit: cover; }
-.source-note { color: var(--colour-ink-soft); font-size: .9rem; }
 .race-details { display: grid; gap: var(--space-6); }
 .detail-list { display: grid; margin: 0; border-top: 2px solid var(--colour-forest); }
 .detail-list div { display: grid; grid-template-columns: minmax(6.5rem,.65fr) 1.35fr; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: var(--border); }
