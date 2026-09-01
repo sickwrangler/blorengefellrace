@@ -1,100 +1,75 @@
-.section {
+.race-report {
+  max-width: var(--content-width);
+}
+
+.report-grid {
+  display: grid;
+  gap: var(--space-6);
   margin-top: var(--space-7);
 }
 
-.podium {
-  display: grid;
-  gap: var(--space-3);
-  margin-bottom: var(--space-7);
-}
-
-.place,
-.bar {
+.podium-list {
   min-width: 0;
 }
 
-.bar {
-  display: grid;
-  grid-template-columns: 6rem minmax(0,1fr);
-  height: 100%;
-  border: var(--border);
-  background: var(--colour-paper-light);
+.podium-list h3 {
+  margin-top: 0;
 }
 
-.bar img {
-  width: 6rem;
-  height: 100%;
-  min-height: 7rem;
-  object-fit: cover;
+.podium-list ol {
+  padding: 0;
+  margin: 0;
+  border-top: 2px solid var(--colour-forest);
+  list-style-position: inside;
 }
 
-.details {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: .15rem;
-  padding: var(--space-4);
+.podium-list li {
+  padding: var(--space-4) 0;
+  margin: 0;
+  border-bottom: var(--border);
 }
 
-.details span:first-child {
+.podium-list li::marker {
   color: var(--colour-bracken);
   font-family: var(--font-display);
-  font-size: 1.35rem;
+  font-size: 1.2rem;
 }
 
-.details span:nth-child(2) {
-  font-weight: 750;
+.podium-list span {
+  display: block;
+  margin-left: 1.5rem;
+  color: var(--colour-ink-soft);
 }
 
-.category-winners {
+.race-report__community {
+  max-width: var(--reading-width);
+  margin-top: var(--space-7);
+  font-size: 1.1rem;
+}
+
+.race-report__photos {
   display: grid;
-  grid-template-columns: repeat(auto-fit,minmax(9.5rem,1fr));
-  border-top: 2px solid var(--colour-forest);
-  border-left: var(--border);
+  gap: var(--space-4);
+  margin-top: var(--space-7);
 }
 
-.category {
-  min-width: 0;
-  padding: var(--space-3);
+.race-report__photos figure {
   margin: 0;
-  border-right: var(--border);
-  border-bottom: var(--border);
-  background: rgba(255,253,248,.7);
 }
 
-.cat-photo {
-  margin: calc(var(--space-3) * -1) calc(var(--space-3) * -1) var(--space-3);
-}
-
-.cat-photo img {
+.race-report__photos img {
   width: 100%;
-  height: 9.5rem;
+  height: clamp(16rem,55vw,28rem);
   object-fit: cover;
 }
 
-.category > div:not(.cat-photo) {
-  line-height: 1.45;
-}
-
-.category > div:last-child {
-  margin-top: var(--space-2);
-  color: var(--colour-ink-soft);
-  font-size: .9rem;
-}
-
-.group-winners {
-  margin-top: var(--space-8);
-}
-
-@media (min-width: 42rem) {
-  .podium {
-    grid-template-columns: repeat(3,minmax(0,1fr));
-    align-items: stretch;
+@media (min-width: 48rem) {
+  .report-grid,
+  .race-report__photos {
+    grid-template-columns: repeat(2,minmax(0,1fr));
   }
 
-  .place.first { order: 2; }
-  .place.second { order: 1; }
-  .place.third { order: 3; }
-  .bar { grid-template-columns: 1fr; }
-  .bar img { width: 100%; height: 15rem; }
+  .race-report__photos img {
+    height: 30rem;
+  }
 }

@@ -1,0 +1,7 @@
+# Private organiser and registration data
+/private-data/
+/data/private/
+/registration*.xlsx
+/registrations*.xlsx
+/registration*.csv
+/registrations*.csv
