@@ -30,6 +30,16 @@ titles, accessible link names, safe new-window links, local links and assets
 (including CSS assets and filename case), JavaScript and JSON syntax, and the custom 404
 configuration. It uses only the Node.js standard library.
 
+To validate the normalized public 2025 result data against its authoritative
+workbook, keep the workbook outside the repository and run:
+
+```sh
+node scripts/validate-public-results.mjs <path-to-results-workbook.xlsx>
+```
+
+See `data/public/results/README.md` for the public field allowlist and
+private-data boundary.
+
 The automated checks complement manual browser review, which should cover:
 
 - home, information, route, entry, results, and privacy pages;
