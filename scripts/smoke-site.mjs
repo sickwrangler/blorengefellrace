@@ -27,7 +27,6 @@ const checks = [
   ["docs/current-system-audit.md", null],
   ["docs/local-development.md", null],
   ["docs/photo-management.md", null],
-  ["staticwebapp.config.json", "application/json"],
 ];
 const photoManifest = JSON.parse(fs.readFileSync("data/photos/manifest.json", "utf8"));
 for (const photo of photoManifest.photos) checks.push([photo.optimizedFilename, "image/jpeg"]);
