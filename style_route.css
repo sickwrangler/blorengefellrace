@@ -16,6 +16,50 @@
   margin: var(--space-7) 0 var(--space-9);
 }
 
+.interactive-route {
+  min-width: 0;
+  margin-top: var(--space-8);
+}
+
+.interactive-route > p:not(.kicker) { max-width: var(--reading-width); }
+
+.route-map-interactive {
+  width: 100%;
+  height: clamp(22rem,62vw,38rem);
+  min-width: 0;
+  margin-top: var(--space-5);
+  overflow: hidden;
+  border: 2px solid var(--colour-forest);
+  background: var(--colour-stone);
+}
+
+.route-map-status {
+  margin-top: var(--space-3);
+  color: var(--colour-ink-soft);
+  font-size: .9rem;
+}
+
+.route-map-status--error {
+  padding: var(--space-3) var(--space-4);
+  border-left: .3rem solid var(--colour-bracken);
+  background: var(--colour-warning);
+}
+
+.leaflet-container {
+  color: var(--colour-ink);
+  font-family: var(--font-body);
+}
+
+.leaflet-control a { font-weight: 400; }
+
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1.3rem;
+  line-height: 2.75rem;
+}
+
 .map_img {
   width: 100%;
   height: auto;

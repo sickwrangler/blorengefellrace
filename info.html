@@ -21,7 +21,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;650;750&amp;family=Suez+One&amp;display=swap" rel="stylesheet">
   <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
 </head>
-<body>
+<body data-photo-page="info">
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" scrolling="no"></iframe>
 
@@ -45,16 +45,44 @@
       <div class="space">
         <h2>Travel for 2026</h2>
         <p>Race HQ is at Llanfoist Community Hall. The race itself starts at the bottom of Church Lane, Llanfoist.</p>
-        <p>Parking is available but limited. Please walk, cycle, use public transport or lift-share where possible.</p>
-        <p>Detailed public-transport directions will be published before entries open.</p>
+        <div class="travel-grid">
+          <section>
+            <h3>Rail and bus</h3>
+            <p><a href="https://tfw.wales/places/stations/abergavenny">Abergavenny is the nearest railway station</a>. Check current onward bus and local travel options with <a href="https://www.traveline.cymru/">Traveline Cymru</a> before setting out; timetables can change.</p>
+          </section>
+          <section>
+            <h3>Walking and cycling</h3>
+            <p>Walking from Abergavenny or Llanfoist may be practical for some participants. Cycle parking is available at Llanfoist Community Hall. Plan for winter weather, visibility and the return journey.</p>
+          </section>
+          <section>
+            <h3>Driving</h3>
+            <p>Parking is available but limited. Please lift-share where possible, park considerately and follow any race-day directions from marshals.</p>
+          </section>
+        </div>
+        <p class="noteAlt">Choose the safest practical option for your circumstances. Check live public-transport information and weather before travelling.</p>
       </div>
-      <img class="info-banner-img" src="images/blorenge_finish_line_group.jpeg" width="2048" height="1365" loading="lazy" alt="Runners gathering near the race venue after finishing">
+      <img class="info-banner-img" src="images/generated/photos/info-finishers.jpg" width="1600" height="1066" loading="lazy" alt="Runners gathering near the race venue after finishing" data-photo-id="info-finishers">
     </section>
 
     <section id="kit" class="tab-content" role="tabpanel" aria-labelledby="tab-kit" tabindex="0">
       <div class="space">
         <h2>2026 kit requirements</h2>
-        <p>The mandatory and recommended kit requirements for 2026 have not yet been confirmed. Further details will be published before entries open.</p>
+        <p class="lede">Bring every item on the full kit list to the event, even if the weather looks settled. The Race Organiser will decide on the day what competitors must carry.</p>
+        <ul class="kit-list">
+          <li>Waterproof/windproof top</li>
+          <li>Waterproof/windproof legs</li>
+          <li>Hat</li>
+          <li>Gloves</li>
+          <li>Compass</li>
+          <li>Whistle</li>
+          <li>Food and drink as needed for the conditions</li>
+          <li>A waterproofed map of the race route</li>
+          <li>Something to carry the kit in, such as a bumbag or rucksack</li>
+        </ul>
+        <h3>Practical guidance</h3>
+        <p>Wear fell-running shoes with effective grip and arrive prepared for exposed, wet and cold winter conditions. Competitors are responsible for their own safety and must follow the Race Organiser’s instructions.</p>
+        <p>Navigation must not rely solely on a phone, watch or other electronic device. Bring the map and compass, know how to use them and read the <a href="https://www.welshfellrunnersassociation.org.uk/cy/info-for-runners">Welsh Fell Runners Association guidance for runners</a> before race day.</p>
+        <p class="noteAlt"><strong>Do not leave kit at home.</strong> The on-the-day decision is about what you must carry during the race, not what you need to bring to registration.</p>
       </div>
     </section>
 
@@ -86,13 +114,13 @@
 
         <p class="race-report__community">Runners represented a wide range of clubs, with strong local participation led by Mynydd Du. Its 26 finishers were the largest club representation.</p>
 
-        <div class="race-report__photos" aria-label="Photographs from the 2025 results collection">
+        <div class="race-report__photos" aria-label="Photographs from the 2025 results collection" data-photo-region="race-report-gallery">
           <figure>
-            <img src="images/optimized/winners/bethanlogan.JPG" width="1515" height="1596" loading="lazy" alt="Bethan Logan, the 2025 women’s winner">
+            <img src="images/generated/photos/info-winner-bethan.jpg" width="1515" height="1596" loading="lazy" alt="Bethan Logan, the 2025 women’s winner">
             <figcaption>Bethan Logan, women’s winner</figcaption>
           </figure>
           <figure>
-            <img src="images/optimized/winners/jonford.JPG" width="1703" height="1619" loading="lazy" alt="Jonathan Ford, third overall in 2025">
+            <img src="images/generated/photos/info-third-jonathan.jpg" width="1600" height="1521" loading="lazy" alt="Jonathan Ford, third overall in 2025">
             <figcaption>Jonathan Ford, third overall</figcaption>
           </figure>
         </div>
@@ -146,6 +174,7 @@
 
   <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" scrolling="no"></iframe>
   <script src="script.js"></script>
+  <script src="photo-manager.js"></script>
   <script>
     function showTab(tabId) {
       document.querySelectorAll('.tab').forEach(tab => {

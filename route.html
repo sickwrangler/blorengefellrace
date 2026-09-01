@@ -15,13 +15,16 @@
   <meta name="description" content="Route information for the 5.7 km Blorenge Fell Race, with 485 m ascent and a start at the bottom of Church Lane, Llanfoist.">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="style_route.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;650;750&amp;family=Suez+One&amp;display=swap" rel="stylesheet">
   <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
   <script src="script.js" defer></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous" defer></script>
+  <script src="route-map.js" defer></script>
 </head>
-<body>
+<body data-photo-page="route">
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <iframe class="nav-iframe" src="components/navbar/navbar.html" title="Primary navigation" scrolling="no"></iframe>
 
@@ -33,54 +36,65 @@
           <h1 id="route-title">Route<br><span lang="cy">Llwybr</span></h1>
           <p class="lede">The 2026 race starts at the bottom of Church Lane, Llanfoist.</p>
         </div>
-        <img class="route-intro__image" src="images/optimized/route/ascent.jpg" width="1600" height="1398" alt="Fell runners climbing the steep open slope of the Blorenge" fetchpriority="high">
+        <img class="route-intro__image" src="images/generated/photos/route-ascent.jpg" width="1600" height="1398" alt="Fell runners climbing the steep open slope of the Blorenge" fetchpriority="high" data-photo-id="route-ascent">
       </section>
 
-      <p class="noteAlt section-top">The authoritative 2026 route and map have not yet been published. Further details will be published before entries open. The guide and photographs below show the route used previously and should not be relied on as the confirmed 2026 route.</p>
+      <p class="noteAlt section-top"><strong>This is the confirmed 2026 route.</strong> The official race figures are 5.7 km with 485 m ascent. The downloadable GPX contains the route geometry but no elevation data, so it must not be used to infer a different distance, ascent or elevation profile.</p>
+
+      <section class="interactive-route" aria-labelledby="interactive-route-title">
+        <p class="kicker">Interactive route</p>
+        <h2 id="interactive-route-title">Explore the course</h2>
+        <p id="route-map-description">The route starts and finishes at the bottom of Church Lane, Llanfoist, climbs to the Blorenge trig point and returns by the established course. Pan or zoom the map for visual orientation.</p>
+        <div id="route-map-interactive" class="route-map-interactive" role="region" aria-label="Interactive map of the confirmed 2026 race route" aria-describedby="route-map-description route-map-status" tabindex="0"></div>
+        <p id="route-map-status" class="route-map-status" aria-live="polite">Loading the interactive route map…</p>
+        <noscript><p class="noteAlt">JavaScript is needed for the interactive map. The route description, static guide and GPX download remain available.</p></noscript>
+      </section>
 
       <figure class="route-map">
-        <img class="map_img" src="images/OS Map blorenge.png" width="1452" height="1288" loading="lazy" alt="Previous Blorenge Fell Race route guide">
-        <figcaption>Previous Blorenge Fell Race route guide, shown for context only</figcaption>
+        <img class="map_img" src="images/OS Map blorenge.png" width="1452" height="1288" loading="lazy" alt="Static guide to the established Blorenge Fell Race route">
+        <figcaption>Static guide to the established route; use alongside the current race instructions</figcaption>
       </figure>
 
-      <section aria-labelledby="previous-route-title">
-        <p class="kicker">Previous route guide</p>
-        <h2 id="previous-route-title">From village to summit and back</h2>
+      <section aria-labelledby="route-guide-title">
+        <p class="kicker">Route guide</p>
+        <h2 id="route-guide-title">From village to summit and back</h2>
         <ol class="route-journey">
           <li class="route-step">
             <div class="route-step__copy"><h2>The start<br><span lang="cy">Y cychwyn</span></h2></div>
-            <img src="images/optimized/route/start.jpg" width="900" height="1200" loading="lazy" alt="Runners listening to the start-line briefing">
+            <img src="images/generated/photos/route-start.jpg" width="1200" height="1600" loading="lazy" alt="Runners listening to the start-line briefing" data-photo-id="route-start">
           </li>
           <li class="route-step">
             <div class="route-step__copy"><h2>The tunnel<br><span lang="cy">Y twnnel</span></h2></div>
-            <img src="images/optimized/route/tunnel.jpg" width="900" height="1200" loading="lazy" alt="The wet stone tunnel on the previous race route">
+            <img src="images/generated/photos/route-tunnel.jpg" width="1200" height="1600" loading="lazy" alt="The wet stone tunnel on the race route" data-photo-id="route-tunnel">
           </li>
           <li class="route-step">
             <div class="route-step__copy"><h2>The tram road<br><span lang="cy">Y ffordd drams</span></h2></div>
-            <img src="images/blorenge_tramroad_wyndham.jpeg" width="2048" height="1536" loading="lazy" alt="A runner climbing a muddy wooded section beside a fallen tree">
+            <img src="images/generated/photos/route-tramroad.jpg" width="1600" height="1200" loading="lazy" alt="A runner climbing a muddy wooded section beside a fallen tree" data-photo-id="route-tramroad">
           </li>
           <li class="route-step">
             <div class="route-step__copy"><h2>The steep bit<br><span lang="cy">Y rhan serth</span></h2></div>
-            <img src="images/blorenge_climb_ladies.jpeg" width="2048" height="1365" loading="lazy" alt="A group of runners climbing a steep grassy bank">
+            <img src="images/generated/photos/route-steep-climb.jpg" width="1600" height="1066" loading="lazy" alt="A group of runners climbing a steep grassy bank" data-photo-id="route-steep-climb">
           </li>
           <li class="route-step">
             <div class="route-step__copy"><h2>The trig, and now back down<br><span lang="cy">Y trig, ac yn awr yn ôl i lawr</span></h2></div>
-            <img src="images/Blorenge_trig.webp" width="1267" height="950" loading="lazy" alt="The Blorenge trig point beneath a broad cloudy sky">
+            <img src="images/generated/photos/route-trig.jpg" width="1267" height="950" loading="lazy" alt="The Blorenge trig point beneath a broad cloudy sky" data-photo-id="route-trig">
           </li>
           <li class="route-step">
             <div class="route-step__copy"><h2>The finish<br><span lang="cy">Y gorffen</span></h2></div>
-            <img src="images/blorenge_finisher_flora.jpeg" width="2048" height="1365" loading="lazy" alt="A runner approaching the finish along a stone-walled lane">
+            <img src="images/generated/photos/route-finish.jpg" width="1600" height="1066" loading="lazy" alt="A runner approaching the finish along a stone-walled lane" data-photo-id="route-finish">
           </li>
         </ol>
       </section>
 
       <section class="route-documents" aria-labelledby="route-documents-title">
         <h2 id="route-documents-title">2026 route documents</h2>
-        <p>The confirmed route map and any public assessment information will be published when available.</p>
+        <p><a class="button" href="downloads/blorenge-fell-race-2026.gpx" download type="application/gpx+xml">Download the 2026 route GPX</a></p>
+        <p>The GPX is provided for route familiarisation and contains no elevation profile. It does not replace a waterproofed route map, compass, mountain judgement, the Race Organiser’s instructions or the <a href="https://www.welshfellrunnersassociation.org.uk/cy/info-for-runners">WFRA navigation and safety guidance</a>.</p>
       </section>
     </div>
   </main>
 
   <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" scrolling="no"></iframe>
+  <script src="photo-manager.js"></script>
 </body>
 </html>
