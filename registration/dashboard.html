@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Organiser prototype | Blorenge Fell Race</title>
+  <meta name="description" content="Development-only organiser workflow using synthetic registration data.">
+  <link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="prototype.css">
+  <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+  <script type="module" src="dashboard.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="prototype-header"><a href="index.html">← Runner prototype</a><strong>ORGANISER PROTOTYPE — SYNTHETIC DATA ONLY</strong></header>
+  <main id="main-content" class="prototype-shell">
+    <h1 class="visually-hidden">Blorenge Fell Race organiser prototype</h1>
+    <section id="dashboard-closed" class="prototype-card" hidden><h2>Prototype unavailable</h2><p>This organiser simulation is disabled on the production custom domain. Production authentication and authorization have not been built.</p></section>
+    <div id="dashboard" hidden>
+      <section class="prototype-card">
+        <p class="eyebrow">Development-only workflow</p><h2>Test registration desk</h2>
+        <p class="noteAlt"><strong>Not production-ready:</strong> this prototype has no production authentication. It must never be connected to real entrant data.</p>
+        <div class="status-grid"><div><span>State</span><strong id="dash-state"></strong></div><div><span>Accepted</span><strong id="dash-accepted"></strong></div><div><span>Waiting</span><strong id="dash-waiting"></strong></div></div>
+        <div class="dashboard-controls">
+          <label>Registration state<select id="state-control"><option value="test">Test — accepting</option><option value="paused">Paused</option><option value="full">Full</option></select></label>
+          <label>Test capacity<input id="capacity-control" type="number" min="1" max="500" value="110"></label>
+          <button id="save-settings" class="button" type="button">Apply test settings</button>
+        </div>
+      </section>
+      <section class="prototype-card">
+        <h2>Entrants</h2>
+        <div class="dashboard-controls"><label>Search<input id="search" type="search" placeholder="Name, club or test email"></label><label>Entry status<select id="entry-filter"><option value="">All</option><option>accepted</option><option value="waiting_list">waiting list</option><option>cancelled</option></select></label><label>Payment<select id="payment-filter"><option value="">All</option><option>successful</option><option>declined</option><option>abandoned</option><option>refunded</option><option value="not_started">not started</option></select></label></div>
+        <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th>Runner</th><th>Club</th><th>Entry</th><th>Mock payment</th><th>Race no.</th><th>Actions</th></tr></thead><tbody id="entrant-rows"></tbody></table></div>
+        <p id="empty-state">No synthetic registrations yet.</p>
+        <div class="form-actions"><button id="load-fixtures" class="button button--quiet" type="button">Load synthetic scenarios</button><button id="export-csv" class="button button--quiet" type="button">Export sanitized test CSV</button><button id="reset-data" class="button button--quiet" type="button">Reset all test data</button></div>
+      </section>
+      <section class="prototype-card"><h2>Captured message previews</h2><p>These messages were captured locally. Nothing was sent externally.</p><ul id="message-list" class="message-list"></ul></section>
+    </div>
+  </main>
+</body>
+</html>

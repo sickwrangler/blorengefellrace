@@ -22,6 +22,8 @@ from the repository root:
 ```sh
 git status --short --branch
 node scripts/validate-site.mjs
+node scripts/validate-registration.mjs
+node --test tests/registration.test.mjs
 node scripts/validate-route.mjs
 node scripts/validate-photos.mjs
 node scripts/inspect-photo-metadata.mjs
@@ -88,3 +90,15 @@ Do not submit registration forms, enter personal data, or trigger external trans
 - Obtain explicit approval before merging a production change.
 
 Detailed operational and security review information is maintained separately from the public website.
+
+## Registration prototype
+
+Start the complete dependency-free Phase 1 prototype with one command:
+
+```sh
+node scripts/start-registration-prototype.mjs
+```
+
+Open <http://127.0.0.1:4173/registration/>. The server binds only to the local loopback interface and keeps synthetic registrations in memory. Stopping it deletes the server-side test data. No email or payment provider is configured.
+
+The Azure pull-request version uses disposable browser storage for interface review because Phase 1 does not provision an API or database. The production custom domain remains closed. See `registration-test-checklist.md` for a non-developer walkthrough.
