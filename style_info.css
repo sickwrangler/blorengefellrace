@@ -7,6 +7,46 @@
   margin-bottom: var(--space-5);
 }
 
+.travel-grid {
+  display: grid;
+  gap: var(--space-5);
+  margin-block: var(--space-6);
+}
+
+.travel-grid section {
+  min-width: 0;
+  padding: var(--space-5);
+  border: var(--border);
+  background: rgba(255,253,248,.78);
+}
+
+.travel-grid h3 {
+  margin-top: 0;
+  font-size: 1.45rem;
+}
+
+.travel-grid p:last-child { margin-bottom: 0; }
+
+.kit-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(15rem,1fr));
+  max-width: 58rem;
+  padding: 0;
+  margin-block: var(--space-6);
+  border-top: 2px solid var(--colour-forest);
+  border-left: var(--border);
+  list-style: none;
+}
+
+.kit-list li {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  margin: 0;
+  border-right: var(--border);
+  border-bottom: var(--border);
+  background: rgba(255,253,248,.78);
+}
+
 .tab-content > .space:first-child {
   padding-bottom: var(--space-6);
 }
@@ -66,4 +106,8 @@
 
 .participation-summary p:last-child {
   margin-bottom: 0;
+}
+
+@media (min-width: 48rem) {
+  .travel-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }

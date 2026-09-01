@@ -19,6 +19,8 @@ organiser or stakeholder contact details.
 - No entries on the day
 - Parking is available but limited
 - Walking, cycling, public transport and lift-sharing are encouraged
+- Established race route, interactive map and public GPX
+- Full WFRA kit list, with the on-the-day carry decision made by the Race Organiser
 
 ## Outstanding confirmations
 
@@ -26,8 +28,6 @@ organiser or stakeholder contact details.
 - Date entries close
 - Whether the existing Google Form will be used temporarily
 - Runner registration and check-in times
-- Authoritative route and map link
-- Mandatory and recommended kit requirements
 - Race licence and WFRA listing
 - Final landowner and stakeholder permissions
 - Risk-assessment link and approval status
@@ -37,7 +37,6 @@ organiser or stakeholder contact details.
 - Prize categories
 - Cut-off time, if any
 - Toilets, changing facilities and refreshments
-- Detailed public-transport directions
 - Public organiser contact address for the 2026 event
 - Rules concerning dogs, headphones and poles
 - Photography and privacy arrangements
@@ -46,27 +45,30 @@ organiser or stakeholder contact details.
 - Whether a 2026 course recce or litter pick will take place
 - Precise public location details for race HQ beyond its confirmed name
 
-## Existing material awaiting confirmation
+## Publication boundaries
 
 - The previous registration form remains in commented source for reference but
   is not presented as the 2026 registration service.
-- The route map and route photographs are labelled as previous-event material,
-  not as the authoritative 2026 route.
-- Previous detailed transport directions, kit rules, recce information and the
-  published assessment link are withheld from current-event guidance until
-  they are confirmed.
+- The established route is confirmed for 2026. The route page publishes the
+  official 5.7 km and 485 m figures, an interactive map, a sanitized GPX and a
+  static route guide.
+- The information page publishes the WFRA full kit list and makes clear that
+  competitors bring every item while the Race Organiser decides what must be
+  carried on the day.
+- Travel guidance remains deliberately high level and directs runners to live
+  public-transport information rather than publishing fragile timetable detail.
+- The organiser will publish an updated local-conditions and wildfire notice
+  shortly before the race.
+- Unconfirmed recce information and assessment links remain withheld.
 
 ## Historical material retained
 
-Historical results, participant photographs, the existing race-report content,
-the 2024 race-photo link and the 2025 environment-award material remain
-unchanged. These items describe previous events rather than the 2026 race.
+Historical results, participant photographs, the 2025 race report and the 2024
+race-photo link remain unchanged. These items describe previous events rather
+than the 2026 race.
 
 ## Editorial questions
 
-- The information tab is titled “2024 Race Report”, while many winner images
-  are stored under a `2025` directory. Confirm the intended report year before
-  changing either the heading or historical material.
 - Confirm whether the existing public race email address should be promoted as
   the organiser contact for 2026. It remains in the general footer and privacy
   policy but is not currently presented as a confirmed 2026 event contact.

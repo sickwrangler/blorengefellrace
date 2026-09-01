@@ -8,22 +8,18 @@ The Blorenge Fell Race website is a static, browser-rendered site. Azure Static 
 flowchart LR
     U[User / browser]
     SITE[Public static website<br/>HTML / CSS / JavaScript / images]
+    DATA[Committed public data<br/>results JSON / GPX / photo manifest]
     AZ[Azure Static Web Apps]
     GH[GitHub repository]
     GA[GitHub Actions deployment]
-    FORM[Google Form<br/>registration]
     RESULTS[Google Sheets and OpenSheet<br/>race results]
-    DOCS[Google Docs<br/>published race documents]
-    TAB[Tableau Public<br/>race statistics]
     ANALYTICS[Google Analytics]
-    MEDIA[Fonts, icons, weather,<br/>video and location services]
+    MEDIA[Fonts, Leaflet, OpenStreetMap,<br/>weather and video]
 
     U --> AZ --> SITE
     GH --> GA --> AZ
-    SITE --> FORM
+    SITE --> DATA
     SITE --> RESULTS
-    SITE --> DOCS
-    SITE --> TAB
     SITE --> ANALYTICS
     SITE --> MEDIA
 ```
@@ -34,29 +30,29 @@ flowchart LR
 |---|---|---|
 | Home | `index.html` | Event summary, location, and community and environmental content |
 | Information | `info.html` | Travel, kit, race information, images, and statistics |
-| Route | `route.html` | Route narrative, map, images, and published assessment |
-| Entry | `enter.html` | Embeds the external registration form |
+| Route | `route.html` | Confirmed route narrative, interactive/static maps, images, and GPX download |
+| Entry | `enter.html` | Publishes confirmed entry facts and registration availability |
 | Results | `result.html` | Loads and presents current and historical published results |
 | Privacy | `privacy.html` | Public privacy information and contact details |
 | Shared navigation and footer | `components/` | Common page navigation and footer content |
 | Styling | `style*.css` and component CSS | Layout, responsive presentation, tables, route, and winner styling |
-| Behaviour | `script.js` and inline scripts | Page interaction, results rendering, analytics, and public embeds |
-| Media | `images/` | Logos, maps, event photographs, and winner photographs |
+| Behaviour | `script.js`, `route-map.js`, `photo-manager.js`, and inline scripts | Page interaction, route map, photo assignment, results rendering, analytics, and public embeds |
+| Public data | `data/public/`, `data/photos/`, and `downloads/` | Normalized results, editorial photo catalogue, and the public route GPX |
+| Media | `images/` | Logos, static maps, source photographs, and generated display photographs |
 
 ## Data flow
 
-- General event content and images are committed as static files.
-- Registration is completed through an embedded Google Form.
+- General event content, the confirmed route GPX, the photo manifest and display images are committed as static files.
+- The current entry page does not activate a registration service; it will link or embed the confirmed public service when entries open.
 - Results are loaded in the visitor's browser from published Google Sheets and OpenSheet endpoints.
-- Tableau Public provides race statistics.
+- The interactive route map uses Leaflet and OpenStreetMap tiles; the route description and GPX remain available if either external resource fails.
 - Google Analytics receives website usage events from the browser.
 - Public contact links open the visitor's email application; the website does not send email itself.
 
-The repository contains no server-side payment, email, database, or storage implementation.
+The repository contains no server-side payment, email, database, or storage implementation. The JSON photo manifest and generated images are repository files, not a separate media service.
 
 ## Deployment flow
 
 GitHub stores the source. GitHub Actions publishes reviewed website versions to Azure Static Web Apps. Pull-request previews provide a separate URL for checking proposed changes before production approval.
 
 Detailed operational and security review information is maintained separately from the public website.
-

@@ -1,6 +1,6 @@
 # Current system overview
 
-Last reviewed: 31 August 2026
+Last reviewed: 1 September 2026
 
 ## Summary
 
@@ -23,18 +23,17 @@ Main public pages:
 - Results
 - Privacy
 
-Shared navigation and footer content is stored under `components/`. Site images and other static media are stored under `images/`.
+Shared navigation and footer content is stored under `components/`. Site images and other static media are stored under `images/`. The confirmed route GPX is stored under `downloads/`, while the editorial photo catalogue is stored under `data/photos/`.
 
 ## Public services
 
 The site uses several external public services:
 
-- Google Forms for race registration
+- A public registration service when confirmed (none is active on the current entry page)
 - Published Google Sheets and OpenSheet for race results
-- Tableau Public for race statistics
 - Google Analytics for site usage measurement
-- Google Docs for published race documents
-- Google Fonts, Font Awesome, YouTube, weatherwidget.io, and what3words for public content and presentation
+- Leaflet and OpenStreetMap for the interactive route map
+- Google Fonts, YouTube and weatherwidget.io for public content and presentation
 
 Registration submissions and published result data are managed by those external services rather than stored by this static website.
 
@@ -58,4 +57,3 @@ No registration form was submitted during these checks.
 ## Further review
 
 Detailed operational and security review information is maintained separately from the public website.
-

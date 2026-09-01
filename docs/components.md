@@ -7,8 +7,8 @@
 | `index.html` | Homepage, 2026 event summary, race character and environmental content | Global CSS, analytics, weather script, YouTube, images |
 | `enter.html` | Confirmed 2026 entry facts and publication status | Global CSS, analytics |
 | `result.html` | Current and historical race results | Global/results CSS, OpenSheet, published Google Sheet |
-| `route.html` | Confirmed 2026 facts and clearly labelled previous-route context | Global/route CSS, map and photographs |
-| `info.html` | Travel, kit, historical report, statistics and winner information in tabs | Global/info/winners CSS, tab JavaScript, Tableau and images |
+| `route.html` | Confirmed 2026 facts, interactive/static maps, GPX download and route guide | Global/route CSS, Leaflet, `route-map.js`, GPX and photographs |
+| `info.html` | Travel, full kit guidance, historical report, statistics and winner information in tabs | Global/info/winners CSS, tab JavaScript and images |
 | `privacy.html` | Privacy policy | Global CSS |
 | `404.html` | Branded not-found page | Global CSS |
 
@@ -37,9 +37,11 @@ New pages should use `page-shell` for their main width and vertical rhythm, `pag
 | File | Responsibility |
 |---|---|
 | `style.css` | Tokens, global type and elements, shared page patterns, homepage, tabs and responsive rules |
-| `style_info.css` | Information header, quotations and Tableau containment |
+| `style_info.css` | Information header, travel, kit, statistics and report layout |
 | `style_results.css` | Collapsible result groups and horizontally scrollable tables |
 | `style_route.css` | Route introduction, map and alternating route sequence |
+| `route-map.js` | Loads the public GPX into Leaflet and provides route/tile failure states |
+| `photo-manager.js` | Applies the photo manifest to composed image slots and ordered galleries |
 | `style_winners.css` | Historical podium, category and team presentation |
 | `components/navbar/navbar.css` | Desktop and mobile navigation |
 | `components/footer/footer.css` | Footer layout |
@@ -48,7 +50,7 @@ The principal breakpoints are 48rem for compact/tablet layouts and 64rem for the
 
 ## Images
 
-Original photographs remain under `images/`. Display-sized derivatives are under `images/optimized/` and should be preferred when the rendered role does not need the original resolution. Do not overwrite or delete the originals when preparing a new derivative.
+The main editorial catalogue is `data/photos/manifest.json`; metadata-stripped display derivatives are under `images/generated/photos/`. Source photographs remain outside that generated directory and must never be overwritten by the build. See `docs/photo-management.md` before adding, reassigning or retiring a photograph.
 
 Give content photographs meaningful alternative text, use an empty alternative for genuinely decorative images, add intrinsic width and height, and lazy-load below-the-fold media. Use `object-fit: cover` only with a deliberate container height and check faces, runners and landscape landmarks at narrow and wide widths.
 
@@ -66,5 +68,7 @@ Give content photographs meaningful alternative text, use an empty alternative f
 | General event wording, dates, times and public links | HTML files in this repository |
 | Historical results | Public Google Sheet exposed through OpenSheet |
 | 2025 results | Published Google Sheet CSV |
-| Current route and entry publication status | `route.html` and `enter.html` |
-| Statistics | Public Tableau views embedded in `info.html` |
+| Current entry publication status | `enter.html` |
+| 2025 statistics | Published public-result data summarized in `info.html` |
+| Confirmed route, map and GPX | `route.html`, `route-map.js` and `downloads/blorenge-fell-race-2026.gpx` |
+| Editorial photo catalogue | `data/photos/manifest.json` |
