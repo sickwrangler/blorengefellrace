@@ -53,7 +53,7 @@ const sanitized = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Blorenge Fell Race" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
   <metadata>
     <name>Blorenge Fell Race 2026</name>
-    <desc>Confirmed 2026 route geometry. Official race figures are 5.7 km with 485 m ascent. This file contains no elevation profile.</desc>
+    <desc>Confirmed 2026 Blorenge Fell Race route.</desc>
     <bounds minlat="${bounds.minlat}" minlon="${bounds.minlon}" maxlat="${bounds.maxlat}" maxlon="${bounds.maxlon}"/>
   </metadata>
 ${waypointXml}

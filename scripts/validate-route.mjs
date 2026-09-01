@@ -20,8 +20,11 @@ if (points[0]?.join(",") !== "51.8132300,-3.0369400") errors.push("GPX start coo
 if (points.at(-1)?.join(",") !== "51.8132200,-3.0369400") errors.push("GPX finish coordinate is not the confirmed Church Lane finish");
 if (/<(?:ele|time|extensions|author|email)\b/i.test(gpx)) errors.push("GPX contains elevation, time, extension or personal metadata");
 if (/2024|5396|501\.25|calculated/i.test(gpx)) errors.push("GPX contains obsolete or conflicting calculated metadata");
-for (const fact of ["5.7 km", "485 m ascent", "bottom of Church Lane", "contains no elevation"]) {
+for (const fact of ["5.7 km", "485 m ascent", "bottom of Church Lane", "The GPX is provided to help runners familiarise themselves with the route"]) {
   if (!routePage.includes(fact)) errors.push(`route.html is missing official fact or warning: ${fact}`);
+}
+for (const implementationDetail of ["no elevation", "elevation profile", "calculated distance", "track points", "route geometry", "different distance"]) {
+  if (routePage.toLowerCase().includes(implementationDetail)) errors.push(`route.html exposes GPX implementation detail: ${implementationDetail}`);
 }
 for (const hook of ["fitBounds", "tileerror", "GPX could not", "route description and GPX download"]) {
   if (!mapScript.includes(hook)) errors.push(`route-map.js is missing expected behaviour: ${hook}`);
