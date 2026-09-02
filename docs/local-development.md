@@ -99,6 +99,6 @@ Start the complete dependency-free Phase 1 prototype with one command:
 node scripts/start-registration-prototype.mjs
 ```
 
-Open <http://127.0.0.1:4173/registration/>. The server binds only to the local loopback interface and keeps synthetic registrations in memory. Stopping it deletes the server-side test data. No email or payment provider is configured.
+Open <http://127.0.0.1:4173/registration/>. The server binds only to the local loopback interface and keeps synthetic registrations in memory. It starts and resets to a documented fixture baseline; stopping it deletes the server-side session. No email or payment provider is configured.
 
-The Azure pull-request version uses disposable browser storage for interface review because Phase 1 does not provision an API or database. The production custom domain remains closed. See `registration-test-checklist.md` for a non-developer walkthrough.
+The Azure pull-request version uses the shared, versioned `localStorage` repository documented in `registration-architecture.md`. Runner and dashboard testing must use the same browser profile and preview origin. The production custom domain remains closed. See `registration-test-checklist.md` for a non-developer walkthrough.

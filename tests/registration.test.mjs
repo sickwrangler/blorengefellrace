@@ -2,6 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { ageOnDate, initialState, safeRegistrationState, submitRegistration, applyMockPayment, cancelRegistration, updateTestSettings, sanitizedCsv } from "../registration/registration-core.mjs";
+import { createPreviewRepository, STORAGE_KEY, SCHEMA_VERSION, LEGACY_STORAGE_KEYS, isRepositoryStorageEvent, queryRegistrations, environmentForHostname } from "../registration/preview-repository.mjs";
+
+const fixtures = JSON.parse(fs.readFileSync(new URL("../registration/fixtures.json", import.meta.url), "utf8"));
+function memoryStorage(initial = {}) {
+  const values = new Map(Object.entries(initial));
+  return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key), values };
+}
+function previewRepository(storage = memoryStorage()) { return createPreviewRepository({ storage, fixtures, environment: "preview", now: () => "2026-09-01T12:00:00.000Z" }); }
 
 const runner = (number = 1, overrides = {}) => ({
   firstName: `Runner${number}`, lastName: "Example", email: `runner${number}@example.com`, phone: "07700 900123",
@@ -111,7 +119,7 @@ test("sanitized CSV excludes private contact, birth, consent and emergency field
   assert.match(csv, /Runner1/);
 });
 
-test("test settings cannot select open and reset yields an empty isolated state", () => {
+test("test settings cannot select open and a fresh isolated state contains no carried-over records", () => {
   const state = initialState(); submitRegistration(state, runner());
   assert.equal(updateTestSettings(state, { registrationState: "open" }).ok, false);
   const reset = initialState({ environment: state.environment });
@@ -119,8 +127,94 @@ test("test settings cannot select open and reset yields an empty isolated state"
 });
 
 test("fixture file contains the required synthetic scenarios", () => {
-  const fixtures = JSON.parse(fs.readFileSync(new URL("../registration/fixtures.json", import.meta.url), "utf8"));
   const ids = fixtures.map((fixture) => fixture.id);
   for (const id of ["accepted-with-club", "unattached", "underage-rejected", "duplicate-rejected", "refunded", "cancelled-entry", "waiting-list", "capacity-reached"]) assert.ok(ids.includes(id));
   assert.ok(fixtures.every((fixture) => !fixture.runner?.email || /@(example\.(com|org|net)|[^@]+\.invalid)$/i.test(fixture.runner.email)));
+});
+
+test("runner and dashboard share one versioned storage contract", () => {
+  assert.equal(STORAGE_KEY, "blorenge-registration-preview");
+  assert.equal(SCHEMA_VERSION, 2);
+  const source = fs.readFileSync(new URL("../registration/prototype-client.mjs", import.meta.url), "utf8");
+  assert.match(source, /createPreviewRepository/);
+  assert.doesNotMatch(source, /sessionStorage/);
+});
+
+test("production hosts remain closed and are not classified for preview persistence", () => {
+  assert.equal(environmentForHostname("www.blorengefellrace.cymru"), "production");
+  assert.equal(environmentForHostname("ambitious-bay-0339ed203.5.azurestaticapps.net"), "production");
+  assert.equal(environmentForHostname("ambitious-bay-0339ed203-8.5.azurestaticapps.net"), "preview");
+  assert.equal(environmentForHostname("127.0.0.1"), "local");
+});
+
+test("review submission creates exactly one runner record visible on refresh", () => {
+  const storage = memoryStorage(); const repository = previewRepository(storage);
+  const start = repository.load().state.registrations.length;
+  const created = repository.mutate((state) => submitRegistration(state, runner(501), { source: "runner" }));
+  assert.equal(created.ok, true);
+  assert.equal(repository.load().state.registrations.length, start + 1);
+  const refreshed = previewRepository(storage).load().state;
+  assert.equal(refreshed.registrations.filter((item) => item.id === created.registration.id).length, 1);
+  assert.equal(refreshed.registrations.find((item) => item.id === created.registration.id).source, "runner");
+  assert.equal(queryRegistrations(refreshed, { search: created.registration.testReference }).length, 1);
+  assert.equal(queryRegistrations(refreshed, { search: created.registration.runner.email }).length, 1);
+  const duplicate = repository.mutate((state) => submitRegistration(state, runner(501), { source: "runner" }));
+  assert.equal(duplicate.code, "DUPLICATE");
+  assert.equal(repository.load().state.registrations.length, start + 1);
+});
+
+test("mock payment updates the existing record and all outcomes remain queryable", () => {
+  const repository = previewRepository(); repository.load();
+  const successful = repository.mutate((state) => submitRegistration(state, runner(601), { source: "runner" })).registration;
+  const declined = repository.mutate((state) => submitRegistration(state, runner(602), { source: "runner" })).registration;
+  const abandoned = repository.mutate((state) => submitRegistration(state, runner(603), { source: "runner" })).registration;
+  assert.equal(repository.mutate((state) => applyMockPayment(state, successful.id, "successful")).ok, true);
+  repository.mutate((state) => applyMockPayment(state, declined.id, "declined"));
+  repository.mutate((state) => applyMockPayment(state, abandoned.id, "abandoned"));
+  const records = repository.load().state.registrations;
+  assert.equal(records.filter((item) => item.id === successful.id).length, 1);
+  assert.equal(records.find((item) => item.id === successful.id).paymentStatus, "successful");
+  assert.equal(records.find((item) => item.id === declined.id).paymentStatus, "declined");
+  assert.equal(records.find((item) => item.id === abandoned.id).paymentStatus, "abandoned");
+});
+
+test("dashboard-style initialization does not overwrite existing records", () => {
+  const repository = previewRepository(); const first = repository.load();
+  const created = repository.mutate((state) => submitRegistration(state, runner(701), { source: "runner" })).registration;
+  const second = repository.load(); const third = repository.load();
+  assert.equal(second.state.registrations.length, first.state.registrations.length + 1);
+  assert.ok(third.state.registrations.some((item) => item.testReference === created.testReference));
+});
+
+test("cross-tab storage events are recognized only for the shared key", () => {
+  assert.equal(isRepositoryStorageEvent({ key: STORAGE_KEY }), true);
+  assert.equal(isRepositoryStorageEvent({ key: "unrelated" }), false);
+});
+
+test("reset returns a known fixture state and removes runner-created records", () => {
+  const repository = previewRepository(); const baseline = repository.load().state;
+  const created = repository.mutate((state) => submitRegistration(state, runner(801), { source: "runner" })).registration;
+  assert.ok(repository.load().state.registrations.some((item) => item.id === created.id));
+  const reset = repository.reset();
+  assert.equal(reset.ok, true);
+  assert.equal(reset.state.registrations.length, baseline.registrations.length);
+  assert.ok(reset.state.registrations.every((item) => item.source === "seed"));
+});
+
+test("invalid stored data fails safely and explicit reset recovers", () => {
+  const storage = memoryStorage({ [STORAGE_KEY]: "not-json" }); const repository = previewRepository(storage);
+  const snapshot = repository.load();
+  assert.equal(snapshot.recovery.required, true);
+  assert.equal(repository.mutate((state) => submitRegistration(state, runner(901))).ok, false);
+  assert.equal(repository.reset().ok, true);
+  assert.equal(repository.load().recovery, null);
+});
+
+test("legacy preview data requires visible recovery and reset removes the old store", () => {
+  const storage = memoryStorage({ [LEGACY_STORAGE_KEYS[0]]: JSON.stringify(initialState({ environment: "preview" })) });
+  const repository = previewRepository(storage);
+  assert.equal(repository.load().recovery.code, "STORAGE_SCHEMA_INVALID");
+  assert.equal(repository.reset().ok, true);
+  assert.equal(storage.getItem(LEGACY_STORAGE_KEYS[0]), null);
+  assert.equal(repository.load().recovery, null);
 });

@@ -37,6 +37,7 @@ const checks = [
   ["registration/runner.mjs", "javascript"],
   ["registration/dashboard.mjs", "javascript"],
   ["registration/prototype-client.mjs", "javascript"],
+  ["registration/preview-repository.mjs", "javascript"],
   ["registration/registration-core.mjs", "javascript"],
   ["registration/fixtures.json", "application/json"],
 ];

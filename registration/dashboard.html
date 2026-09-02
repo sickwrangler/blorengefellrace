@@ -18,6 +18,8 @@
       <section class="prototype-card">
         <p class="eyebrow">Development-only workflow</p><h2>Test registration desk</h2>
         <p class="noteAlt"><strong>Not production-ready:</strong> this prototype has no production authentication. It must never be connected to real entrant data.</p>
+        <p>The Azure preview uses this browser profile’s local storage. Another browser, private window or device will not share these entries, and clearing site data removes them. A later phase will replace this with isolated server storage.</p>
+        <div id="dashboard-recovery" class="form-alert" role="alert" hidden></div>
         <div class="status-grid"><div><span>State</span><strong id="dash-state"></strong></div><div><span>Accepted</span><strong id="dash-accepted"></strong></div><div><span>Waiting</span><strong id="dash-waiting"></strong></div></div>
         <div class="dashboard-controls">
           <label>Registration state<select id="state-control"><option value="test">Test — accepting</option><option value="paused">Paused</option><option value="full">Full</option></select></label>
@@ -25,15 +27,30 @@
           <button id="save-settings" class="button" type="button">Apply test settings</button>
         </div>
       </section>
+      <section class="prototype-card" aria-labelledby="diagnostic-title">
+        <h2 id="diagnostic-title">Development diagnostics</h2>
+        <dl class="diagnostic-list">
+          <div><dt>Test environment</dt><dd id="diagnostic-environment"></dd></div>
+          <div><dt>Storage type</dt><dd id="diagnostic-storage"></dd></div>
+          <div><dt>Schema version</dt><dd id="diagnostic-schema"></dd></div>
+          <div><dt>Registrations loaded</dt><dd id="diagnostic-count"></dd></div>
+          <div><dt>Last refresh</dt><dd id="diagnostic-refresh"></dd></div>
+        </dl>
+        <div class="form-actions"><button id="refresh-data" class="button button--quiet" type="button">Refresh test data</button><button id="reset-fixtures" class="button button--quiet" type="button">Load/reset synthetic fixtures</button></div>
+      </section>
       <section class="prototype-card">
         <h2>Entrants</h2>
         <div class="dashboard-controls"><label>Search<input id="search" type="search" placeholder="Name, club or test email"></label><label>Entry status<select id="entry-filter"><option value="">All</option><option>accepted</option><option value="waiting_list">waiting list</option><option>cancelled</option></select></label><label>Payment<select id="payment-filter"><option value="">All</option><option>successful</option><option>declined</option><option>abandoned</option><option>refunded</option><option value="not_started">not started</option></select></label></div>
-        <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th>Runner</th><th>Club</th><th>Entry</th><th>Mock payment</th><th>Race no.</th><th>Actions</th></tr></thead><tbody id="entrant-rows"></tbody></table></div>
+        <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th>Test reference</th><th>Runner</th><th>Source</th><th>Club</th><th>Registration</th><th>Mock payment</th><th>Race no.</th><th>Actions</th></tr></thead><tbody id="entrant-rows"></tbody></table></div>
         <p id="empty-state">No synthetic registrations yet.</p>
-        <div class="form-actions"><button id="load-fixtures" class="button button--quiet" type="button">Load synthetic scenarios</button><button id="export-csv" class="button button--quiet" type="button">Export sanitized test CSV</button><button id="reset-data" class="button button--quiet" type="button">Reset all test data</button></div>
+        <div class="form-actions"><button id="export-csv" class="button button--quiet" type="button">Export sanitized test CSV</button></div>
       </section>
       <section class="prototype-card"><h2>Captured message previews</h2><p>These messages were captured locally. Nothing was sent externally.</p><ul id="message-list" class="message-list"></ul></section>
     </div>
+    <dialog id="entry-dialog" class="entry-dialog" aria-labelledby="entry-dialog-title">
+      <h2 id="entry-dialog-title">Synthetic test entry</h2><dl id="entry-details" class="review-list"></dl>
+      <form method="dialog"><button class="button" type="submit">Close details</button></form>
+    </dialog>
   </main>
 </body>
 </html>

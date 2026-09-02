@@ -38,8 +38,9 @@
         <p><a href="dashboard.html">Open the organiser prototype</a></p>
       </section>
 
+      <div id="runner-recovery" class="form-alert" role="alert" hidden></div>
+      <div class="step-indicator prototype-card" aria-label="Registration progress"><span id="step-label">Stage 1 of 5 — Runner details</span><progress id="step-progress" max="5" value="1">1 of 5</progress></div>
       <form id="registration-form" class="prototype-card" novalidate>
-        <div class="step-indicator" aria-label="Registration progress"><span id="step-label">Step 1 of 3</span><progress id="step-progress" max="3" value="1">1 of 3</progress></div>
         <div id="form-alert" class="form-alert" role="alert" tabindex="-1" hidden></div>
 
         <section data-step="1" aria-labelledby="runner-heading">
@@ -76,8 +77,15 @@
         </section>
 
         <section data-step="3" aria-labelledby="review-heading" hidden>
-          <h2 id="review-heading">Review and simulate payment</h2>
+          <h2 id="review-heading">Review your test registration</h2>
           <dl id="review-list" class="review-list"></dl>
+          <p>The next action creates one persistent synthetic registration with payment initially marked “not started”. Mock payment follows as a separate test stage.</p>
+        </section>
+
+        <section data-step="4" aria-labelledby="payment-heading" hidden>
+          <h2 id="payment-heading">Test payment</h2>
+          <p>Test registration reference: <strong id="payment-reference"></strong></p>
+          <p>Registration state: <strong id="payment-entry-state"></strong><br>Mock-payment state: <strong id="payment-state">not started</strong></p>
           <label>Mock payment outcome
             <select name="paymentOutcome">
               <option value="successful">Payment successful</option>
@@ -92,13 +100,15 @@
         <div class="form-actions">
           <button id="back-button" class="button button--quiet" type="button" hidden>Back</button>
           <button id="next-button" class="button" type="button">Continue</button>
-          <button id="submit-button" class="button" type="submit" hidden>Create test entry</button>
+          <button id="submit-button" class="button" type="submit" hidden>Create test registration and continue to mock payment</button>
+          <button id="payment-button" class="button" type="button" hidden>Apply mock payment and show confirmation</button>
         </div>
       </form>
 
       <section id="confirmation" class="prototype-card" tabindex="-1" hidden>
-        <p class="eyebrow">Test submission complete</p>
+        <p class="eyebrow">Stage 5 of 5 — Confirmation</p>
         <h2 id="confirmation-title">Test entry recorded</h2>
+        <p>Test registration reference: <strong id="confirmation-reference"></strong></p>
         <p id="confirmation-copy"></p>
         <p><strong>No email was sent and no payment was taken.</strong></p>
         <div class="form-actions"><button id="another-button" class="button" type="button">Create another synthetic entry</button><a class="button button--quiet" href="dashboard.html">View organiser prototype</a></div>

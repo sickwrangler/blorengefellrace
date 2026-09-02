@@ -108,7 +108,7 @@ export function statusSummary(state) {
   };
 }
 
-export function submitRegistration(state, input) {
+export function submitRegistration(state, input, { source = "runner" } = {}) {
   if (!["test", "open"].includes(state.registrationState)) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING", message: "Registration is not accepting entries." };
   const errors = validateRunner(input, { requireSynthetic: state.registrationState === "test" });
   if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
@@ -118,7 +118,8 @@ export function submitRegistration(state, input) {
   }
   const entryStatus = acceptedCount(state) < state.event.capacity ? "accepted" : "waiting_list";
   const registration = {
-    id: identifier(), eventId: state.event.id, environment: state.environment,
+    id: identifier(), testReference: `TEST-${identifier("").replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase()}`,
+    source, eventId: state.event.id, environment: state.environment,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     runner: {
       id: identifier("runner"), firstName: String(input.firstName).trim(), lastName: String(input.lastName).trim(),

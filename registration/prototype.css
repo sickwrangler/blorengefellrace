@@ -24,10 +24,16 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border: .15rem solid #
 .payment-simulation { display: grid; gap: .2rem; margin-top: 1rem; padding: 1rem; border: .15rem dashed #9a5a39; }
 .dashboard-controls { display: grid; gap: .75rem; margin-bottom: 1rem; }
 .dashboard-table-wrap { overflow-x: auto; }
-.dashboard-table { width: 100%; min-width: 55rem; border-collapse: collapse; }
+.dashboard-table { width: 100%; min-width: 72rem; border-collapse: collapse; }
 .dashboard-table th, .dashboard-table td { padding: .6rem; border-bottom: 1px solid var(--colour-stone); text-align: left; vertical-align: top; }
 .dashboard-table button { min-height: 2.5rem; margin: .1rem; padding: .35rem .55rem; }
 .message-list { padding: 0; list-style: none; }
 .message-list li { padding: .75rem 0; border-bottom: 1px solid var(--colour-stone); }
+.diagnostic-list { display: grid; gap: .5rem; }
+.diagnostic-list div { display: grid; grid-template-columns: minmax(9rem, .65fr) 1.35fr; gap: 1rem; padding-bottom: .5rem; border-bottom: 1px solid var(--colour-stone); }
+.diagnostic-list dt { font-weight: 750; }
+.diagnostic-list dd { margin: 0; }
+.entry-dialog { width: min(100% - 2rem, 42rem); max-height: calc(100vh - 2rem); padding: 1.5rem; overflow: auto; border: 1px solid var(--colour-stone-dark); background: var(--colour-paper-light); color: var(--colour-ink); }
+.entry-dialog::backdrop { background: rgb(23 49 38 / .72); }
 @media (min-width: 42rem) { .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dashboard-controls { grid-template-columns: 1fr 1fr 1fr; align-items: end; } }
 @media (max-width: 30rem) { .status-grid { grid-template-columns: 1fr; } .review-list { grid-template-columns: 1fr; } .review-list dt { padding-bottom: 0; border: 0; } .review-list dd { padding-top: .15rem; } }
