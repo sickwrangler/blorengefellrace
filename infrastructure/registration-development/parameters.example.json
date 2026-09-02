@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "resourcePrefix": { "value": "<approved-unique-prefix>" },
+    "location": { "value": "uksouth" },
+    "allowedOrigins": { "value": ["<approved-pr-preview-origin>"] },
+    "tags": {
+      "value": {
+        "workload": "registration",
+        "environment": "development",
+        "dataClassification": "synthetic-only",
+        "owner": "<approved-owner-tag>"
+      }
+    }
+  }
+}

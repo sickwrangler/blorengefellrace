@@ -5,6 +5,9 @@
 /registrations*.xlsx
 /registration*.csv
 /registrations*.csv
+/.local-registration/
+/private-exports/
+/registration-backups/
 
 # Local, unreviewed photo masters; only reviewed public assets belong in Git
 /photo-source/

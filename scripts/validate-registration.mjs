@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
-const files = ["registration/index.html", "registration/dashboard.html", "registration/prototype.css", "registration/runner.mjs", "registration/runner-flow.mjs", "registration/dashboard.mjs", "registration/organiser-view.mjs", "registration/prototype-client.mjs", "registration/preview-repository.mjs", "registration/registration-core.mjs", "registration/fixtures.json", "scripts/start-registration-prototype.mjs"];
+const files = ["registration/index.html", "registration/dashboard.html", "registration/prototype.css", "registration/runner.mjs", "registration/runner-flow.mjs", "registration/dashboard.mjs", "registration/organiser-view.mjs", "registration/prototype-client.mjs", "registration/preview-repository.mjs", "registration/registration-core.mjs", "registration/fixtures.json", "registration/server/service.mjs", "registration/server/api.mjs", "registration/server/auth.mjs", "registration/server/adapters.mjs", "registration/server/repositories.mjs", "scripts/start-registration-prototype.mjs", "scripts/start-registration-phase2.mjs", "scripts/reset-registration-phase2.mjs", "scripts/backup-registration-phase2.mjs", "scripts/restore-registration-phase2.mjs"];
 const errors = [];
 for (const file of files) if (!fs.existsSync(file)) errors.push(`Missing ${file}`);
 for (const file of files.filter((name) => name.endsWith(".mjs"))) {
@@ -45,5 +45,11 @@ for (const id of ["close-detail", "reset-test", "export-csv", "keep-entry", "con
   if (!dashboardScript.includes(`\"#${id}\"`)) errors.push(`Organiser button lacks a handler: ${id}`);
 for (const required of ["Remove race number", "removeRaceNumber", "releaseRaceNumber"])
   if (!dashboardScript.includes(required)) errors.push(`Organiser race-number workflow is missing: ${required}`);
+const phase2 = fs.readFileSync("registration/server/service.mjs", "utf8") + fs.readFileSync("registration/server/api.mjs", "utf8");
+for (const required of ["IDEMPOTENCY_KEY_REQUIRED", "confirmationTokenHash", "race_number_removed", "record_anonymised", "csvFormulaSafe", "/api/v2/organiser/"])
+  if (!phase2.includes(required)) errors.push(`Phase 2 server boundary is missing: ${required}`);
+const staticConfig = fs.readFileSync("staticwebapp.config.json", "utf8");
+for (const blocked of ["/registration/server/*", "/infrastructure/*", "/docs/internal/*", "/tests/*"])
+  if (!staticConfig.includes(blocked)) errors.push(`Preview source route is not blocked: ${blocked}`);
 if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
 console.log("Validated registration state guards, synthetic fixtures, HTML/mobile source, JavaScript syntax and external-service boundaries.");

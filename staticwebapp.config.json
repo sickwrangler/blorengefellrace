@@ -1,4 +1,10 @@
 {
+  "routes": [
+    { "route": "/registration/server/*", "statusCode": 404 },
+    { "route": "/infrastructure/*", "statusCode": 404 },
+    { "route": "/docs/internal/*", "statusCode": 404 },
+    { "route": "/tests/*", "statusCode": 404 }
+  ],
   "responseOverrides": {
     "404": {
       "rewrite": "/404.html"

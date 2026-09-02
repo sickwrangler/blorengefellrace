@@ -25,7 +25,7 @@ flowchart LR
     AZ --> W
 ```
 
-Phase 1 implements the domain rules and an in-memory local API. The Azure PR preview uses an isolated browser simulation because no cloud API or database is being provisioned. Runner and organiser pages share the versioned `localStorage` key `blorenge-registration-preview` with schema version 3. That simulation is for usability review only and is not suitable for real entries or organiser access.
+Phase 1 implements the original domain rules and Azure-preview simulation. Phase 2 adds a versioned server API, normalized model and persistent local repository behind the same user journey. The Azure PR preview continues using the isolated browser simulation because no cloud API, identity or database has been approved. Runner and organiser preview pages share the versioned `localStorage` key `blorenge-registration-preview` with schema version 3. That simulation is for usability review only and is not suitable for real entries or organiser access. See `adr/0001-registration-storage.md` and `registration-phase2.md`.
 
 Preview records persist across navigation and refresh in the same browser profile. A `storage` event refreshes an organiser tab after a runner submission in another tab; normal page refresh also reloads the same repository. Private/incognito windows have separate storage, another browser or device cannot see the records, and clearing site data removes them. Corrupt or outdated stored data blocks mutation and displays one reset instruction instead of silently discarding or accepting data.
 

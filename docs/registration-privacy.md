@@ -1,6 +1,6 @@
 # Registration privacy design
 
-This Phase 1 prototype must use invented test entrants only. It stores data temporarily in server memory or the reviewer’s browser and can be reset in one action. It does not send data to a payment or email service.
+The registration development system must use invented test entrants only. The Azure preview stores disposable test data in the reviewer’s browser. Phase 2 local development stores synthetic data in an ignored, permission-restricted server file until explicit reset. Neither mode sends data to a payment or email service.
 
 ## Field inventory
 

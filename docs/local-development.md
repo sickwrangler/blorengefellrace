@@ -102,3 +102,11 @@ node scripts/start-registration-prototype.mjs
 Open <http://127.0.0.1:4173/registration/>. The server binds only to the local loopback interface and keeps synthetic registrations in memory. It starts with zero entries and Reset test returns it to zero; stopping it deletes the server-side session. No email or payment provider is configured.
 
 The Azure pull-request version uses the shared, versioned `localStorage` repository documented in `registration-architecture.md`. Runner and dashboard testing must use the same browser profile and preview origin. The production custom domain remains closed. See `registration-test-checklist.md` for a non-developer walkthrough.
+
+Phase 2 adds the preferred persistent local API without removing the safe PR-preview fallback:
+
+```sh
+node scripts/start-registration-phase2.mjs
+```
+
+The runner, organiser area, captured-email adapter, mock-payment adapter and ignored persistent store are served together at <http://127.0.0.1:4173/registration/>. Stop and restart the process to verify persistence. Reset explicitly with `node scripts/reset-registration-phase2.mjs`; backup and restore commands are documented in `registration-phase2.md`.

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "description": "Normalized Phase 2 synthetic registration schema",
+  "collections": [
+    "event",
+    "runners",
+    "emergencyContacts",
+    "registrations",
+    "payments",
+    "consents",
+    "communications",
+    "auditEvents",
+    "idempotency",
+    "amendmentRequests"
+  ],
+  "privateFields": ["runner.email", "runner.phone", "runner.dateOfBirth", "runner.membershipNumber", "emergencyContact.name", "emergencyContact.phone"],
+  "highlyRestrictedFields": ["emergencyContact.name", "emergencyContact.phone"],
+  "publicResultAllowlist": ["firstName", "lastName", "club", "genderCategory", "raceNumber"],
+  "deleteAfterEventCandidates": ["emergencyContact", "runner.phone", "runner.dateOfBirth", "runner.membershipNumber"],
+  "limitedFinancialRetention": ["payment.status", "payment.providerReference", "payment.updatedAt"]
+}
