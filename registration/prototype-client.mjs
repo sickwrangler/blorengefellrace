@@ -1,4 +1,4 @@
-import { initialState, submitRegistration, applyMockPayment, cancelRegistration, promoteRegistration, updateTestSettings, assignRaceNumber, statusSummary, sanitizedCsv } from "./registration-core.mjs";
+import { initialState, submitRegistration, applyMockPayment, cancelRegistration, promoteRegistration, updateTestSettings, assignRaceNumber, markOrganiserViewed, statusSummary, sanitizedCsv } from "./registration-core.mjs";
 import { createPreviewRepository, STORAGE_KEY, SCHEMA_VERSION, UPDATE_EVENT, isRepositoryStorageEvent, environmentForHostname } from "./preview-repository.mjs";
 
 const hostname = window.location.hostname;
@@ -6,7 +6,6 @@ const environment = environmentForHostname(hostname);
 export const isLocal = environment === "local";
 export const isPreview = environment === "preview";
 export const canTest = isLocal || isPreview;
-const fixtures = canTest ? await fetch(new URL("./fixtures.json", import.meta.url)).then((response) => response.json()) : [];
 const storageAdapter = {
   getItem(key) { return window.localStorage.getItem(key); },
   setItem(key, value) { window.localStorage.setItem(key, value); },
@@ -14,7 +13,6 @@ const storageAdapter = {
 };
 const repository = createPreviewRepository({
   storage: storageAdapter,
-  fixtures,
   environment: isPreview ? "preview" : "local",
   dispatch: () => window.dispatchEvent(new CustomEvent(UPDATE_EVENT))
 });
@@ -80,6 +78,7 @@ export const prototype = {
   cancel(id) { return localApiOrRepository(`/entries/${id}/cancel`, { method: "POST" }, (state) => cancelRegistration(state, id)); },
   promote(id) { return localApiOrRepository(`/entries/${id}/promote`, { method: "POST" }, (state) => promoteRegistration(state, id)); },
   assign(id, raceNumber) { return localApiOrRepository(`/entries/${id}/race-number`, { method: "POST", body: JSON.stringify({ raceNumber }) }, (state) => assignRaceNumber(state, id, raceNumber)); },
+  markViewed(testReference) { return localApiOrRepository(`/entries/${encodeURIComponent(testReference)}/viewed`, { method: "POST" }, (state) => markOrganiserViewed(state, testReference)); },
   settings(changes) { return localApiOrRepository("/settings", { method: "POST", body: JSON.stringify(changes) }, (state) => updateTestSettings(state, changes)); },
   async reset() {
     if (!canTest) return { ok: false, code: "PRODUCTION_CLOSED" };

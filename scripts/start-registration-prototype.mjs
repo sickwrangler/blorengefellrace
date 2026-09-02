@@ -2,13 +2,11 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { submitRegistration, applyMockPayment, cancelRegistration, promoteRegistration, updateTestSettings, assignRaceNumber, statusSummary } from "../registration/registration-core.mjs";
-import { createFixtureState } from "../registration/preview-repository.mjs";
+import { initialState, submitRegistration, applyMockPayment, cancelRegistration, promoteRegistration, updateTestSettings, assignRaceNumber, markOrganiserViewed, statusSummary } from "../registration/registration-core.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.env.REGISTRATION_PROTOTYPE_PORT || 4173);
-const fixtures = JSON.parse(fs.readFileSync(path.join(root, "registration/fixtures.json"), "utf8"));
-let state = createFixtureState(fixtures, "local");
+let state = initialState({ environment: "local", state: "test", capacity: 110 });
 const mime = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gpx": "application/gpx+xml" };
 
 function json(response, status, payload) {
@@ -32,7 +30,9 @@ async function handleApi(request, response, pathname) {
     const result = submitRegistration(state, await body(request)); return json(response, result.ok ? 201 : 409, result);
   }
   if (request.method === "POST" && pathname === "/api/registration/settings") return json(response, 200, updateTestSettings(state, await body(request)));
-  if (request.method === "POST" && pathname === "/api/registration/reset") { state = createFixtureState(fixtures, "local"); return json(response, 200, { ok: true, state }); }
+  if (request.method === "POST" && pathname === "/api/registration/reset") { state = initialState({ environment: "local", state: "test", capacity: 110 }); state.testProgress.resetCompleted = true; return json(response, 200, { ok: true, state }); }
+  const viewed = pathname.match(/^\/api\/registration\/entries\/([^/]+)\/viewed$/);
+  if (request.method === "POST" && viewed) return json(response, 200, markOrganiserViewed(state, decodeURIComponent(viewed[1])));
   const match = pathname.match(/^\/api\/registration\/entries\/([^/]+)\/(payment|cancel|promote|race-number)$/);
   if (request.method === "POST" && match) {
     const [, id, action] = match; const payload = await body(request);

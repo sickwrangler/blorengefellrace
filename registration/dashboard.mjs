@@ -1,109 +1,108 @@
 import { prototype, canTest } from "./prototype-client.mjs";
 import { queryRegistrations } from "./preview-repository.mjs";
-
-if (!canTest) document.querySelector("#dashboard-closed").hidden = false;
-else { document.querySelector("#dashboard").hidden = false; await render(); }
+import { availableOrganiserActions } from "./organiser-view.mjs";
 
 let currentState;
+let selectedReference = new URLSearchParams(window.location.search).get("ref");
+let markingViewed = false;
+if (canTest) await render();
+
+function showNotice(message, error = false) {
+  const notice = document.querySelector("#organiser-alert"); notice.textContent = message; notice.hidden = false;
+  notice.classList.toggle("form-alert--success", !error); notice.focus();
+}
 async function render() {
-  const snapshot = await prototype.all();
-  currentState = snapshot.state;
-  const accepted = currentState.registrations.filter((item) => item.entryStatus === "accepted").length;
-  const waiting = currentState.registrations.filter((item) => item.entryStatus === "waiting_list").length;
-  document.querySelector("#dash-state").textContent = currentState.registrationState.toUpperCase();
-  document.querySelector("#dash-accepted").textContent = `${accepted} / ${currentState.event.capacity}`;
-  document.querySelector("#dash-waiting").textContent = waiting;
-  document.querySelector("#state-control").value = currentState.registrationState;
-  document.querySelector("#capacity-control").value = currentState.event.capacity;
-  document.querySelector("#diagnostic-environment").textContent = snapshot.diagnostics.environment;
-  document.querySelector("#diagnostic-storage").textContent = snapshot.diagnostics.storageType;
-  document.querySelector("#diagnostic-schema").textContent = snapshot.diagnostics.schemaVersion;
-  document.querySelector("#diagnostic-count").textContent = snapshot.diagnostics.registrationsLoaded;
-  document.querySelector("#diagnostic-refresh").textContent = new Date(snapshot.diagnostics.lastRefreshTime).toLocaleString();
-  const recovery = document.querySelector("#dashboard-recovery");
-  recovery.hidden = !snapshot.recovery;
-  recovery.textContent = snapshot.recovery?.message || "";
-  renderRows(); renderMessages();
-  for (const control of document.querySelectorAll("#save-settings, #export-csv, #entrant-rows button")) control.disabled = Boolean(snapshot.recovery);
-}
-
-function renderRows() {
-  const search = document.querySelector("#search").value.toLowerCase().trim();
-  const entry = document.querySelector("#entry-filter").value;
-  const payment = document.querySelector("#payment-filter").value;
-  const registrations = queryRegistrations(currentState, { search, entry, payment });
-  const body = document.querySelector("#entrant-rows"); body.replaceChildren();
-  for (const item of registrations) {
-    const row = document.createElement("tr");
-    row.innerHTML = `<td></td><td><strong></strong><br><small></small></td><td></td><td></td><td></td><td></td><td></td><td></td>`;
-    row.children[0].textContent = item.testReference;
-    row.children[1].querySelector("strong").textContent = `${item.runner.firstName} ${item.runner.lastName}`;
-    row.children[1].querySelector("small").textContent = item.runner.email;
-    row.children[2].textContent = item.source === "seed" ? "Seed fixture" : "Runner form";
-    row.children[3].textContent = item.runner.club;
-    row.children[4].textContent = item.waitingListPosition ? `${item.entryStatus} #${item.waitingListPosition}` : item.entryStatus;
-    row.children[5].textContent = item.paymentStatus;
-    row.children[6].textContent = item.raceNumber ?? "—";
-    const actions = row.children[7];
-    actions.append(actionButton("Details", () => showDetails(item)));
-    if (item.entryStatus === "waiting_list") actions.append(actionButton("Promote", () => act(() => prototype.promote(item.id))));
-    if (item.entryStatus !== "cancelled") actions.append(actionButton("Cancel", () => act(() => prototype.cancel(item.id))));
-    actions.append(actionButton("Race number", async () => {
-      const number = window.prompt("Assign a synthetic race number", item.raceNumber ?? "");
-      if (number !== null) await act(() => prototype.assign(item.id, number));
-    }));
-    if (item.paymentStatus === "successful") actions.append(actionButton("Refund", () => act(() => prototype.payment(item.id, "refunded"))));
-    body.append(row);
+  const snapshot = await prototype.all(); currentState = snapshot.state;
+  const active = currentState.registrations.filter((item) => item.entryStatus !== "cancelled");
+  const accepted = active.filter((item) => item.entryStatus === "accepted").length;
+  const waiting = active.filter((item) => item.entryStatus === "waiting_list").length;
+  const attention = active.filter((item) => ["not_started", "declined", "abandoned"].includes(item.paymentStatus)).length;
+  document.querySelector("#summary-accepted").textContent = accepted;
+  document.querySelector("#summary-waiting").textContent = waiting;
+  document.querySelector("#summary-payments").textContent = attention;
+  document.querySelector("#summary-remaining").textContent = Math.max(0, currentState.event.capacity - accepted);
+  document.querySelector("#technical-environment").textContent = snapshot.diagnostics.environment;
+  document.querySelector("#technical-storage").textContent = snapshot.diagnostics.storageType;
+  document.querySelector("#technical-schema").textContent = snapshot.diagnostics.schemaVersion;
+  if (snapshot.recovery) showNotice(snapshot.recovery.message, true);
+  renderList(); renderProgress();
+  const selected = currentState.registrations.find((item) => item.testReference === selectedReference);
+  if (selected) {
+    renderDetail(selected);
+    if (!currentState.testProgress.organiserViewed && !markingViewed) {
+      markingViewed = true; await prototype.markViewed(selectedReference); markingViewed = false;
+      currentState.testProgress.organiserViewed = true; renderProgress();
+    }
+  } else {
+    document.querySelector("#entry-detail").hidden = true;
+    if (selectedReference) { selectedReference = null; history.replaceState(null, "", "dashboard.html"); }
   }
-  document.querySelector("#empty-state").hidden = registrations.length > 0;
 }
-
-function actionButton(label, handler) {
-  const button = document.createElement("button"); button.type = "button"; button.textContent = label; button.addEventListener("click", handler); return button;
+function filteredEntries() {
+  return queryRegistrations(currentState, { search: document.querySelector("#search").value, entry: document.querySelector("#entry-filter").value, payment: document.querySelector("#payment-filter").value });
 }
-async function act(operation) {
-  const result = await operation();
-  if (!result.ok) window.alert(result.message || `Prototype action failed: ${result.code}`);
-  await render();
+function renderList() {
+  const entries = filteredEntries(); const list = document.querySelector("#entrant-list"); list.replaceChildren();
+  for (const item of entries) {
+    const card = document.createElement("article"); card.className = "entrant-card";
+    if (item.testReference === selectedReference) card.classList.add("entrant-card--selected");
+    const heading = document.createElement("h3"); heading.textContent = `${item.runner.firstName} ${item.runner.lastName}`;
+    const reference = document.createElement("p"); reference.className = "entrant-reference"; reference.textContent = item.testReference;
+    const facts = document.createElement("dl"); facts.className = "entrant-facts";
+    for (const [label, value] of [["Club", item.runner.club], ["Entry", item.entryStatus.replace("_", " ")], ["Mock payment", item.paymentStatus.replace("_", " ")], ["Race number", item.raceNumber ?? "Not assigned"]]) {
+      const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; facts.append(dt, dd);
+    }
+    const button = document.createElement("button"); button.className = "button button--quiet"; button.type = "button"; button.textContent = "View entry";
+    button.addEventListener("click", () => selectEntry(item.testReference));
+    card.append(heading, reference, facts, button); list.append(card);
+  }
+  document.querySelector("#empty-state").hidden = entries.length > 0;
 }
-function showDetails(item) {
-  const fields = {
-    "Test reference": item.testReference, Source: item.source === "seed" ? "Seed fixture" : "Runner form",
-    Runner: `${item.runner.firstName} ${item.runner.lastName}`, "Synthetic email": item.runner.email,
-    "Synthetic phone": item.runner.phone, Club: item.runner.club, Category: item.runner.genderCategory,
-    "Registration status": item.entryStatus, "Mock-payment status": item.paymentStatus,
-    "Emergency-contact name": item.runner.emergencyName, "Synthetic emergency phone": item.runner.emergencyPhone,
-    "Travel method": item.runner.travelMethod, "Race number": item.raceNumber ?? "Not assigned"
-  };
-  document.querySelector("#entry-details").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => {
-    const term = document.createElement("dt"); term.textContent = label;
-    const description = document.createElement("dd"); description.textContent = value;
-    return [term, description];
+async function selectEntry(reference) {
+  selectedReference = reference; history.replaceState(null, "", `dashboard.html?ref=${encodeURIComponent(reference)}`);
+  await render(); document.querySelector("#entry-detail").scrollIntoView({ behavior: "smooth", block: "start" }); document.querySelector("#entry-detail").focus();
+}
+function renderDetail(item) {
+  const panel = document.querySelector("#entry-detail"); panel.hidden = false;
+  document.querySelector("#detail-title").textContent = `${item.runner.firstName} ${item.runner.lastName}`;
+  document.querySelector("#detail-reference").textContent = item.testReference;
+  const fields = { "Synthetic email": item.runner.email, "Synthetic phone": item.runner.phone, Club: item.runner.club, Category: item.runner.genderCategory, "Entry status": item.entryStatus.replace("_", " "), "Mock-payment status": item.paymentStatus.replace("_", " "), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact": `${item.runner.emergencyName} — ${item.runner.emergencyPhone}`, Travel: item.runner.travelMethod };
+  document.querySelector("#entry-details").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
+  renderActions(item); renderMessages(item);
+}
+function actionButton(label, handler, className = "button button--quiet") {
+  const button = document.createElement("button"); button.type = "button"; button.className = className; button.textContent = label; button.addEventListener("click", handler); return button;
+}
+function renderActions(item) {
+  const actions = document.querySelector("#entry-actions"); actions.replaceChildren();
+  const available = availableOrganiserActions(item);
+  if (available.includes("race_number")) actions.append(actionButton(item.raceNumber ? "Change race number" : "Assign race number", async () => {
+    const value = window.prompt("Enter a synthetic race number", item.raceNumber ?? ""); if (value === null) return;
+    const result = await prototype.assign(item.id, value); if (!result.ok) showNotice(`Race number not changed: ${result.code}`, true); else showNotice(`Race number ${value} assigned to ${item.testReference}.`); await render();
   }));
-  document.querySelector("#entry-dialog").showModal();
+  if (available.includes("promote")) actions.append(actionButton("Promote from waiting list", async () => { const result = await prototype.promote(item.id); showNotice(result.ok ? `${item.testReference} promoted.` : `Promotion unavailable: ${result.code}`, !result.ok); await render(); }));
+  if (available.includes("refund")) actions.append(actionButton("Refund mock payment", async () => { if (!window.confirm(`Refund the mock payment for ${item.testReference}?`)) return; const result = await prototype.payment(item.id, "refunded"); showNotice(result.ok ? "Mock payment marked refunded." : `Refund unavailable: ${result.code}`, !result.ok); await render(); }));
+  if (available.includes("cancel")) actions.append(actionButton("Cancel entry", async () => { if (!window.confirm(`Cancel synthetic entry ${item.testReference}?`)) return; const result = await prototype.cancel(item.id); showNotice(result.ok ? "Synthetic entry cancelled." : `Cancellation unavailable: ${result.code}`, !result.ok); await render(); }, "button button--quiet danger-button"));
+  if (available.includes("messages")) actions.append(actionButton("Preview captured messages", () => { const preview = document.querySelector("#message-preview"); preview.hidden = false; preview.scrollIntoView({ behavior: "smooth", block: "nearest" }); }));
 }
-function renderMessages() {
-  const list = document.querySelector("#message-list"); list.replaceChildren();
-  for (const message of [...currentState.communications].reverse()) {
-    const item = document.createElement("li");
-    const heading = document.createElement("strong"); heading.textContent = message.subject;
-    const copy = document.createElement("p"); copy.textContent = `${message.recipient} — ${message.body}`;
-    item.append(heading, copy); list.append(item);
-  }
-  if (!currentState.communications.length) { const item = document.createElement("li"); item.textContent = "No captured messages yet."; list.append(item); }
+function renderMessages(item) {
+  const messages = currentState.communications.filter((message) => message.registrationId === item.id); const list = document.querySelector("#entry-messages"); list.replaceChildren(); document.querySelector("#message-preview").hidden = true;
+  for (const message of messages) { const li = document.createElement("li"); const strong = document.createElement("strong"); strong.textContent = message.subject; const copy = document.createElement("p"); copy.textContent = message.body; li.append(strong, copy); list.append(li); }
+  if (!messages.length) { const li = document.createElement("li"); li.textContent = "No messages have been captured for this test entry."; list.append(li); }
+}
+function renderProgress() {
+  const reference = currentState.testProgress.submittedReference;
+  const entry = currentState.registrations.find((item) => item.testReference === reference);
+  const checks = {
+    submitted: Boolean(entry), payment: entry?.paymentStatus === "successful", visible: Boolean(entry && currentState.testProgress.organiserViewed),
+    raceNumber: Boolean(entry?.raceNumber), managed: Boolean(entry && (entry.entryStatus === "cancelled" || (entry.entryStatus === "accepted" && entry.raceNumber))), reset: Boolean(currentState.testProgress.resetCompleted)
+  };
+  for (const item of document.querySelectorAll("#testing-progress [data-check]")) { const done = checks[item.dataset.check]; item.classList.toggle("is-complete", done); item.setAttribute("aria-label", `${done ? "Complete" : "Not complete"}: ${item.textContent}`); }
+  const complete = Object.values(checks).every(Boolean); document.querySelector("#journey-complete").hidden = !complete;
 }
 
-for (const selector of ["#search", "#entry-filter", "#payment-filter"]) document.querySelector(selector)?.addEventListener("input", renderRows);
-document.querySelector("#save-settings")?.addEventListener("click", () => act(() => prototype.settings({ registrationState: document.querySelector("#state-control").value, capacity: Number(document.querySelector("#capacity-control").value) })));
-document.querySelector("#refresh-data")?.addEventListener("click", render);
-document.querySelector("#reset-fixtures")?.addEventListener("click", async () => {
-  if (!window.confirm("Replace all browser/server test data with the documented synthetic fixture set?")) return;
-  const result = await prototype.reset();
-  if (!result.ok) window.alert(result.message || `Fixture reset failed: ${result.code}`);
-  await render();
-});
-document.querySelector("#export-csv")?.addEventListener("click", async () => {
-  const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-  const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url);
-});
+for (const selector of ["#search", "#entry-filter", "#payment-filter"]) document.querySelector(selector)?.addEventListener("input", renderList);
+document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
+document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
+document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });
 prototype.subscribe(() => render());

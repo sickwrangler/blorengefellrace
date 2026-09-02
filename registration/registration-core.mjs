@@ -57,7 +57,8 @@ export function initialState({ capacity = EVENT.capacity, state = "test", enviro
     registrationState: safeRegistrationState(state, environment),
     registrations: [],
     auditEvents: [],
-    communications: []
+    communications: [],
+    testProgress: { submittedReference: null, organiserViewed: false, resetCompleted: false }
   };
 }
 
@@ -134,6 +135,7 @@ export function submitRegistration(state, input, { source = "runner" } = {}) {
     consentRecordedAt: new Date().toISOString()
   };
   state.registrations.push(registration);
+  if (source === "runner") state.testProgress.submittedReference = registration.testReference;
   refreshWaitingList(state);
   addAudit(state, "registration_created", registration.id, { entryStatus });
   addCommunication(state, registration, "registration_received");
@@ -215,6 +217,13 @@ export function assignRaceNumber(state, registrationId, raceNumber) {
   registration.raceNumber = number;
   registration.updatedAt = new Date().toISOString();
   addAudit(state, "race_number_assigned", registration.id, { raceNumber: number });
+  return { ok: true, registration };
+}
+
+export function markOrganiserViewed(state, testReference) {
+  const registration = state.registrations.find((item) => item.testReference === testReference);
+  if (!registration) return { ok: false, code: "NOT_FOUND" };
+  state.testProgress.organiserViewed = true;
   return { ok: true, registration };
 }
 

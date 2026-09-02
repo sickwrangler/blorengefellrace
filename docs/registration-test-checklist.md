@@ -1,64 +1,23 @@
-# Registration prototype test checklist
+# Registration prototype: five-minute organiser test
 
-Start the prototype with:
+Use the runner and organiser pages in the same normal browser profile. A private window, another browser or another device has separate test data.
 
-```sh
-node scripts/start-registration-prototype.mjs
-```
+1. Open the organiser test area and select **Reset test**. Confirm the summary shows zero accepted entries, zero waiting-list entries and 110 remaining places.
+2. Open the runner page and select **Start a test registration**.
+3. Continue through the pre-filled synthetic details and consent. Only the controls for the current stage should be visible.
+4. Review the complete entry and select **Submit test entry** once. Record the displayed `TEST-…` reference.
+5. Select **Simulate successful payment**. Confirm the same reference shows an accepted entry and successful mock payment.
+6. Select **View this entry as organiser**.
+7. Confirm the correct entry is highlighted and its reference, runner details and successful payment status match.
+8. Assign a synthetic race number.
+9. Select **Preview captured messages** and confirm the preview says no message was sent externally.
+10. Confirm the testing-progress panel displays **End-to-end registration test completed successfully.**
+11. Select **Reset test** and confirm the entry disappears and all counts return to zero.
 
-Open <http://127.0.0.1:4173/registration/>. Use synthetic details only; the provided `example.com` values are safe defaults.
+The complete journey should take no more than approximately five minutes. No developer tools, fixtures, storage controls or manual refresh controls are required.
 
-On the Azure preview, keep the runner and dashboard in the same browser and profile. Private windows, other browsers and other devices have separate storage. Clearing site data removes preview entries.
+## Quick responsive and keyboard review
 
-## Runner journey
+If time permits, repeat the runner stages at approximately 320 and 768 pixels. Check that the page does not scroll horizontally, focus is visible, validation errors identify their fields, and the organiser entries display as readable cards. Use Tab, Shift+Tab, Enter and Space to confirm every visible action is operable.
 
-1. Confirm the red test banner remains visible throughout.
-2. Try continuing with a required field empty and check that the error identifies the field.
-3. Enter a birth date after 28 November 2010 and confirm it is rejected as underage.
-4. Complete the three information/review stages and select “Create test registration and continue to mock payment”. Record the visible test reference.
-5. Confirm the registration exists with payment “not started”, then choose each mock-payment outcome in Stage 4.
-6. Choose “Temporary error”, confirm the existing record remains stored, then select another outcome and retry.
-7. Reuse an existing test email and confirm the duplicate is rejected without adding a record.
-8. Check Stage 5 repeats the test reference and clearly says no email was sent and no payment was taken.
-
-## Organiser journey
-
-1. Open the organiser prototype and select “Load/reset synthetic fixtures”. Record the starting registration count.
-2. Search by synthetic name, club and email; filter entry and payment states.
-3. Change capacity, pause/resume test entry, and confirm new entries are rejected while paused.
-4. Cancel an accepted test entry and check the first waiting runner is promoted.
-5. Assign a race number and confirm a duplicate race number is rejected.
-6. Refund an entry whose mock payment is successful.
-7. Review captured message previews; confirm no external delivery is claimed.
-8. Export the CSV and confirm it contains no email, phone, date of birth, emergency-contact, membership or consent fields.
-9. Reset test data and confirm the documented fixture count and seed labels return.
-
-## Exact preview regression journey
-
-1. Open runner and dashboard pages in the same normal browser profile.
-2. Select “Load/reset synthetic fixtures” and confirm the documented starting count is 6.
-3. Complete the runner form using a new reserved example-domain email.
-4. Select “Create test registration and continue to mock payment”.
-5. Confirm the dashboard count increases by one and search for the displayed test reference.
-6. Apply successful mock payment and confirm that same record changes to `successful`.
-7. Refresh both pages and confirm the record remains.
-8. Cancel the record and confirm its registration status changes to `cancelled`.
-9. Select “Load/reset synthetic fixtures” and confirm the baseline is restored.
-
-## Additional thorough checks
-
-- Repeat with unique example-domain emails and mock outcomes `declined` and `abandoned`; both records must remain searchable with those statuses.
-- Select the temporary-error outcome after creating a registration; the count must not increase and the existing record must remain `not_started` until retry.
-- Keep the dashboard open in one tab and submit in another; its count should update automatically. Then use “Refresh test data” as the explicit fallback.
-- Reload both tabs and confirm the runner-created records remain.
-- Try the same preview in a private window and confirm it has a separate fixture store and cannot see the normal-profile entries.
-- Attempt a duplicate synthetic email and confirm the dashboard count does not change.
-- Test search independently by test reference, runner name and synthetic email.
-- At widths around 320, 375, 768 and 1440 pixels, check all five stages, the dashboard table’s deliberate horizontal scrolling, dialogs, focus indication and error announcements.
-- Optional recovery test: in browser developer tools for the preview only, run `localStorage.setItem("blorenge-registration-preview", "not-json")` and reload. Submission must be blocked with a visible recovery message. “Load/reset synthetic fixtures” must restore the six-fixture baseline.
-
-## Responsive and accessibility review
-
-Repeat the runner journey at approximately 320, 375, 768 and 1440 pixels. Check keyboard-only operation, visible focus, error announcements, labels, touch-target size, horizontal overflow and reading order.
-
-The numbered Azure pull-request preview offers a browser-only disposable simulation. The production custom domain must show the closed page instead.
+Edge cases—including capacity 109/110/111, concurrent final-place attempts, corrupt storage, duplicate submission, declined/abandoned payments and privacy boundaries—remain covered by the automated suite rather than the main organiser journey.

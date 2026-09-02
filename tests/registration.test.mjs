@@ -1,15 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { ageOnDate, initialState, safeRegistrationState, submitRegistration, applyMockPayment, cancelRegistration, updateTestSettings, sanitizedCsv } from "../registration/registration-core.mjs";
+import { ageOnDate, initialState, safeRegistrationState, submitRegistration, applyMockPayment, cancelRegistration, updateTestSettings, assignRaceNumber, markOrganiserViewed, statusSummary, sanitizedCsv } from "../registration/registration-core.mjs";
 import { createPreviewRepository, STORAGE_KEY, SCHEMA_VERSION, LEGACY_STORAGE_KEYS, isRepositoryStorageEvent, queryRegistrations, environmentForHostname } from "../registration/preview-repository.mjs";
+import { RUNNER_STAGE_ACTIONS, isRunnerActionAvailable, organiserHandoverUrl } from "../registration/runner-flow.mjs";
+import { availableOrganiserActions } from "../registration/organiser-view.mjs";
 
 const fixtures = JSON.parse(fs.readFileSync(new URL("../registration/fixtures.json", import.meta.url), "utf8"));
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
   return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key), values };
 }
-function previewRepository(storage = memoryStorage()) { return createPreviewRepository({ storage, fixtures, environment: "preview", now: () => "2026-09-01T12:00:00.000Z" }); }
+function previewRepository(storage = memoryStorage()) { return createPreviewRepository({ storage, environment: "preview", now: () => "2026-09-01T12:00:00.000Z" }); }
 
 const runner = (number = 1, overrides = {}) => ({
   firstName: `Runner${number}`, lastName: "Example", email: `runner${number}@example.com`, phone: "07700 900123",
@@ -73,6 +75,13 @@ test("duplicate active email addresses are rejected", () => {
   assert.equal(submitRegistration(state, runner(2, { email: "RUNNER1@EXAMPLE.COM" })).code, "DUPLICATE");
 });
 
+test("repeated Stage 3 submission cannot create two records", () => {
+  const state = initialState(); const payload = runner(77);
+  assert.equal(submitRegistration(state, payload).ok, true);
+  assert.equal(submitRegistration(state, payload).code, "DUPLICATE");
+  assert.equal(state.registrations.length, 1);
+});
+
 test("capacity accepts entries 109 and 110 then wait-lists entry 111", () => {
   const state = initialState({ capacity: 110 });
   for (let number = 1; number <= 108; number += 1) assert.equal(submitRegistration(state, runner(number)).registration.entryStatus, "accepted");
@@ -134,7 +143,7 @@ test("fixture file contains the required synthetic scenarios", () => {
 
 test("runner and dashboard share one versioned storage contract", () => {
   assert.equal(STORAGE_KEY, "blorenge-registration-preview");
-  assert.equal(SCHEMA_VERSION, 2);
+  assert.equal(SCHEMA_VERSION, 3);
   const source = fs.readFileSync(new URL("../registration/prototype-client.mjs", import.meta.url), "utf8");
   assert.match(source, /createPreviewRepository/);
   assert.doesNotMatch(source, /sessionStorage/);
@@ -191,14 +200,16 @@ test("cross-tab storage events are recognized only for the shared key", () => {
   assert.equal(isRepositoryStorageEvent({ key: "unrelated" }), false);
 });
 
-test("reset returns a known fixture state and removes runner-created records", () => {
-  const repository = previewRepository(); const baseline = repository.load().state;
+test("reset removes every test entry and returns counts to zero", () => {
+  const repository = previewRepository();
   const created = repository.mutate((state) => submitRegistration(state, runner(801), { source: "runner" })).registration;
   assert.ok(repository.load().state.registrations.some((item) => item.id === created.id));
   const reset = repository.reset();
   assert.equal(reset.ok, true);
-  assert.equal(reset.state.registrations.length, baseline.registrations.length);
-  assert.ok(reset.state.registrations.every((item) => item.source === "seed"));
+  assert.equal(reset.state.registrations.length, 0);
+  assert.equal(statusSummary(reset.state).accepted, 0);
+  assert.equal(statusSummary(reset.state).waiting, 0);
+  assert.equal(reset.state.testProgress.resetCompleted, true);
 });
 
 test("invalid stored data fails safely and explicit reset recovers", () => {
@@ -217,4 +228,49 @@ test("legacy preview data requires visible recovery and reset removes the old st
   assert.equal(repository.reset().ok, true);
   assert.equal(storage.getItem(LEGACY_STORAGE_KEYS[0]), null);
   assert.equal(repository.load().recovery, null);
+});
+
+test("runner stages expose only their relevant actions and block later actions early", () => {
+  assert.deepEqual(RUNNER_STAGE_ACTIONS[1], ["details-continue"]);
+  assert.deepEqual(RUNNER_STAGE_ACTIONS[2], ["race-back", "race-continue"]);
+  assert.deepEqual(RUNNER_STAGE_ACTIONS[3], ["review-back", "submit-test"]);
+  assert.equal(isRunnerActionAvailable(1, "submit-test"), false);
+  assert.equal(isRunnerActionAvailable(2, "payment-successful", true), false);
+  assert.equal(isRunnerActionAvailable(4, "payment-successful", false), false);
+  assert.equal(isRunnerActionAvailable(4, "payment-successful", true), true);
+});
+
+test("organiser handover focuses the exact encoded test reference", () => {
+  assert.equal(organiserHandoverUrl("TEST-A B/1"), "dashboard.html?ref=TEST-A%20B%2F1");
+});
+
+test("runner and organiser counts derive from the same records", () => {
+  const repository = previewRepository();
+  repository.mutate((state) => submitRegistration(state, runner(1001), { source: "runner" }));
+  const state = repository.load().state;
+  assert.equal(statusSummary(state).accepted, 1);
+  assert.equal(queryRegistrations(state).filter((item) => item.entryStatus === "accepted").length, 1);
+});
+
+test("guided progress follows the same runner record", () => {
+  const repository = previewRepository(); repository.reset();
+  const created = repository.mutate((state) => submitRegistration(state, runner(1101), { source: "runner" })).registration;
+  repository.mutate((state) => applyMockPayment(state, created.id, "successful"));
+  repository.mutate((state) => markOrganiserViewed(state, created.testReference));
+  repository.mutate((state) => assignRaceNumber(state, created.id, 42));
+  const state = repository.load().state; const entry = state.registrations[0];
+  assert.equal(state.testProgress.submittedReference, entry.testReference);
+  assert.equal(state.testProgress.organiserViewed, true);
+  assert.equal(state.testProgress.resetCompleted, true);
+  assert.equal(entry.paymentStatus, "successful"); assert.equal(entry.raceNumber, 42);
+});
+
+test("invalid organiser actions are not offered", () => {
+  const accepted = { entryStatus: "accepted", paymentStatus: "successful" };
+  assert.deepEqual(availableOrganiserActions(accepted).sort(), ["cancel", "messages", "race_number", "refund"].sort());
+  const cancelled = { entryStatus: "cancelled", paymentStatus: "refunded" };
+  assert.deepEqual(availableOrganiserActions(cancelled), ["messages"]);
+  const waiting = { entryStatus: "waiting_list", paymentStatus: "not_started" };
+  assert.ok(availableOrganiserActions(waiting).includes("promote"));
+  assert.ok(!availableOrganiserActions(waiting).includes("refund"));
 });

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
-const files = ["registration/index.html", "registration/dashboard.html", "registration/prototype.css", "registration/runner.mjs", "registration/dashboard.mjs", "registration/prototype-client.mjs", "registration/preview-repository.mjs", "registration/registration-core.mjs", "registration/fixtures.json", "scripts/start-registration-prototype.mjs"];
+const files = ["registration/index.html", "registration/dashboard.html", "registration/prototype.css", "registration/runner.mjs", "registration/runner-flow.mjs", "registration/dashboard.mjs", "registration/organiser-view.mjs", "registration/prototype-client.mjs", "registration/preview-repository.mjs", "registration/registration-core.mjs", "registration/fixtures.json", "scripts/start-registration-prototype.mjs"];
 const errors = [];
 for (const file of files) if (!fs.existsSync(file)) errors.push(`Missing ${file}`);
 for (const file of files.filter((name) => name.endsWith(".mjs"))) {
@@ -14,9 +14,9 @@ for (const htmlFile of ["registration/index.html", "registration/dashboard.html"
   if (!/<title>[^<]+<\/title>/.test(html)) errors.push(`${htmlFile} missing title`);
 }
 const runnerPage = fs.readFileSync("registration/index.html", "utf8");
-for (const required of ["TEST REGISTRATION — NOT A REAL ENTRY", "No card details", "dateOfBirth", "acceptTerms", "acceptPrivacy", "Emergency-contact"])
+for (const required of ["TEST REGISTRATION — NOT A REAL ENTRY", "No money, card details", "dateOfBirth", "acceptTerms", "acceptPrivacy", "Emergency-contact"])
   if (!runnerPage.includes(required)) errors.push(`Runner prototype missing: ${required}`);
-for (const required of ["Stage 1 of 5", "Create test registration and continue to mock payment", "confirmation-reference"])
+for (const required of ["Stage 1 of 4", "Submit test entry", "View this entry as organiser", "Start a test registration"])
   if (!runnerPage.includes(required)) errors.push(`Runner journey is missing: ${required}`);
 const client = fs.readFileSync("registration/prototype-client.mjs", "utf8");
 if (!client.includes("PRODUCTION_CLOSED") || !client.includes("canTest")) errors.push("Production-closed client guard is missing");
@@ -29,9 +29,19 @@ if (/href=["'][^"']*registration\//i.test(entryPage)) errors.push("Public entry 
 const fixtures = JSON.parse(fs.readFileSync("registration/fixtures.json", "utf8"));
 if (fixtures.some((fixture) => fixture.runner?.email && !/@(example\.(com|org|net)|[^@]+\.invalid)$/i.test(fixture.runner.email))) errors.push("Fixture contains a non-synthetic email");
 const repository = fs.readFileSync("registration/preview-repository.mjs", "utf8");
-if (!repository.includes('STORAGE_KEY = "blorenge-registration-preview"') || !repository.includes("SCHEMA_VERSION = 2")) errors.push("Shared preview storage contract is missing");
+if (!repository.includes('STORAGE_KEY = "blorenge-registration-preview"') || !repository.includes("SCHEMA_VERSION = 3")) errors.push("Shared preview storage contract is missing");
 const dashboard = fs.readFileSync("registration/dashboard.html", "utf8");
-for (const required of ["Development diagnostics", "Refresh test data", "Load/reset synthetic fixtures", "Schema version"])
-  if (!dashboard.includes(required)) errors.push(`Dashboard diagnostic is missing: ${required}`);
+for (const required of ["Testing progress", "Technical details", "Reset test", "There are no test entries"])
+  if (!dashboard.includes(required)) errors.push(`Dashboard workflow is missing: ${required}`);
+if (!dashboard.includes("prototype-pending") || !dashboard.includes('location.replace("../404.html")')) errors.push("Production organiser redirect/hidden guard is missing");
+const prototypeCss = fs.readFileSync("registration/prototype.css", "utf8");
+if (!prototypeCss.includes("[hidden]") || !prototypeCss.includes("display: none !important")) errors.push("Hidden stage controls can be exposed by button display styles");
+if (dashboard.includes("dashboard-table") || prototypeCss.includes("min-width: 72rem")) errors.push("Organiser view retains a clipped wide table");
+const runnerScript = fs.readFileSync("registration/runner.mjs", "utf8");
+for (const id of ["start-test", "reset-test", "details-continue", "race-back", "race-continue", "review-back", "submit-test", "retry-payment"])
+  if (!runnerScript.includes(`\"#${id}\"`)) errors.push(`Runner button lacks a handler: ${id}`);
+const dashboardScript = fs.readFileSync("registration/dashboard.mjs", "utf8");
+for (const id of ["close-detail", "reset-test", "export-csv"])
+  if (!dashboardScript.includes(`\"#${id}\"`)) errors.push(`Organiser button lacks a handler: ${id}`);
 if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
 console.log("Validated registration state guards, synthetic fixtures, HTML/mobile source, JavaScript syntax and external-service boundaries.");

@@ -25,9 +25,9 @@ flowchart LR
     AZ --> W
 ```
 
-Phase 1 implements the domain rules and an in-memory local API. The Azure PR preview uses an isolated browser simulation because no cloud API or database is being provisioned. Runner and organiser pages share the versioned `localStorage` key `blorenge-registration-preview` with schema version 2. That simulation is for usability review only and is not suitable for real entries or organiser access.
+Phase 1 implements the domain rules and an in-memory local API. The Azure PR preview uses an isolated browser simulation because no cloud API or database is being provisioned. Runner and organiser pages share the versioned `localStorage` key `blorenge-registration-preview` with schema version 3. That simulation is for usability review only and is not suitable for real entries or organiser access.
 
-Preview records persist across navigation and refresh in the same browser profile. A `storage` event refreshes an organiser tab after a runner submission in another tab, while a manual refresh action provides an explicit fallback. Private/incognito windows have separate storage, another browser or device cannot see the records, and clearing site data removes them. Corrupt or outdated stored data blocks mutation and displays a reset instruction instead of silently discarding or accepting data.
+Preview records persist across navigation and refresh in the same browser profile. A `storage` event refreshes an organiser tab after a runner submission in another tab; normal page refresh also reloads the same repository. Private/incognito windows have separate storage, another browser or device cannot see the records, and clearing site data removes them. Corrupt or outdated stored data blocks mutation and displays one reset instruction instead of silently discarding or accepting data.
 
 ## State enforcement
 
@@ -41,7 +41,7 @@ The state model is `closed`, `test`, `open`, `paused` and `full`.
 
 A query parameter, browser preference or date cannot change the production state. Production has no registration API in Phase 1, so a direct API request cannot store data or trigger another service.
 
-Reset replaces all preview records with the documented synthetic fixture baseline. Runner-created and seed-fixture records coexist until that explicit reset, and each record carries a visible test reference and source label.
+Reset removes every preview registration and returns the accepted and waiting-list counts to zero. Automated synthetic fixtures remain available to the test suite but are not loaded into the organiser’s manual journey. Every runner-created record carries a visible test reference.
 
 ## Data model
 

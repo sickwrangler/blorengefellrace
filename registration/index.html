@@ -1,118 +1,88 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Registration prototype | Blorenge Fell Race</title>
-  <meta name="description" content="Synthetic test registration prototype for the Blorenge Fell Race.">
-  <link rel="stylesheet" href="../style.css">
-  <link rel="stylesheet" href="prototype.css">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Registration test | Blorenge Fell Race</title>
+  <meta name="description" content="Safe synthetic registration test for the Blorenge Fell Race.">
+  <link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="prototype.css">
   <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
   <script type="module" src="runner.mjs"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
-  <header class="prototype-header">
-    <a href="../enter.html">← Back to entry information</a>
-    <strong>TEST REGISTRATION — NOT A REAL ENTRY</strong>
-  </header>
+  <header class="prototype-header"><a href="../enter.html">← Back to entry information</a><strong>TEST REGISTRATION — NOT A REAL ENTRY</strong></header>
   <main id="main-content" class="prototype-shell">
-    <h1 class="visually-hidden">Blorenge Fell Race registration prototype</h1>
+    <h1 class="visually-hidden">Blorenge Fell Race registration test</h1>
     <section id="closed-panel" class="prototype-card" hidden>
-      <p class="eyebrow">Registration status</p>
-      <h2>2026 entries are not yet open</h2>
-      <p>This prototype cannot accept or store an entry on the production website. Opening registration will require a separate, explicitly authorised deployment.</p>
-      <p><a class="button" href="../enter.html">Return to entry information</a></p>
+      <p class="eyebrow">Registration status</p><h2>2026 entries are not yet open</h2>
+      <p>This test cannot accept or store an entry on the production website.</p><p><a class="button" href="../enter.html">Return to entry information</a></p>
     </section>
 
     <div id="test-experience" hidden>
-      <section class="prototype-card prototype-intro">
-        <p class="eyebrow">Phase 1 prototype</p>
-        <h2>Test the runner journey</h2>
-        <p class="lede">Use invented details only. This simulation creates no real race entry, takes no money and sends no email.</p>
-        <div class="status-grid" aria-live="polite">
-          <div><span>Mode</span><strong id="status-mode">Test</strong></div>
-          <div><span>Places</span><strong id="status-places">Loading…</strong></div>
-          <div><span>Waiting</span><strong id="status-waiting">0</strong></div>
-        </div>
-        <p><a href="dashboard.html">Open the organiser prototype</a></p>
+      <section id="test-landing" class="prototype-card prototype-intro">
+        <p class="eyebrow">Safe organiser test</p><h2>Try the registration journey</h2>
+        <p class="lede">This creates no real race entry, takes no money and sends no email. Test data stays in this browser until you reset it.</p>
+        <div class="status-grid" aria-live="polite"><div><span>Test places</span><strong id="status-places">0 of 110</strong></div><div><span>Waiting list</span><strong id="status-waiting">0</strong></div></div>
+        <div id="runner-recovery" class="form-alert" role="alert" hidden></div>
+        <div class="form-actions"><button id="start-test" class="button" type="button">Start a test registration</button><a class="secondary-link" href="dashboard.html">View organiser test area</a></div>
+        <button id="reset-test" class="text-button" type="button">Reset test</button>
       </section>
 
-      <div id="runner-recovery" class="form-alert" role="alert" hidden></div>
-      <div class="step-indicator prototype-card" aria-label="Registration progress"><span id="step-label">Stage 1 of 5 — Runner details</span><progress id="step-progress" max="5" value="1">1 of 5</progress></div>
-      <form id="registration-form" class="prototype-card" novalidate>
-        <div id="form-alert" class="form-alert" role="alert" tabindex="-1" hidden></div>
+      <div id="runner-flow" hidden>
+        <div class="step-indicator prototype-card" aria-label="Registration progress"><span id="step-label">Stage 1 of 4 — Your details</span><progress id="step-progress" max="4" value="1">1 of 4</progress></div>
+        <form id="registration-form" class="prototype-card" novalidate>
+          <div id="form-alert" class="form-alert" role="alert" tabindex="-1" hidden></div>
+          <section data-stage="1" aria-labelledby="runner-heading">
+            <h2 id="runner-heading">Your details</h2>
+            <p>Use synthetic information only.</p>
+            <div class="field-grid">
+              <label>First name <input name="firstName" autocomplete="off" required value="Alex"></label>
+              <label>Last name <input name="lastName" autocomplete="off" required value="Example"></label>
+              <label>Email <span class="hint">Reserved example address only</span><input name="email" type="email" autocomplete="off" required value="alex.runner@example.com"></label>
+              <label>Test phone <input name="phone" type="tel" autocomplete="off" required value="07700 900123"></label>
+              <label>Date of birth <input name="dateOfBirth" type="date" required value="1990-06-15"></label>
+              <label>Results category<select name="genderCategory" required><option value="">Select one</option><option>Female</option><option selected>Male</option><option>Non-binary</option><option>Prefer not to say</option></select></label>
+              <label>Running club <span class="hint">Optional</span><input name="club" autocomplete="off" value="Example Harriers"></label>
+              <label class="checkbox-field"><input name="affiliated" type="checkbox"> UK Athletics/WFRA affiliated</label>
+              <label>Membership number <span class="hint">Only if affiliated</span><input name="membershipNumber" autocomplete="off"></label>
+            </div>
+            <div class="form-actions"><button id="details-continue" class="button" type="button">Continue</button></div>
+          </section>
 
-        <section data-step="1" aria-labelledby="runner-heading">
-          <h2 id="runner-heading">Runner details</h2>
-          <div class="field-grid">
-            <label>First name <input name="firstName" autocomplete="off" required value="Alex"></label>
-            <label>Last name <input name="lastName" autocomplete="off" required value="Example"></label>
-            <label>Email <span class="hint">Use an example address</span><input name="email" type="email" autocomplete="off" required value="alex.runner@example.com"></label>
-            <label>Test phone <input name="phone" type="tel" autocomplete="off" required value="07700 900123"></label>
-            <label>Date of birth <input name="dateOfBirth" type="date" required value="1990-06-15"></label>
-            <label>Results category
-              <select name="genderCategory" required>
-                <option value="">Select one</option><option>Female</option><option selected>Male</option><option>Non-binary</option><option>Prefer not to say</option>
-              </select>
-            </label>
-            <label>Running club <span class="hint">Optional</span><input name="club" autocomplete="off" value="Example Harriers"></label>
-            <label class="checkbox-field"><input name="affiliated" type="checkbox"> UK Athletics/WFRA affiliated</label>
-            <label>Membership number <span class="hint">Required only if affiliated</span><input name="membershipNumber" autocomplete="off"></label>
-          </div>
-        </section>
+          <section data-stage="2" aria-labelledby="race-heading" hidden>
+            <h2 id="race-heading">Race details and consent</h2>
+            <p class="noteAlt">Medical information and postal addresses are not collected in this prototype.</p>
+            <div class="field-grid">
+              <label>Emergency-contact name <input name="emergencyName" autocomplete="off" required value="Sam Example"></label>
+              <label>Emergency-contact phone <input name="emergencyPhone" type="tel" autocomplete="off" required value="07700 900456"></label>
+              <label>Travel method<select name="travelMethod" required><option value="">Select one</option><option>Walk or cycle</option><option selected>Shared car</option><option>Car</option><option>Public transport</option><option>Other</option></select></label>
+            </div>
+            <label class="checkbox-field"><input name="acceptTerms" type="checkbox" required> I accept the prototype race terms. This is not a real entry.</label>
+            <label class="checkbox-field"><input name="acceptPrivacy" type="checkbox" required> I acknowledge the prototype privacy notice and will use synthetic data only.</label>
+            <div class="form-actions"><button id="race-back" class="button button--quiet" type="button">Back</button><button id="race-continue" class="button" type="button">Continue</button></div>
+          </section>
 
-        <section data-step="2" aria-labelledby="race-day-heading" hidden>
-          <h2 id="race-day-heading">Race-day details and consent</h2>
-          <p class="noteAlt">Medical information and postal addresses are deliberately excluded from this prototype.</p>
-          <div class="field-grid">
-            <label>Emergency-contact name <input name="emergencyName" autocomplete="off" required value="Sam Example"></label>
-            <label>Emergency-contact phone <input name="emergencyPhone" type="tel" autocomplete="off" required value="07700 900456"></label>
-            <label>Travel method
-              <select name="travelMethod" required><option value="">Select one</option><option>Walk or cycle</option><option selected>Shared car</option><option>Car</option><option>Public transport</option><option>Other</option></select>
-            </label>
-          </div>
-          <label class="checkbox-field"><input name="acceptTerms" type="checkbox" required> I accept the prototype race terms. This is not a real entry.</label>
-          <label class="checkbox-field"><input name="acceptPrivacy" type="checkbox" required> I acknowledge the prototype privacy notice and will use synthetic data only.</label>
-        </section>
+          <section data-stage="3" aria-labelledby="review-heading" hidden>
+            <h2 id="review-heading">Review and submit</h2><dl id="review-list" class="review-list"></dl>
+            <div class="form-actions"><button id="review-back" class="button button--quiet" type="button">Back and edit</button><button id="submit-test" class="button" type="submit">Submit test entry</button></div>
+          </section>
 
-        <section data-step="3" aria-labelledby="review-heading" hidden>
-          <h2 id="review-heading">Review your test registration</h2>
-          <dl id="review-list" class="review-list"></dl>
-          <p>The next action creates one persistent synthetic registration with payment initially marked “not started”. Mock payment follows as a separate test stage.</p>
-        </section>
-
-        <section data-step="4" aria-labelledby="payment-heading" hidden>
-          <h2 id="payment-heading">Test payment</h2>
-          <p>Test registration reference: <strong id="payment-reference"></strong></p>
-          <p>Registration state: <strong id="payment-entry-state"></strong><br>Mock-payment state: <strong id="payment-state">not started</strong></p>
-          <label>Mock payment outcome
-            <select name="paymentOutcome">
-              <option value="successful">Payment successful</option>
-              <option value="declined">Payment declined</option>
-              <option value="abandoned">Payment abandoned</option>
-              <option value="temporary_error">Temporary error — test retry</option>
-            </select>
-          </label>
-          <div class="payment-simulation"><strong>SIMULATION ONLY</strong><span>No card details, real payment provider or money are involved.</span></div>
-        </section>
-
-        <div class="form-actions">
-          <button id="back-button" class="button button--quiet" type="button" hidden>Back</button>
-          <button id="next-button" class="button" type="button">Continue</button>
-          <button id="submit-button" class="button" type="submit" hidden>Create test registration and continue to mock payment</button>
-          <button id="payment-button" class="button" type="button" hidden>Apply mock payment and show confirmation</button>
-        </div>
-      </form>
-
-      <section id="confirmation" class="prototype-card" tabindex="-1" hidden>
-        <p class="eyebrow">Stage 5 of 5 — Confirmation</p>
-        <h2 id="confirmation-title">Test entry recorded</h2>
-        <p>Test registration reference: <strong id="confirmation-reference"></strong></p>
-        <p id="confirmation-copy"></p>
-        <p><strong>No email was sent and no payment was taken.</strong></p>
-        <div class="form-actions"><button id="another-button" class="button" type="button">Create another synthetic entry</button><a class="button button--quiet" href="dashboard.html">View organiser prototype</a></div>
-      </section>
+          <section data-stage="4" aria-labelledby="payment-heading" hidden>
+            <div id="payment-choice">
+              <h2 id="payment-heading">Test payment and confirmation</h2>
+              <p>Test reference: <strong id="payment-reference"></strong></p>
+              <p>No money, card details or real payment service are involved.</p>
+              <div class="choice-actions"><button id="payment-successful" data-payment="successful" class="button" type="button">Simulate successful payment</button><button id="payment-declined" data-payment="declined" class="button button--quiet" type="button">Simulate declined payment</button><button id="payment-abandoned" data-payment="abandoned" class="button button--quiet" type="button">Simulate abandoned payment</button></div>
+            </div>
+            <div id="payment-result" tabindex="-1" hidden>
+              <p class="eyebrow">Test result</p><h2 id="result-title"></h2><p id="result-copy"></p>
+              <dl class="review-list"><dt>Test reference</dt><dd id="result-reference"></dd><dt>Entry status</dt><dd id="result-entry"></dd><dt>Mock payment</dt><dd id="result-payment"></dd></dl>
+              <div id="success-action"><a id="organiser-handover" class="button" href="dashboard.html">View this entry as organiser</a></div>
+              <div id="retry-action" hidden><button id="retry-payment" class="button" type="button">Retry mock payment</button></div>
+            </div>
+          </section>
+        </form>
+      </div>
     </div>
   </main>
 </body>
