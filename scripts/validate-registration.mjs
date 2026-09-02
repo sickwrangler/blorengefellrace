@@ -31,7 +31,7 @@ if (fixtures.some((fixture) => fixture.runner?.email && !/@(example\.(com|org|ne
 const repository = fs.readFileSync("registration/preview-repository.mjs", "utf8");
 if (!repository.includes('STORAGE_KEY = "blorenge-registration-preview"') || !repository.includes("SCHEMA_VERSION = 3")) errors.push("Shared preview storage contract is missing");
 const dashboard = fs.readFileSync("registration/dashboard.html", "utf8");
-for (const required of ["Testing progress", "Technical details", "Reset test", "There are no test entries"])
+for (const required of ["Testing progress", "Technical details", "Reset test", "There are no test entries", "Also release race number?", "available for another entrant"])
   if (!dashboard.includes(required)) errors.push(`Dashboard workflow is missing: ${required}`);
 if (!dashboard.includes("prototype-pending") || !dashboard.includes('location.replace("../404.html")')) errors.push("Production organiser redirect/hidden guard is missing");
 const prototypeCss = fs.readFileSync("registration/prototype.css", "utf8");
@@ -41,7 +41,9 @@ const runnerScript = fs.readFileSync("registration/runner.mjs", "utf8");
 for (const id of ["start-test", "reset-test", "details-continue", "race-back", "race-continue", "review-back", "submit-test", "retry-payment"])
   if (!runnerScript.includes(`\"#${id}\"`)) errors.push(`Runner button lacks a handler: ${id}`);
 const dashboardScript = fs.readFileSync("registration/dashboard.mjs", "utf8");
-for (const id of ["close-detail", "reset-test", "export-csv"])
+for (const id of ["close-detail", "reset-test", "export-csv", "keep-entry", "confirm-cancel-entry"])
   if (!dashboardScript.includes(`\"#${id}\"`)) errors.push(`Organiser button lacks a handler: ${id}`);
+for (const required of ["Remove race number", "removeRaceNumber", "releaseRaceNumber"])
+  if (!dashboardScript.includes(required)) errors.push(`Organiser race-number workflow is missing: ${required}`);
 if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
 console.log("Validated registration state guards, synthetic fixtures, HTML/mobile source, JavaScript syntax and external-service boundaries.");

@@ -53,6 +53,8 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border: .15rem solid #
 .technical-details dl { display: grid; grid-template-columns: minmax(6rem, .5fr) 1.5fr; }
 .technical-details dt { font-weight: 750; }
 .technical-details dd { margin: 0; }
+.confirmation-dialog { width: min(100% - 2rem, 32rem); padding: 1.5rem; border: 1px solid var(--colour-stone-dark); background: var(--colour-paper-light); color: var(--colour-ink); }
+.confirmation-dialog::backdrop { background: rgb(20 24 20 / .65); }
 .dashboard-controls { display: grid; gap: .75rem; margin-bottom: 1rem; }
 .message-list { padding: 0; list-style: none; }
 .message-list li { padding: .75rem 0; border-bottom: 1px solid var(--colour-stone); }

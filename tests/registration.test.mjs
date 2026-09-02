@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { ageOnDate, initialState, safeRegistrationState, submitRegistration, applyMockPayment, cancelRegistration, updateTestSettings, assignRaceNumber, markOrganiserViewed, statusSummary, sanitizedCsv } from "../registration/registration-core.mjs";
+import { ageOnDate, initialState, safeRegistrationState, submitRegistration, applyMockPayment, cancelRegistration, updateTestSettings, assignRaceNumber, removeRaceNumber, markOrganiserViewed, statusSummary, sanitizedCsv } from "../registration/registration-core.mjs";
 import { createPreviewRepository, STORAGE_KEY, SCHEMA_VERSION, LEGACY_STORAGE_KEYS, isRepositoryStorageEvent, queryRegistrations, environmentForHostname } from "../registration/preview-repository.mjs";
 import { RUNNER_STAGE_ACTIONS, isRunnerActionAvailable, organiserHandoverUrl } from "../registration/runner-flow.mjs";
 import { availableOrganiserActions } from "../registration/organiser-view.mjs";
@@ -119,6 +119,58 @@ test("mock payment transitions include decline, abandonment, success and refund"
   assert.equal(applyMockPayment(state, entry.id, "abandoned").ok, true);
   assert.equal(applyMockPayment(state, entry.id, "successful").ok, true);
   assert.equal(applyMockPayment(state, entry.id, "refunded").ok, true);
+});
+
+test("direct race-number removal updates the entry, export and audit history", () => {
+  const state = initialState(); const entry = submitRegistration(state, runner(1201)).registration;
+  assignRaceNumber(state, entry.id, 51);
+  const result = removeRaceNumber(state, entry.id);
+  assert.equal(result.ok, true); assert.equal(result.releasedRaceNumber, 51); assert.equal(entry.raceNumber, null);
+  assert.match(sanitizedCsv(state), new RegExp(`"${entry.id}","","Runner1201"`));
+  assert.ok(state.auditEvents.some((event) => event.type === "race_number_removed" && event.registrationId === entry.id && event.detail.raceNumber === 51));
+});
+
+test("cancellation can release an assigned race number", () => {
+  const state = initialState(); const entry = submitRegistration(state, runner(1202)).registration;
+  assignRaceNumber(state, entry.id, 52);
+  const result = cancelRegistration(state, entry.id, { releaseRaceNumber: true });
+  assert.equal(result.ok, true); assert.equal(result.releasedRaceNumber, 52); assert.equal(entry.raceNumber, null);
+  assert.ok(state.auditEvents.some((event) => event.type === "race_number_removed" && event.detail.reason === "registration_cancelled"));
+});
+
+test("cancellation can retain an assigned race number", () => {
+  const state = initialState(); const entry = submitRegistration(state, runner(1203)).registration;
+  assignRaceNumber(state, entry.id, 53);
+  const result = cancelRegistration(state, entry.id, { releaseRaceNumber: false });
+  assert.equal(result.ok, true); assert.equal(result.releasedRaceNumber, null); assert.equal(entry.raceNumber, 53);
+  assert.ok(availableOrganiserActions(entry).includes("remove_race_number"));
+  assert.equal(removeRaceNumber(state, entry.id).ok, true); assert.equal(entry.raceNumber, null);
+});
+
+test("refunding retains the assigned race number", () => {
+  const state = initialState(); const entry = submitRegistration(state, runner(1204)).registration;
+  assignRaceNumber(state, entry.id, 54); applyMockPayment(state, entry.id, "successful");
+  assert.equal(applyMockPayment(state, entry.id, "refunded").ok, true);
+  assert.equal(entry.raceNumber, 54);
+});
+
+test("a refunded entry permits separate manual race-number removal", () => {
+  const state = initialState(); const entry = submitRegistration(state, runner(1205)).registration;
+  assignRaceNumber(state, entry.id, 55); applyMockPayment(state, entry.id, "successful"); applyMockPayment(state, entry.id, "refunded");
+  assert.ok(availableOrganiserActions(entry).includes("remove_race_number"));
+  assert.equal(removeRaceNumber(state, entry.id).ok, true); assert.equal(entry.raceNumber, null); assert.equal(entry.paymentStatus, "refunded");
+});
+
+test("a released race number is available for reassignment", () => {
+  const state = initialState(); const first = submitRegistration(state, runner(1206)).registration; const second = submitRegistration(state, runner(1207)).registration;
+  assignRaceNumber(state, first.id, 56); removeRaceNumber(state, first.id);
+  assert.equal(assignRaceNumber(state, second.id, 56).ok, true); assert.equal(second.raceNumber, 56);
+});
+
+test("duplicate race numbers are rejected", () => {
+  const state = initialState(); const first = submitRegistration(state, runner(1208)).registration; const second = submitRegistration(state, runner(1209)).registration;
+  assignRaceNumber(state, first.id, 57);
+  assert.equal(assignRaceNumber(state, second.id, 57).code, "DUPLICATE_RACE_NUMBER"); assert.equal(second.raceNumber, null);
 });
 
 test("sanitized CSV excludes private contact, birth, consent and emergency fields", () => {

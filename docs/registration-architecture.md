@@ -43,6 +43,8 @@ A query parameter, browser preference or date cannot change the production state
 
 Reset removes every preview registration and returns the accepted and waiting-list counts to zero. Automated synthetic fixtures remain available to the test suite but are not loaded into the organiser’s manual journey. Every runner-created record carries a visible test reference.
 
+Race numbers remain unique while assigned. An organiser can remove a number explicitly, or choose whether to release it when cancelling an entry; the cancellation choice defaults to release. A refund does not alter the entry's race number because payment and entry validity are separate decisions. Assignment and removal are recorded in the prototype audit history.
+
 ## Data model
 
 | Entity | Principal fields |

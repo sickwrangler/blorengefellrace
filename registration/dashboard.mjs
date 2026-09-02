@@ -5,6 +5,7 @@ import { availableOrganiserActions } from "./organiser-view.mjs";
 let currentState;
 let selectedReference = new URLSearchParams(window.location.search).get("ref");
 let markingViewed = false;
+let pendingCancellation = null;
 if (canTest) await render();
 
 function showNotice(message, error = false) {
@@ -80,10 +81,33 @@ function renderActions(item) {
     const value = window.prompt("Enter a synthetic race number", item.raceNumber ?? ""); if (value === null) return;
     const result = await prototype.assign(item.id, value); if (!result.ok) showNotice(`Race number not changed: ${result.code}`, true); else showNotice(`Race number ${value} assigned to ${item.testReference}.`); await render();
   }));
+  if (available.includes("remove_race_number")) actions.append(actionButton("Remove race number", async () => {
+    if (!window.confirm(`Remove race number ${item.raceNumber} from ${item.testReference}? The released number becomes available for another entrant.`)) return;
+    const result = await prototype.removeRaceNumber(item.id);
+    showNotice(result.ok ? `Race number ${result.releasedRaceNumber} removed and available for another entrant.` : `Race number not removed: ${result.code}`, !result.ok);
+    await render();
+  }));
   if (available.includes("promote")) actions.append(actionButton("Promote from waiting list", async () => { const result = await prototype.promote(item.id); showNotice(result.ok ? `${item.testReference} promoted.` : `Promotion unavailable: ${result.code}`, !result.ok); await render(); }));
   if (available.includes("refund")) actions.append(actionButton("Refund mock payment", async () => { if (!window.confirm(`Refund the mock payment for ${item.testReference}?`)) return; const result = await prototype.payment(item.id, "refunded"); showNotice(result.ok ? "Mock payment marked refunded." : `Refund unavailable: ${result.code}`, !result.ok); await render(); }));
-  if (available.includes("cancel")) actions.append(actionButton("Cancel entry", async () => { if (!window.confirm(`Cancel synthetic entry ${item.testReference}?`)) return; const result = await prototype.cancel(item.id); showNotice(result.ok ? "Synthetic entry cancelled." : `Cancellation unavailable: ${result.code}`, !result.ok); await render(); }, "button button--quiet danger-button"));
+  if (available.includes("cancel")) actions.append(actionButton("Cancel entry", async () => {
+    if (item.raceNumber) {
+      pendingCancellation = item.id;
+      document.querySelector("#cancel-entry-reference").textContent = `${item.testReference} currently has race number ${item.raceNumber}.`;
+      document.querySelector("#release-race-number").checked = true;
+      document.querySelector("#cancel-entry-dialog").showModal();
+      return;
+    }
+    if (!window.confirm(`Cancel synthetic entry ${item.testReference}?`)) return;
+    await cancelEntry(item.id, false);
+  }, "button button--quiet danger-button"));
   if (available.includes("messages")) actions.append(actionButton("Preview captured messages", () => { const preview = document.querySelector("#message-preview"); preview.hidden = false; preview.scrollIntoView({ behavior: "smooth", block: "nearest" }); }));
+}
+async function cancelEntry(id, releaseRaceNumber) {
+  const result = await prototype.cancel(id, releaseRaceNumber);
+  const message = result.ok
+    ? result.releasedRaceNumber ? `Synthetic entry cancelled. Race number ${result.releasedRaceNumber} released for another entrant.` : result.registration.raceNumber ? `Synthetic entry cancelled. Race number ${result.registration.raceNumber} retained.` : "Synthetic entry cancelled."
+    : `Cancellation unavailable: ${result.code}`;
+  showNotice(message, !result.ok); await render();
 }
 function renderMessages(item) {
   const messages = currentState.communications.filter((message) => message.registrationId === item.id); const list = document.querySelector("#entry-messages"); list.replaceChildren(); document.querySelector("#message-preview").hidden = true;
@@ -105,4 +129,10 @@ for (const selector of ["#search", "#entry-filter", "#payment-filter"]) document
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
 document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });
+document.querySelector("#keep-entry")?.addEventListener("click", () => { pendingCancellation = null; document.querySelector("#cancel-entry-dialog").close(); });
+document.querySelector("#confirm-cancel-entry")?.addEventListener("click", async () => {
+  if (!pendingCancellation) return;
+  const id = pendingCancellation; const release = document.querySelector("#release-race-number").checked;
+  pendingCancellation = null; document.querySelector("#cancel-entry-dialog").close(); await cancelEntry(id, release);
+});
 prototype.subscribe(() => render());

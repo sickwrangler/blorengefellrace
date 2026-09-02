@@ -2,7 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { initialState, submitRegistration, applyMockPayment, cancelRegistration, promoteRegistration, updateTestSettings, assignRaceNumber, markOrganiserViewed, statusSummary } from "../registration/registration-core.mjs";
+import { initialState, submitRegistration, applyMockPayment, cancelRegistration, promoteRegistration, updateTestSettings, assignRaceNumber, removeRaceNumber, markOrganiserViewed, statusSummary } from "../registration/registration-core.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.env.REGISTRATION_PROTOTYPE_PORT || 4173);
@@ -33,12 +33,13 @@ async function handleApi(request, response, pathname) {
   if (request.method === "POST" && pathname === "/api/registration/reset") { state = initialState({ environment: "local", state: "test", capacity: 110 }); state.testProgress.resetCompleted = true; return json(response, 200, { ok: true, state }); }
   const viewed = pathname.match(/^\/api\/registration\/entries\/([^/]+)\/viewed$/);
   if (request.method === "POST" && viewed) return json(response, 200, markOrganiserViewed(state, decodeURIComponent(viewed[1])));
-  const match = pathname.match(/^\/api\/registration\/entries\/([^/]+)\/(payment|cancel|promote|race-number)$/);
+  const match = pathname.match(/^\/api\/registration\/entries\/([^/]+)\/(payment|cancel|promote|race-number|remove-race-number)$/);
   if (request.method === "POST" && match) {
     const [, id, action] = match; const payload = await body(request);
     const result = action === "payment" ? applyMockPayment(state, id, payload.outcome)
-      : action === "cancel" ? cancelRegistration(state, id)
+      : action === "cancel" ? cancelRegistration(state, id, { releaseRaceNumber: Boolean(payload.releaseRaceNumber) })
       : action === "promote" ? promoteRegistration(state, id)
+      : action === "remove-race-number" ? removeRaceNumber(state, id)
       : assignRaceNumber(state, id, payload.raceNumber);
     return json(response, result.ok ? 200 : 409, result);
   }

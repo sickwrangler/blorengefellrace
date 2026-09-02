@@ -158,10 +158,15 @@ export function applyMockPayment(state, registrationId, outcome) {
   return { ok: true, registration };
 }
 
-export function cancelRegistration(state, registrationId) {
+export function cancelRegistration(state, registrationId, { releaseRaceNumber = false } = {}) {
   const registration = state.registrations.find((item) => item.id === registrationId);
   if (!registration || registration.entryStatus === "cancelled") return { ok: false, code: "NOT_FOUND" };
   const releasedPlace = registration.entryStatus === "accepted";
+  const releasedRaceNumber = releaseRaceNumber && registration.raceNumber ? registration.raceNumber : null;
+  if (releasedRaceNumber) {
+    registration.raceNumber = null;
+    addAudit(state, "race_number_removed", registration.id, { raceNumber: releasedRaceNumber, reason: "registration_cancelled" });
+  }
   registration.entryStatus = "cancelled";
   registration.waitingListPosition = null;
   registration.updatedAt = new Date().toISOString();
@@ -180,7 +185,7 @@ export function cancelRegistration(state, registrationId) {
     }
   }
   refreshWaitingList(state);
-  return { ok: true, registration, promoted };
+  return { ok: true, registration, promoted, releasedRaceNumber };
 }
 
 export function promoteRegistration(state, registrationId) {
@@ -218,6 +223,16 @@ export function assignRaceNumber(state, registrationId, raceNumber) {
   registration.updatedAt = new Date().toISOString();
   addAudit(state, "race_number_assigned", registration.id, { raceNumber: number });
   return { ok: true, registration };
+}
+
+export function removeRaceNumber(state, registrationId) {
+  const registration = state.registrations.find((item) => item.id === registrationId);
+  if (!registration || !registration.raceNumber) return { ok: false, code: "NO_RACE_NUMBER" };
+  const raceNumber = registration.raceNumber;
+  registration.raceNumber = null;
+  registration.updatedAt = new Date().toISOString();
+  addAudit(state, "race_number_removed", registration.id, { raceNumber, reason: "organiser_action" });
+  return { ok: true, registration, releasedRaceNumber: raceNumber };
 }
 
 export function markOrganiserViewed(state, testReference) {

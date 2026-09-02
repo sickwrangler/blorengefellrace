@@ -14,6 +14,8 @@ Use the runner and organiser pages in the same normal browser profile. A private
 10. Confirm the testing-progress panel displays **End-to-end registration test completed successfully.**
 11. Select **Reset test** and confirm the entry disappears and all counts return to zero.
 
+For the race-number correction, assign a number and refund the mock payment; confirm the number remains. Then select **Remove race number**, accept the confirmation, and confirm the list, detail panel and a newly generated CSV show no number. Reassign the released number to confirm it is available. Finally, cancel a numbered entry once with **Also release race number?** selected and once with it cleared to verify both choices.
+
 The complete journey should take no more than approximately five minutes. No developer tools, fixtures, storage controls or manual refresh controls are required.
 
 ## Quick responsive and keyboard review

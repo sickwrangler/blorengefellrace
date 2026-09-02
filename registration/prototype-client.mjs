@@ -1,4 +1,4 @@
-import { initialState, submitRegistration, applyMockPayment, cancelRegistration, promoteRegistration, updateTestSettings, assignRaceNumber, markOrganiserViewed, statusSummary, sanitizedCsv } from "./registration-core.mjs";
+import { initialState, submitRegistration, applyMockPayment, cancelRegistration, promoteRegistration, updateTestSettings, assignRaceNumber, removeRaceNumber, markOrganiserViewed, statusSummary, sanitizedCsv } from "./registration-core.mjs";
 import { createPreviewRepository, STORAGE_KEY, SCHEMA_VERSION, UPDATE_EVENT, isRepositoryStorageEvent, environmentForHostname } from "./preview-repository.mjs";
 
 const hostname = window.location.hostname;
@@ -75,9 +75,10 @@ export const prototype = {
     }
     return repositorySnapshot();
   },
-  cancel(id) { return localApiOrRepository(`/entries/${id}/cancel`, { method: "POST" }, (state) => cancelRegistration(state, id)); },
+  cancel(id, releaseRaceNumber = false) { return localApiOrRepository(`/entries/${id}/cancel`, { method: "POST", body: JSON.stringify({ releaseRaceNumber }) }, (state) => cancelRegistration(state, id, { releaseRaceNumber })); },
   promote(id) { return localApiOrRepository(`/entries/${id}/promote`, { method: "POST" }, (state) => promoteRegistration(state, id)); },
   assign(id, raceNumber) { return localApiOrRepository(`/entries/${id}/race-number`, { method: "POST", body: JSON.stringify({ raceNumber }) }, (state) => assignRaceNumber(state, id, raceNumber)); },
+  removeRaceNumber(id) { return localApiOrRepository(`/entries/${id}/remove-race-number`, { method: "POST" }, (state) => removeRaceNumber(state, id)); },
   markViewed(testReference) { return localApiOrRepository(`/entries/${encodeURIComponent(testReference)}/viewed`, { method: "POST" }, (state) => markOrganiserViewed(state, testReference)); },
   settings(changes) { return localApiOrRepository("/settings", { method: "POST", body: JSON.stringify(changes) }, (state) => updateTestSettings(state, changes)); },
   async reset() {

@@ -48,5 +48,12 @@
     <div class="reset-row"><button id="reset-test" class="text-button danger-link" type="button">Reset test</button></div>
     <details class="technical-details"><summary>Technical details</summary><dl><dt>Environment</dt><dd id="technical-environment"></dd><dt>Storage</dt><dd id="technical-storage"></dd><dt>Schema</dt><dd id="technical-schema"></dd></dl></details>
   </main>
+  <dialog id="cancel-entry-dialog" class="confirmation-dialog" aria-labelledby="cancel-entry-title">
+    <h2 id="cancel-entry-title">Cancel test entry</h2>
+    <p id="cancel-entry-reference"></p>
+    <p><strong>Also release race number?</strong></p>
+    <label class="checkbox-field"><input id="release-race-number" type="checkbox" checked> Yes — release it so the number becomes available for another entrant.</label>
+    <div class="form-actions"><button id="keep-entry" class="button button--quiet" type="button">Keep entry</button><button id="confirm-cancel-entry" class="button danger-button" type="button">Cancel entry</button></div>
+  </dialog>
 </body>
 </html>
