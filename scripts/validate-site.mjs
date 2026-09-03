@@ -7,7 +7,7 @@ import vm from "node:vm";
 const root = process.cwd();
 const errors = [];
 const warnings = [];
-const ignoredDirectories = new Set([".git", "node_modules"]);
+const ignoredDirectories = new Set([".deployment", ".git", "node_modules"]);
 const voidElements = new Set([
   "area", "base", "br", "col", "embed", "hr", "img", "input", "link",
   "meta", "param", "source", "track", "wbr",

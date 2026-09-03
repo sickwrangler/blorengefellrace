@@ -152,6 +152,28 @@ test("private export is warned, safely named and never targets the public tree",
   const { service } = setup(); await service.create(runner(19), { idempotencyKey: "private-export-key" }); const result = await service.exportPrivate(admin); assert.match(result.warning, /PRIVATE SYNTHETIC/); assert.match(result.filename, /^private-exports\//); assert.doesNotMatch(result.filename, /^(registration|data|images)\//);
 });
 
+test("development reset clears synthetic records while preserving event configuration and test mode", async () => {
+  const { service, repository } = setup({ environment: "development", registrationState: "test", capacity: 73 });
+  const created = await service.create(runner(26), { idempotencyKey: "reset-complete-key" });
+  await service.mockPayment(created.confirmationToken, "successful", "reset-payment-key");
+  await service.requestAmendment(created.confirmationToken, { type: "correction", message: "Synthetic correction" });
+  await service.manage(admin, created.registration.id, "race_number", { raceNumber: 90 });
+  const before = await repository.read();
+  assert.ok(before.runners.length && before.registrations.length && before.payments.length && before.consents.length && before.communications.length && before.auditEvents.length && before.idempotency.length && before.amendmentRequests.length);
+
+  const reset = await service.resetDevelopment(admin);
+  assert.equal(reset.ok, true);
+  const after = await repository.read();
+  for (const collection of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests"]) {
+    assert.deepEqual(after[collection], [], `${collection} was not cleared`);
+  }
+  assert.equal(after.environment, "development");
+  assert.equal(after.registrationState, "test");
+  assert.equal(after.event.id, before.event.id);
+  assert.equal(after.event.capacity, 73);
+  assert.equal(after.testProgress.resetCompleted, true);
+});
+
 test("source contains no runner payload logging and production remains unlinked", () => {
   const sources = ["registration/server/service.mjs", "registration/server/api.mjs", "scripts/start-registration-phase2.mjs"].map((file) => fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8")).join("\n"); assert.doesNotMatch(sources, /console\.(log|error)\((input|body|runner|normalized|request)/i); assert.doesNotMatch(fs.readFileSync(new URL("../enter.html", import.meta.url), "utf8"), /href=["'][^"']*registration\//i);
 });
