@@ -14,6 +14,8 @@ Phase 2 remains synthetic, closed and isolated on PR #8. Its approved developmen
 
 The local runner and organiser pages use `/api/v2`. The Azure PR preview retains its browser repository, while the separate stable development hostname uses the managed API and shared Table. Production has neither registration pages nor API routes.
 
+The stable-development workflow injects its Entra route rules immediately before its own deployment. Those rules are not placed in the shared production/PR-preview configuration, so the existing browser-only PR preview remains available without changing production identity settings.
+
 ## Versioned endpoints
 
 Public: status, create with idempotency key, opaque-token confirmation, mock-payment retry and amendment/cancellation request.

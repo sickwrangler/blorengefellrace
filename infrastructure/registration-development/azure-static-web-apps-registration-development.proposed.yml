@@ -14,6 +14,9 @@ on:
       - "css/**"
       - "js/**"
       - "images/**"
+      - "scripts/prepare-registration-api.mjs"
+      - "scripts/prepare-registration-development-routes.mjs"
+      - "scripts/validate-registration.mjs"
       - "staticwebapp.config.json"
       - ".github/workflows/azure-static-web-apps-registration-development.yml"
 
@@ -45,6 +48,9 @@ jobs:
           node --test tests/registration.test.mjs tests/registration-phase2.test.mjs
           node scripts/validate-route.mjs
           node scripts/validate-photos.mjs
+
+      - name: Apply isolated development authentication routes
+        run: node scripts/prepare-registration-development-routes.mjs
 
       - name: Deploy isolated registration development app
         uses: Azure/static-web-apps-deploy@v1

@@ -121,3 +121,5 @@ node --test tests/registration.test.mjs tests/registration-phase2.test.mjs
 ```
 
 The preparation step creates ignored copies of the validated server modules inside the deployable API package. Never add `api/src/shared/` or `api/node_modules/` to Git.
+
+The development workflow separately applies `scripts/prepare-registration-development-routes.mjs` in GitHub Actions. Do not run that script for ordinary local or PR-preview testing; it adds the stable environment's Entra route rules to the deployment workspace.
