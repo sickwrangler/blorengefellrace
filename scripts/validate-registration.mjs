@@ -31,7 +31,7 @@ if (fixtures.some((fixture) => fixture.runner?.email && !/@(example\.(com|org|ne
 const repository = fs.readFileSync("registration/preview-repository.mjs", "utf8");
 if (!repository.includes('STORAGE_KEY = "blorenge-registration-preview"') || !repository.includes("SCHEMA_VERSION = 3")) errors.push("Shared preview storage contract is missing");
 const dashboard = fs.readFileSync("registration/dashboard.html", "utf8");
-for (const required of ["Testing progress", "Technical details", "Reset test", "There are no test entries", "Also release race number?", "available for another entrant"])
+for (const required of ["Testing progress", "Technical details", "Reset test", "There are no test entries", "Also release race number?", "available for another entrant", "Audit history", "entry-audit"])
   if (!dashboard.includes(required)) errors.push(`Dashboard workflow is missing: ${required}`);
 if (!dashboard.includes("prototype-pending") || !dashboard.includes('location.replace("../404.html")')) errors.push("Production organiser redirect/hidden guard is missing");
 const prototypeCss = fs.readFileSync("registration/prototype.css", "utf8");

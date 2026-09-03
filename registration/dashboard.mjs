@@ -30,6 +30,7 @@ async function render() {
   const selected = currentState.registrations.find((item) => item.testReference === selectedReference);
   if (selected) {
     renderDetail(selected);
+    await renderAudit(selected);
     if (!currentState.testProgress.organiserViewed && !markingViewed) {
       markingViewed = true; await prototype.markViewed(selectedReference); markingViewed = false;
       currentState.testProgress.organiserViewed = true; renderProgress();
@@ -38,6 +39,19 @@ async function render() {
     document.querySelector("#entry-detail").hidden = true;
     if (selectedReference) { selectedReference = null; history.replaceState(null, "", "dashboard.html"); }
   }
+}
+async function renderAudit(item) {
+  const list = document.querySelector("#entry-audit");
+  const result = await prototype.audit(item.id);
+  list.replaceChildren();
+  if (!result.ok) { const li = document.createElement("li"); li.textContent = "Audit history is unavailable."; list.append(li); return; }
+  for (const event of result.events) {
+    const li = document.createElement("li");
+    const action = String(event.action ?? "activity").replaceAll("_", " ");
+    li.textContent = `${new Date(event.timestamp).toLocaleString()} — ${action}`;
+    list.append(li);
+  }
+  if (!result.events.length) { const li = document.createElement("li"); li.textContent = "No audit events recorded for this test entry."; list.append(li); }
 }
 function filteredEntries() {
   return queryRegistrations(currentState, { search: document.querySelector("#search").value, entry: document.querySelector("#entry-filter").value, payment: document.querySelector("#payment-filter").value });

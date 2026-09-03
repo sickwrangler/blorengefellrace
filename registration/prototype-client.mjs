@@ -88,6 +88,12 @@ export const prototype = {
   removeRaceNumber(id) { return localApiOrRepository(`/organiser/registrations/${id}/remove-race-number`, { method: "POST" }, (state) => removeRaceNumber(state, id), true); },
   refund(id) { return localApiOrRepository(`/organiser/registrations/${id}/refund`, { method: "POST" }, (state) => applyMockPayment(state, id, "refunded"), true); },
   markViewed(testReference) { return localApiOrRepository(`/organiser/registrations/reference/${encodeURIComponent(testReference)}/viewed`, { method: "POST" }, (state) => markOrganiserViewed(state, testReference), true); },
+  async audit(id) {
+    if (!canTest) return { ok: false, code: "PRODUCTION_CLOSED", events: [] };
+    if (usesApi) return api(`/organiser/registrations/${encodeURIComponent(id)}/audit`, {}, true).catch(() => ({ ok: false, code: "API_UNAVAILABLE", events: [] }));
+    const { state } = await this.all();
+    return { ok: true, events: state.auditEvents.filter((event) => event.registrationId === id) };
+  },
   settings(changes) { return localApiOrRepository("/settings", { method: "POST", body: JSON.stringify(changes) }, (state) => updateTestSettings(state, changes)); },
   async reset() {
     if (!canTest) return { ok: false, code: "PRODUCTION_CLOSED" };
