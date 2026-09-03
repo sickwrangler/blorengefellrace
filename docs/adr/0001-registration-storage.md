@@ -4,39 +4,40 @@ Status: proposed; no Azure resources have been created.
 
 ## Decision
 
-For an isolated future development environment, use an Azure Functions application with a system-assigned managed identity and Azure Table Storage. Keep the public static site separate. Put all records for one event in one table partition and use ETag-guarded transactional batches for the event counter, registration, waiting-list and race-number-lock entities.
+For the isolated synthetic development environment, use a separate Azure Static Web App on the Free plan, its managed HTTP Functions under `/api/v2`, and a separate Standard LRS Azure Table Storage account. Store all synthetic records for the 2026 test event in one partition. Use ETag-guarded transactional batches for event capacity, registrations, waiting-list sequencing and race-number locks.
 
-This is the smallest option that fits roughly 110 annual registrations while providing atomic final-place allocation, deterministic waiting-list sequence numbers, replaceable storage, inexpensive point/query access and deletion by opaque identifier. A local JSON repository uses the same transaction contract for development; tests use isolated memory.
+This supersedes the earlier standalone-Functions proposal. Managed Functions satisfy the current HTTP-only workload with lower operational overhead and no recurring compute charge. A standalone Function App remains a future option only if a documented requirement cannot be met by managed Functions.
 
 ## Options considered
 
-| Option | Concurrency and reporting | Operations and cost | Decision |
-|---|---|---|---|
-| Static Web Apps managed API plus Table Storage | Table transactional batches and ETags can enforce capacity within one event partition. Managed API deployment is simple, but managed identity/storage integration and independent API lifecycle are more constrained. | Low usage cost and low operational burden. | Viable, but not preferred for the protected organiser boundary. |
-| Azure Functions plus Cosmos DB serverless | Strong transactional batch within a logical partition, flexible queries and straightforward change handling. | Higher conceptual and vendor complexity for only about 110 entries; request-unit planning and backup choices add overhead. | Rejected for current scale. |
-| Azure Functions plus relational database | Excellent constraints, transactions and reporting. | Database baseline cost, migrations and administration are disproportionate to the event. | Rejected for current scale. |
-| Azure Functions plus Table Storage | Atomic batches within an event partition, ETag concurrency, simple event queries and inexpensive storage. Backup is an explicit encrypted export/restore process. | Low expected consumption, modest Azure-specific adapter, no database server. | Recommended. |
-| Single hosted process with SQLite | Simplest application model and strong local transactions. | Durable Azure filesystem/backup and scale-out require a container/App Service baseline and more operations. | Useful locally, not selected for Azure. |
+| Option | Fit | Decision |
+|---|---|---|
+| Static Web Apps managed Functions plus Table Storage | Integrated `/api` routing and identity claims; Table batches and ETags support the small transactional workload. Managed Functions lack managed identity, so a scoped storage SAS must be held in encrypted app settings and rotated. | Selected for synthetic development. |
+| Standalone Functions plus Table Storage | Supports managed identity and independent API lifecycle, but adds a resource, deployment and operational surface not currently needed. | Deferred unless managed Functions prove insufficient. |
+| Cosmos DB serverless | Flexible and transactional within a logical partition, but request-unit planning and extra concepts are disproportionate here. | Rejected for this phase. |
+| Relational database | Strong constraints and reporting, but introduces a recurring/database operational burden. | Rejected for this phase. |
+| Hosted SQLite | Simple application model, but durable cloud filesystem and scale-out complicate hosting. | Local development only. |
 
 ## Consistency design
 
-- Local JSON: one serialized transaction queue and atomic temporary-file rename.
-- Test memory: one serialized transaction queue per isolated repository.
-- Azure Table: one event partition; submit event-counter update and registration/idempotency insert in one transactional batch using the current event ETag. Cancellation and promotion update the cancelled entry, promoted entry and event metadata together. Race-number uniqueness uses a number-lock entity inserted/deleted in the same partition transaction.
-- A conflicting ETag is retried with bounded jitter. Idempotency records make a repeated request return the original result.
+- Local JSON uses one serialized transaction queue and atomic file replacement.
+- Tests use a fresh in-memory repository.
+- Azure Table uses one `blorenge-2026-test` partition. A registration action touches only a bounded set of entities in one transactional batch.
+- A number-lock entity is inserted or removed in the same partition transaction as a race-number change.
+- ETag conflicts receive bounded retries; idempotency entities return the original result for repeated submissions.
 
-Table entity-group transactions are limited to one partition and up to 100 operations, which is sufficient because each registration action changes only a small bounded set of entities. See [Azure Table transaction requirements](https://learn.microsoft.com/rest/api/storageservices/performing-entity-group-transactions) and [Table design guidance](https://learn.microsoft.com/azure/storage/tables/table-storage-design).
+Table entity-group transactions are limited to one partition and 100 operations. Each planned action remains comfortably below that boundary. Bulk reset is deliberately paged rather than attempted as one transaction.
 
-## Authentication
+## Authentication and storage credential
 
-Use Microsoft Entra ID through the hosting boundary; do not store passwords. The API validates platform identity claims and maps assigned roles to application permissions. Local development accepts an explicit organiser header only on loopback in the `local` environment; production code cannot enable that path. See [Static Web Apps authentication and authorization](https://learn.microsoft.com/azure/static-web-apps/authentication-authorization).
+Use the Static Web Apps preconfigured Microsoft Entra provider. Runner submission routes remain public but enforce test state and synthetic-address validation in server code. The dashboard and every private API route require the single custom `Organiser` role; the API also checks the platform principal rather than relying only on page routing.
 
-## Region and cost assumption
+Managed Static Web Apps Functions do not support managed identity. The minimal design therefore gives the API a revocable SAS limited to the one development Table and read/add/update/delete operations. The SAS is stored only in the Static Web App's encrypted application settings, never in GitHub or browser code. This is a conscious development-only trade-off and must be reconsidered before real personal data is accepted.
 
-Proposed region: UK South, subject to checking service availability immediately before deployment. Assumptions are one event, about 110 entrants/year, fewer than 50,000 API calls/month, less than 1 GB stored, low log volume and no always-on compute.
+## Region and cost
 
-Estimated development cost: approximately £0–£5/month during light use, potentially near zero within applicable consumption allowances; budget £10/month initially for alerts and unexpected telemetry. This is an estimate, not a quote. Review current [Functions pricing](https://azure.microsoft.com/pricing/details/functions/), [Table Storage pricing](https://azure.microsoft.com/pricing/details/storage/tables/), [Azure Monitor pricing](https://azure.microsoft.com/pricing/details/monitor/) and the Azure calculator immediately before approval.
+Co-locate the Static Web App and Storage account in West Europe to avoid cross-region data transfer. The Static Web App uses the Free plan. At September 2026 public GBP retail rates, Standard LRS Table capacity is £0.0331/GB-month and each 10,000 read, write, list, scan, batch-write or delete operations costs £0.0003. Expected synthetic use is fractions of a penny; detailed assumptions and calculations are in the internal approval pack.
 
 ## Consequences
 
-The Table adapter is Azure-specific, but domain and API code depend only on the repository transaction contract. Table Storage has limited ad-hoc querying; operational CSV exports and small in-memory filtering are acceptable at this scale. Backup/restore and retention jobs must be explicitly scheduled and tested before real data is collected.
+The Free plan has no SLA, no private endpoint and invitation-based custom roles are limited. Those constraints are acceptable for synthetic development, not a claim of production readiness. The Table adapter remains Azure-specific, while domain code continues to use the repository transaction contract. Backup and production retention remain deliberately out of scope.

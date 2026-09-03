@@ -19,16 +19,11 @@ Public: status, create with idempotency key, opaque-token confirmation, mock-pay
 
 Organiser: filtered snapshot/totals, single entry, state control, race-number actions, cancel/promote/refund/correct, audit history, public/private export, synthetic import, anonymise/delete and development reset. Every organiser endpoint requires an authorization decision.
 
-## Roles
+## Organiser access
 
-| Role | Permissions |
-|---|---|
-| Administrator | All read/manage, race-number, private export, audit and erasure operations |
-| Registration manager | Read/manage, race-number, private export and audit; no destructive erasure |
-| Race-day volunteer | Read and race-number operations only |
-| Read-only viewer | Read only |
+The proposed shared development environment has one custom role, `Organiser`. It covers all prototype dashboard operations and is assigned by a time-limited Microsoft Entra invitation. The API must independently require the platform principal and role on every private endpoint. Additional roles are deferred until real operational responsibilities justify them.
 
-Production should use Microsoft Entra ID/platform claims. The local bypass requires loopback, environment `local` and an explicit development header; it fails closed everywhere else.
+The existing local harness can emulate narrower permission sets for tests. Its bypass requires loopback, environment `local` and an explicit development header; it fails closed everywhere else and is not part of the Azure deployment.
 
 ## Data and privacy
 

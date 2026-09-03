@@ -1,26 +1,9 @@
 # Registration development infrastructure proposal
 
-Review only: nothing in this directory has been applied.
+Review only: no file in this directory is an active deployment workflow and none of these resources has been created by this proposal.
 
-Proposed UK South resources are a dedicated development resource group, locally redundant general-purpose storage account with one Table, Azure Functions consumption/Flex application with managed identity, Microsoft Entra application/role assignments, Application Insights/Log Analytics, protected backup export, and a £10 monthly budget alert. Development and production must use separate resource groups, identities, settings and stores.
+The proposed resource group contains exactly one Free Azure Static Web App with managed Functions and one Standard LRS StorageV2 account with one Table. It deliberately excludes a standalone Function App, hosting plan, Application Insights, Log Analytics, private endpoints and backup containers. See [`../../docs/internal/registration-azure-approval-pack.md`](../../docs/internal/registration-azure-approval-pack.md) for boundaries, costs, commands and rollback.
 
-The committed Bicep proposes storage/Table, a private backup container, consumption Function App with system identity, least-privilege Table/Blob data roles, Application Insights and Log Analytics. Entra tenant registration/group assignments and Static Web App/API linkage remain approval-time operations. Public network access is proposed initially for HTTPS Azure service access with Entra authorization and no shared keys; private endpoints would materially increase cost and complexity and should be reconsidered during security review.
+`main.bicep` creates the two Azure resources and Table. `budget.bicep` creates a separate £1 monthly resource-group budget when the subscription supports budgets. `azure-static-web-apps-registration-development.proposed.yml` is inert at this path; after explicit approval it would be copied unchanged into `.github/workflows/`.
 
-Estimated light-development cost is £0–£5/month and could be near zero under applicable consumption allowances. Budget £10/month until measured. Assumptions: approximately 110 annual entries, under 50,000 monthly API calls during testing, under 1 GB storage and low telemetry volume. Verify [Functions](https://azure.microsoft.com/pricing/details/functions/), [Tables](https://azure.microsoft.com/pricing/details/storage/tables/), [Monitor](https://azure.microsoft.com/pricing/details/monitor/) and calculator prices immediately before deployment.
-
-Commands that would create the proposed subset, after replacing placeholders and obtaining explicit approval:
-
-```sh
-az group create --name <approved-development-resource-group> --location uksouth --tags workload=registration environment=development
-az deployment group what-if --resource-group <approved-development-resource-group> --template-file infrastructure/registration-development/main.bicep --parameters infrastructure/registration-development/parameters.example.json
-az deployment group create --resource-group <approved-development-resource-group> --template-file infrastructure/registration-development/main.bicep --parameters infrastructure/registration-development/parameters.example.json
-az consumption budget create --budget-name registration-development --amount 10 --category cost --time-grain monthly --resource-group <approved-development-resource-group> --start-date <YYYY-MM-01> --end-date <YYYY-MM-01>
-```
-
-The removal command would delete only the explicitly named development resource group, after exporting and verifying any required backup:
-
-```sh
-az group delete --name <approved-development-resource-group> --yes --no-wait
-```
-
-Rollback: keep production unchanged; disable the development API deployment, export the development Table, remove role assignments, detach the preview API, verify the static preview still works, then delete the named development resource group. Never reuse the development store or identity for production.
+The proposed Static Web App and Storage account are co-located in West Europe. Proposed exact names are subject to the mandatory read-only name-availability and subscription-policy checks in the approval pack.
