@@ -76,10 +76,11 @@ test("local organiser bypass fails outside loopback/local and roles restrict ope
   for (const context of [{ environment: "production", hostname: "127.0.0.1" }, { environment: "local", hostname: "example.com" }]) assert.equal(developmentActor({ ...context, headers: { "x-development-organiser": "enabled" } }).authenticated, false);
 });
 
-test("Static Web Apps principal requires the exact Organiser role", () => {
+test("Static Web Apps principal accepts the Organiser role case-insensitively", () => {
   const header = (userRoles) => Buffer.from(JSON.stringify({ userId: "synthetic-organiser", userRoles })).toString("base64");
-  const organiser = staticWebAppActor({ "x-ms-client-principal": header(["anonymous", "authenticated", "Organiser"]) });
+  const organiser = staticWebAppActor({ "x-ms-client-principal": header(["anonymous", "authenticated", "organiser"]) });
   assert.equal(organiser.authenticated, true); assert.equal(authorize(organiser, "erase"), true);
+  assert.equal(staticWebAppActor({ "x-ms-client-principal": header(["authenticated", "ORGANISER"]) }).role, "Organiser");
   const ordinary = staticWebAppActor({ "x-ms-client-principal": header(["anonymous", "authenticated"]) });
   assert.equal(ordinary.authenticated, true); assert.equal(authorize(ordinary, "read"), false);
   assert.equal(staticWebAppActor({ "x-ms-client-principal": "not-base64" }).authenticated, false);
