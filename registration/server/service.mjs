@@ -45,7 +45,7 @@ function view(db, registration, { runnerSafe = false } = {}) {
   };
   delete result.confirmationTokenHash;
   if (runnerSafe) {
-    delete result.runner.phone; delete result.runner.dateOfBirth; delete result.runner.membershipNumber;
+    delete result.runner.email; delete result.runner.phone; delete result.runner.dateOfBirth; delete result.runner.membershipNumber; delete result.runner.travelMethod;
     delete result.runner.emergencyName; delete result.runner.emergencyPhone;
   }
   return result;

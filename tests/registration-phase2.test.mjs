@@ -63,6 +63,14 @@ test("confirmation tokens are opaque and non-enumerable", async () => {
   const { service } = setup(); const created = await service.create(runner(13), { idempotencyKey: "confirmation-key" }); assert.ok(created.confirmationToken.length > 60); assert.equal((await service.confirmation(created.confirmationToken)).ok, true); assert.deepEqual(await service.confirmation(`${created.confirmationToken}x`), { ok: false, code: "NOT_FOUND" });
 });
 
+test("public registration responses omit private contact and race-day fields", async () => {
+  const { service } = setup(); const created = await service.create(runner(25), { idempotencyKey: "runner-safe-response" });
+  const serializedCreate = JSON.stringify(created); const confirmation = await service.confirmation(created.confirmationToken); const serializedConfirmation = JSON.stringify(confirmation);
+  for (const privateValue of [runner(25).email, runner(25).phone, runner(25).emergencyName, runner(25).emergencyPhone, runner(25).dateOfBirth, runner(25).travelMethod]) {
+    assert.equal(serializedCreate.includes(privateValue), false); assert.equal(serializedConfirmation.includes(privateValue), false);
+  }
+});
+
 test("local organiser bypass fails outside loopback/local and roles restrict operations", () => {
   const local = developmentActor({ environment: "local", hostname: "127.0.0.1", headers: { "x-development-organiser": "enabled", "x-development-role": "race_day_volunteer" } }); assert.equal(local.authenticated, true); assert.equal(authorize(local, "race_number"), true); assert.equal(authorize(local, "erase"), false);
   for (const context of [{ environment: "production", hostname: "127.0.0.1" }, { environment: "local", hostname: "example.com" }]) assert.equal(developmentActor({ ...context, headers: { "x-development-organiser": "enabled" } }).authenticated, false);
