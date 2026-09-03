@@ -110,3 +110,14 @@ node scripts/start-registration-phase2.mjs
 ```
 
 The runner, organiser area, captured-email adapter, mock-payment adapter and ignored persistent store are served together at <http://127.0.0.1:4173/registration/>. Stop and restart the process to verify persistence. Reset explicitly with `node scripts/reset-registration-phase2.mjs`; backup and restore commands are documented in `registration-phase2.md`.
+
+To validate the managed development API package without using any Azure credential:
+
+```sh
+npm ci --prefix api --ignore-scripts
+node scripts/prepare-registration-api.mjs
+node scripts/validate-registration.mjs
+node --test tests/registration.test.mjs tests/registration-phase2.test.mjs
+```
+
+The preparation step creates ignored copies of the validated server modules inside the deployable API package. Never add `api/src/shared/` or `api/node_modules/` to Git.

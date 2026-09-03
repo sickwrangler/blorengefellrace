@@ -1,10 +1,10 @@
-// REVIEW ONLY. Do not deploy without the organiser's explicit approval.
+// APPROVED FOR THE ISOLATED SYNTHETIC DEVELOPMENT ENVIRONMENT ONLY.
 targetScope = 'resourceGroup'
 
-@description('Globally unique name proposed for the isolated development Static Web App.')
+@description('Globally unique name for the isolated development Static Web App.')
 param staticWebAppName string = 'swa-blorenge-registration-dev'
 
-@description('Globally unique, lowercase name proposed for synthetic registration storage.')
+@description('Globally unique, lowercase name for synthetic registration storage.')
 @minLength(3)
 @maxLength(24)
 param storageAccountName string = 'stblorengeregdev2026'

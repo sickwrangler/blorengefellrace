@@ -25,7 +25,7 @@ flowchart LR
     AZ --> W
 ```
 
-Phase 1 implements the original domain rules and Azure-preview simulation. Phase 2 adds a versioned server API, normalized model and persistent local repository behind the same user journey. The Azure PR preview continues using the isolated browser simulation because no cloud API, identity or database has been approved. Runner and organiser preview pages share the versioned `localStorage` key `blorenge-registration-preview` with schema version 3. That simulation is for usability review only and is not suitable for real entries or organiser access. See `adr/0001-registration-storage.md` and `registration-phase2.md`.
+Phase 1 implements the original domain rules and Azure-preview simulation. Phase 2 adds a versioned server API and persistent repository behind the same user journey. The Azure PR preview continues using its isolated browser simulation; the separate approved development Static Web App uses managed Functions, Microsoft Entra organiser access and one Azure Table for shared synthetic testing. Neither environment is suitable for real entries. See `adr/0001-registration-storage.md` and `registration-phase2.md`.
 
 Preview records persist across navigation and refresh in the same browser profile. A `storage` event refreshes an organiser tab after a runner submission in another tab; normal page refresh also reloads the same repository. Private/incognito windows have separate storage, another browser or device cannot see the records, and clearing site data removes them. Corrupt or outdated stored data blocks mutation and displays one reset instruction instead of silently discarding or accepting data.
 
@@ -34,7 +34,7 @@ Preview records persist across navigation and refresh in the same browser profil
 The state model is `closed`, `test`, `open`, `paused` and `full`.
 
 - `closed` rejects submissions before validation and stores nothing.
-- `test` is limited to localhost and numbered Azure preview hostnames. It accepts only obviously synthetic email addresses and uses local, disposable data.
+- `test` is limited to localhost, numbered Azure preview hostnames and the isolated stable development hostname. It accepts only obviously synthetic email addresses; only the stable development host uses shared Azure storage.
 - `open` is implemented in the domain model for future server tests, but production converts every requested non-closed state to `closed`. The test dashboard cannot select it.
 - `paused` retains existing records and rejects new submissions.
 - `full` rejects direct submissions. The final production waiting-list policy still requires organiser approval. The prototype demonstrates a provisional first-in waiting list when test capacity is exceeded.
@@ -65,7 +65,7 @@ Email addresses are attributes, never database keys. Public results remain logic
 
 The prototype uses one authoritative state mutation path, so only one of two final-place requests can receive the last accepted place. A production database should enforce this in a transaction or conditional write using an event-capacity counter and unique request/idempotency key. The automated suite exercises entries 109, 110 and 111 plus simultaneous final-place requests.
 
-## Future Azure resources requiring approval
+## Production resources still requiring approval
 
 - an Azure-hosted registration API;
 - a private transactional data store with backup and recovery;
@@ -74,4 +74,4 @@ The prototype uses one authoritative state mutation path, so only one of two fin
 - approved payment and transactional-email providers;
 - separate development and production configuration and data boundaries.
 
-No cloud resource is created by Phase 1. Detailed operational and security review information is maintained separately from the public website.
+The Phase 2 cloud resources are development-only and synthetic-only. Detailed operational and security review information is maintained separately from the public website.

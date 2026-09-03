@@ -11,3 +11,7 @@
 
 # Local, unreviewed photo masters; only reviewed public assets belong in Git
 /photo-source/
+
+# Generated managed-API copies and dependencies
+/api/src/shared/
+/api/node_modules/

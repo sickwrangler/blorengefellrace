@@ -60,19 +60,37 @@ export function createJsonFileRepository(filePath, initialState) {
 // ETag-guarded Table transaction for every mutation in one event partition.
 export function createAzureTableRepository({ loadPartition, submitTransaction }) {
   let queue = Promise.resolve();
+  const maximumAttempts = 5;
   return {
     kind: "azure-table-etag-transaction",
-    async read() { return loadPartition(); },
+    async read() { const snapshot = await loadPartition(); return clone(snapshot.state); },
     transaction(operation) {
       const run = queue.then(async () => {
-        const snapshot = await loadPartition();
-        const working = clone(snapshot.state);
-        const result = await operation(working);
-        if (result?.ok !== false) await submitTransaction({ before: snapshot.state, after: working, etag: snapshot.etag });
-        return clone(result);
+        for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+          const snapshot = await loadPartition();
+          const working = clone(snapshot.state);
+          const result = await operation(working);
+          if (result?.ok === false) return clone(result);
+          try {
+            await submitTransaction({ before: snapshot.state, after: working, etag: snapshot.etag });
+            return clone(result);
+          } catch (error) {
+            const conflict = error?.statusCode === 409 || error?.statusCode === 412;
+            if (!conflict || attempt === maximumAttempts) throw error;
+          }
+        }
       });
       queue = run.then(() => undefined, () => undefined);
       return run;
-    }
+    },
+    async reset(nextState) {
+      return this.transaction((working) => {
+        for (const key of Object.keys(working)) delete working[key];
+        Object.assign(working, clone(nextState));
+        return { ok: true, state: clone(nextState) };
+      });
+    },
+    async backup() { return JSON.stringify(await this.read(), null, 2); },
+    async restore(serialized) { const parsed = JSON.parse(serialized); await this.reset(parsed); return this.read(); }
   };
 }

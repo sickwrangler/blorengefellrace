@@ -1,9 +1,9 @@
-# Registration development infrastructure proposal
+# Registration development infrastructure
 
-Review only: no file in this directory is an active deployment workflow and none of these resources has been created by this proposal.
+The explicitly approved isolated development resources were provisioned on 3 September 2026. They contain synthetic registration test data only and do not reference the production Static Web App.
 
-The proposed resource group contains exactly one Free Azure Static Web App with managed Functions and one Standard LRS StorageV2 account with one Table. It deliberately excludes a standalone Function App, hosting plan, Application Insights, Log Analytics, private endpoints and backup containers. See [`../../docs/internal/registration-azure-approval-pack.md`](../../docs/internal/registration-azure-approval-pack.md) for boundaries, costs, commands and rollback.
+The resource group contains exactly one Free Azure Static Web App with managed Functions and one Standard LRS StorageV2 account with one Table. It deliberately excludes a standalone Function App, hosting plan, Application Insights, Log Analytics, private endpoints and backup containers. See [`../../docs/internal/registration-azure-approval-pack.md`](../../docs/internal/registration-azure-approval-pack.md) for boundaries, costs, commands and rollback.
 
-`main.bicep` creates the two Azure resources and Table. `budget.bicep` creates a separate £1 monthly resource-group budget when the subscription supports budgets. `azure-static-web-apps-registration-development.proposed.yml` is inert at this path; after explicit approval it would be copied unchanged into `.github/workflows/`.
+`main.bicep` creates the two Azure resources and Table. `budget.bicep` creates the £1 monthly resource-group budget. `azure-static-web-apps-registration-development.proposed.yml` remains the reviewed reference copy of the active development-only workflow.
 
-The proposed Static Web App and Storage account are co-located in West Europe. Proposed exact names are subject to the mandatory read-only name-availability and subscription-policy checks in the approval pack.
+The Static Web App and Storage account are co-located in West Europe. Deployment is restricted to `codex/development`; the API requires the server environment and registration state to be `development` and `test`.

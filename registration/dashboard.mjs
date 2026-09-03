@@ -88,7 +88,7 @@ function renderActions(item) {
     await render();
   }));
   if (available.includes("promote")) actions.append(actionButton("Promote from waiting list", async () => { const result = await prototype.promote(item.id); showNotice(result.ok ? `${item.testReference} promoted.` : `Promotion unavailable: ${result.code}`, !result.ok); await render(); }));
-  if (available.includes("refund")) actions.append(actionButton("Refund mock payment", async () => { if (!window.confirm(`Refund the mock payment for ${item.testReference}?`)) return; const result = await prototype.payment(item.id, "refunded"); showNotice(result.ok ? "Mock payment marked refunded." : `Refund unavailable: ${result.code}`, !result.ok); await render(); }));
+  if (available.includes("refund")) actions.append(actionButton("Refund mock payment", async () => { if (!window.confirm(`Refund the mock payment for ${item.testReference}?`)) return; const result = await prototype.refund(item.id); showNotice(result.ok ? "Mock payment marked refunded." : `Refund unavailable: ${result.code}`, !result.ok); await render(); }));
   if (available.includes("cancel")) actions.append(actionButton("Cancel entry", async () => {
     if (item.raceNumber) {
       pendingCancellation = item.id;

@@ -1,17 +1,18 @@
 # Registration Phase 2 development system
 
-Phase 2 remains synthetic, closed and isolated on PR #8. It does not provision Azure, accept real entrants, take payments, send email or provide production authentication.
+Phase 2 remains synthetic, closed and isolated on PR #8. Its approved development environment persists synthetic test data across devices, uses mock payments and captures message previews without delivery. It does not accept real entrants or change production.
 
 ## Components
 
 - `registration/server/service.mjs`: normalized domain/application service and server validation.
 - `registration/server/api.mjs`: versioned public and organiser API routing.
-- `registration/server/repositories.mjs`: isolated-memory, persistent-local and proposed Azure Table repository contracts.
-- `registration/server/auth.mjs`: role permissions and loopback-only development identity.
+- `registration/server/repositories.mjs`: isolated-memory, persistent-local and ETag-guarded Azure Table repository contracts.
+- `registration/server/auth.mjs`: loopback-only local identity and Static Web Apps principal validation.
 - `registration/server/adapters.mjs`: mock payment and captured-email adapters.
+- `api/`: managed Functions wrapper and Azure Table transport for the isolated development app.
 - `.local-registration/development.json`: ignored, permission-restricted persistent synthetic store.
 
-The local runner and organiser pages use `/api/v2`. The Azure PR preview deliberately retains the Phase 1 browser repository until persistent Azure storage and identity are approved. Deploying an ephemeral API would misrepresent persistence. Production has neither registration pages nor API routes.
+The local runner and organiser pages use `/api/v2`. The Azure PR preview retains its browser repository, while the separate stable development hostname uses the managed API and shared Table. Production has neither registration pages nor API routes.
 
 ## Versioned endpoints
 

@@ -1,6 +1,6 @@
 # Registration Phase 2 Azure approval pack
 
-Status: awaiting explicit organiser approval. No Azure deployment command has been run, no resource has been created, and the production Static Web App is not referenced by this proposal.
+Status: approved and provisioned as an isolated synthetic-development environment on 3 September 2026. The production Static Web App is not referenced.
 
 Prepared: 3 September 2026. Pricing is the Microsoft public GBP retail price, not a subscription-specific quote.
 
@@ -99,7 +99,7 @@ The £1 monthly budget sends actual-cost email notifications at £0.50 and £1.0
 
 ## Data reset, deletion and rollback
 
-The organiser reset action requires `Organiser`, an explicit confirmation phrase and server-side development/test assertions. It pages through only partition `blorenge-2026-test`, deletes its entities in valid Table batches, recreates the event seed and returns verified zero counts. It does not delete the table or affect another partition.
+The organiser reset action requires `Organiser`, browser confirmation and server-side development/test assertions. It conditionally replaces only the synthetic event snapshot with a fresh empty test state and returns verified zero counts. It does not delete the table or affect another partition.
 
 Infrastructure removal is intentionally simple: revoke organiser access, invalidate the stored access policy, remove the development workflow secret, disable/remove the development workflow, and delete only `rg-blorenge-registration-dev-weu`. There is no backup in this phase, so deletion permanently discards synthetic data. Production is not a rollback target and is never modified.
 
@@ -123,9 +123,9 @@ Its content will be copied unchanged from the `.proposed.yml` artifact. It trigg
 
 Before activating the workflow, the implementation must add the managed Functions wrapper in `api/`, its exact lockfile, Azure Table adapter, development-specific Static Web Apps routes, server-enforced test policy and automated cloud-boundary tests. The workflow must not be activated while `api/` is absent.
 
-## Commands proposed after approval
+## Approved command record
 
-The following is the complete command sequence. Placeholders are supplied interactively and outputs containing identifiers or credentials are not copied into reports. **None has been run.**
+The following is the reviewed command sequence used for provisioning and the remaining deployment/access steps. Private inputs are supplied interactively and outputs containing identifiers or credentials are not copied into reports.
 
 Read-only subscription and availability gate:
 
@@ -156,7 +156,7 @@ Table policy/SAS and encrypted API settings (shell variables prevent values bein
 
 ```sh
 AZURE_STORAGE_ACCOUNT_KEY="$(az storage account keys list --resource-group rg-blorenge-registration-dev-weu --account-name stblorengeregdev2026 --query '[0].value' --output tsv)"
-az storage table policy create --account-name stblorengeregdev2026 --account-key "$AZURE_STORAGE_ACCOUNT_KEY" --name RegistrationDevelopment --policy-name swa-api-v2 --permissions raud --expiry <UTC-EXPIRY>
+az storage table policy create --account-name stblorengeregdev2026 --account-key "$AZURE_STORAGE_ACCOUNT_KEY" --table-name RegistrationDevelopment --name swa-api-v2 --permissions raud --expiry <UTC-EXPIRY>
 REGISTRATION_TABLE_SAS_TOKEN="$(az storage table generate-sas --account-name stblorengeregdev2026 --account-key "$AZURE_STORAGE_ACCOUNT_KEY" --name RegistrationDevelopment --policy-name swa-api-v2 --https-only --output tsv)"
 az staticwebapp appsettings set --resource-group rg-blorenge-registration-dev-weu --name swa-blorenge-registration-dev --setting-names "REGISTRATION_STORAGE_ACCOUNT=stblorengeregdev2026" "REGISTRATION_TABLE=RegistrationDevelopment" "REGISTRATION_EVENT_PARTITION=blorenge-2026-test" "REGISTRATION_ENVIRONMENT=development" "REGISTRATION_STATE=test" "REGISTRATION_TABLE_SAS_TOKEN=$REGISTRATION_TABLE_SAS_TOKEN"
 unset REGISTRATION_TABLE_SAS_TOKEN
@@ -179,15 +179,15 @@ The current machine has neither Azure CLI nor GitHub CLI installed, so approved 
 Rollback/deletion commands, to be run only after a separate destructive-action confirmation:
 
 ```sh
-az storage table policy delete --account-name stblorengeregdev2026 --account-key <private-account-key> --name RegistrationDevelopment --policy-name swa-api-v2
+az storage table policy delete --account-name stblorengeregdev2026 --account-key <private-account-key> --table-name RegistrationDevelopment --name swa-api-v2
 az staticwebapp appsettings delete --resource-group rg-blorenge-registration-dev-weu --name swa-blorenge-registration-dev --setting-names REGISTRATION_TABLE_SAS_TOKEN
 gh secret remove AZURE_STATIC_WEB_APPS_API_TOKEN_REGISTRATION_DEVELOPMENT --env registration-development
 az group delete --name rg-blorenge-registration-dev-weu --yes --no-wait
 ```
 
-## Approval gate
+## Approval record
 
-Do not provision or activate anything until the organiser has reviewed this pack and explicitly approved both the architecture and the command sequence. Approval must also supply privately: the intended Azure subscription, confirmation of its offer/spending-limit result, an alert address, the organiser account to invite, acceptance of invitation-based Entra access, and acceptance that the £1 alert is not a cap.
+The organiser explicitly approved this architecture and command sequence on 3 September 2026 and supplied the private inputs outside Git. The £1 budget is an alert, not a cap. Production registration remains outside the approval.
 
 ## Authoritative references
 

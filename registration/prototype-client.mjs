@@ -5,7 +5,9 @@ const hostname = window.location.hostname;
 const environment = environmentForHostname(hostname);
 export const isLocal = environment === "local";
 export const isPreview = environment === "preview";
-export const canTest = isLocal || isPreview;
+export const isDevelopment = environment === "development";
+export const canTest = isLocal || isPreview || isDevelopment;
+const usesApi = isLocal || isDevelopment;
 const storageAdapter = {
   getItem(key) { return window.localStorage.getItem(key); },
   setItem(key, value) { window.localStorage.setItem(key, value); },
@@ -23,7 +25,7 @@ const paymentKeys = new Map();
 async function api(path, options = {}, organiser = false) {
   const response = await fetch(`/api/v2${path}`, {
     ...options,
-    headers: { "content-type": "application/json", ...(organiser ? { "x-development-organiser": "enabled" } : {}), ...(options.headers ?? {}) }
+    headers: { "content-type": "application/json", ...(organiser && isLocal ? { "x-development-organiser": "enabled" } : {}), ...(options.headers ?? {}) }
   });
   const type = response.headers.get("content-type") || "";
   if (!type.includes("application/json")) throw new Error(`API ${response.status}`);
@@ -32,7 +34,7 @@ async function api(path, options = {}, organiser = false) {
 
 async function localApiOrRepository(path, options, operation, organiser = false) {
   if (!canTest) return { ok: false, code: "PRODUCTION_CLOSED", message: "2026 entries are not yet open." };
-  if (isLocal) {
+  if (usesApi) {
     try { return await api(path, options, organiser); } catch { return { ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable. Start it with the documented Phase 2 command." }; }
   }
   return repository.mutate(operation);
@@ -56,23 +58,23 @@ function repositorySnapshot() {
 export const prototype = {
   async status() {
     if (!canTest) return { state: "closed", environment: "production", capacity: 110, accepted: 0, remaining: 110, waiting: 0, recovery: null };
-    if (isLocal) {
+    if (usesApi) {
       try { return await api("/registration/status"); } catch { return { state: "closed", environment: "local", capacity: 110, accepted: 0, remaining: 110, waiting: 0, recovery: { required: true, message: "The persistent development API is unavailable." } }; }
     }
     const snapshot = repositorySnapshot();
     return { ...statusSummary(snapshot.state), recovery: snapshot.recovery };
   },
   submit(payload) {
-    if (isLocal) return api("/registrations", { method: "POST", body: JSON.stringify(payload), headers: { "idempotency-key": submissionKey } }).then((result) => { if (result.ok) { confirmationTokens.set(result.registration.id, result.confirmationToken); submissionKey = crypto.randomUUID(); } return result; }).catch(() => ({ ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable." }));
+    if (usesApi) return api("/registrations", { method: "POST", body: JSON.stringify(payload), headers: { "idempotency-key": submissionKey } }).then((result) => { if (result.ok) { confirmationTokens.set(result.registration.id, result.confirmationToken); submissionKey = crypto.randomUUID(); } return result; }).catch(() => ({ ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable." }));
     return localApiOrRepository("/registrations", { method: "POST", body: JSON.stringify(payload) }, (state) => submitRegistration(state, payload, { source: "runner" }));
   },
   payment(id, outcome) {
-    if (isLocal) { const confirmationToken = confirmationTokens.get(id); const key = paymentKeys.get(id) ?? crypto.randomUUID(); paymentKeys.set(id, key); return api(`/registrations/${encodeURIComponent(confirmationToken)}/mock-payment`, { method: "POST", body: JSON.stringify({ outcome }), headers: { "idempotency-key": key } }).then((result) => { if (result.ok) paymentKeys.delete(id); return result; }); }
+    if (usesApi) { const confirmationToken = confirmationTokens.get(id); const key = paymentKeys.get(id) ?? crypto.randomUUID(); paymentKeys.set(id, key); return api(`/registrations/${encodeURIComponent(confirmationToken)}/mock-payment`, { method: "POST", body: JSON.stringify({ outcome }), headers: { "idempotency-key": key } }).then((result) => { if (result.ok) paymentKeys.delete(id); return result; }); }
     return localApiOrRepository(`/registrations/${id}/payment`, { method: "POST", body: JSON.stringify({ outcome }) }, (state) => applyMockPayment(state, id, outcome));
   },
   async all() {
     if (!canTest) return { state: initialState({ environment: "production", state: "closed" }), recovery: null, diagnostics: { environment: "production", storageType: "none", storageKey: "none", schemaVersion: SCHEMA_VERSION, registrationsLoaded: 0, lastRefreshTime: new Date().toISOString() } };
-    if (isLocal) {
+    if (usesApi) {
       try {
         const result = await api("/organiser/snapshot", {}, true);
         return { ...result, recovery: null, diagnostics: { environment: "local development API", storageType: "persistent server repository", storageKey: "server-side only", schemaVersion: result.state.version, registrationsLoaded: result.state.registrations.length, lastRefreshTime: new Date().toISOString() } };
@@ -84,22 +86,23 @@ export const prototype = {
   promote(id) { return localApiOrRepository(`/organiser/registrations/${id}/promote`, { method: "POST" }, (state) => promoteRegistration(state, id), true); },
   assign(id, raceNumber) { return localApiOrRepository(`/organiser/registrations/${id}/race-number`, { method: "POST", body: JSON.stringify({ raceNumber }) }, (state) => assignRaceNumber(state, id, raceNumber), true); },
   removeRaceNumber(id) { return localApiOrRepository(`/organiser/registrations/${id}/remove-race-number`, { method: "POST" }, (state) => removeRaceNumber(state, id), true); },
+  refund(id) { return localApiOrRepository(`/organiser/registrations/${id}/refund`, { method: "POST" }, (state) => applyMockPayment(state, id, "refunded"), true); },
   markViewed(testReference) { return localApiOrRepository(`/organiser/registrations/reference/${encodeURIComponent(testReference)}/viewed`, { method: "POST" }, (state) => markOrganiserViewed(state, testReference), true); },
   settings(changes) { return localApiOrRepository("/settings", { method: "POST", body: JSON.stringify(changes) }, (state) => updateTestSettings(state, changes)); },
   async reset() {
     if (!canTest) return { ok: false, code: "PRODUCTION_CLOSED" };
-    if (isLocal) {
+    if (usesApi) {
       try { return await api("/organiser/reset", { method: "POST" }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; }
     }
     return repository.reset();
   },
-  async csv() { if (isLocal) { const result = await api("/organiser/export/public", {}, true); return result.csv; } const { state } = await this.all(); return sanitizedCsv(state); },
+  async csv() { if (usesApi) { const result = await api("/organiser/export/public", {}, true); return result.csv; } const { state } = await this.all(); return sanitizedCsv(state); },
   subscribe(callback) {
     const localHandler = () => callback("same-tab");
     const storageHandler = (event) => { if (isRepositoryStorageEvent(event)) callback("cross-tab"); };
     window.addEventListener(UPDATE_EVENT, localHandler);
     window.addEventListener("storage", storageHandler);
-    const polling = isLocal ? window.setInterval(() => callback("server-poll"), 2000) : null;
+    const polling = usesApi ? window.setInterval(() => callback("server-poll"), 2000) : null;
     return () => { window.removeEventListener(UPDATE_EVENT, localHandler); window.removeEventListener("storage", storageHandler); if (polling) window.clearInterval(polling); };
   }
 };

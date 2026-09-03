@@ -1,0 +1,14 @@
+{
+  "name": "blorenge-registration-development-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/functions/*.mjs",
+  "engines": {
+    "node": ">=20 <23"
+  },
+  "dependencies": {
+    "@azure/data-tables": "^13.3.2",
+    "@azure/functions": "^4.7.2"
+  }
+}

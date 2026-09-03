@@ -4,9 +4,11 @@ export const STORAGE_KEY = "blorenge-registration-preview";
 export const SCHEMA_VERSION = 3;
 export const UPDATE_EVENT = "blorenge-registration-preview-updated";
 export const LEGACY_STORAGE_KEYS = Object.freeze(["blorenge-registration-prototype-v1"]);
+export const DEVELOPMENT_HOSTNAME = "black-tree-04204eb03.3.azurestaticapps.net";
 export function isRepositoryStorageEvent(event) { return event?.key === STORAGE_KEY; }
 export function environmentForHostname(hostname) {
   if (hostname === "localhost" || hostname === "127.0.0.1") return "local";
+  if (hostname === DEVELOPMENT_HOSTNAME) return "development";
   if (/azurestaticapps\.net$/i.test(hostname) && /-\d+\.\d+\.azurestaticapps\.net$/i.test(hostname)) return "preview";
   return "production";
 }

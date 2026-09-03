@@ -4,9 +4,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createDatabase, RegistrationService, csvFormulaSafe, parseSyntheticCsv } from "../registration/server/service.mjs";
-import { createMemoryRepository, createJsonFileRepository } from "../registration/server/repositories.mjs";
+import { createMemoryRepository, createJsonFileRepository, createAzureTableRepository } from "../registration/server/repositories.mjs";
 import { createMockPaymentAdapter, createCapturedEmailAdapter, assertSafeAdapters } from "../registration/server/adapters.mjs";
-import { authorize, developmentActor } from "../registration/server/auth.mjs";
+import { authorize, developmentActor, staticWebAppActor } from "../registration/server/auth.mjs";
 import { createApi } from "../registration/server/api.mjs";
 
 const runner = (number = 1, overrides = {}) => ({ firstName: `Runner ${number}`, lastName: "Example", email: `phase2-${number}@example.com`, phone: "+44 7700 900123", dateOfBirth: "1990-06-15", genderCategory: "Female", club: "Example Harriers", affiliated: false, membershipNumber: "", emergencyName: "Sam Example", emergencyPhone: "07700 900456", travelMethod: "Shared car", acceptTerms: true, acceptPrivacy: true, termsVersion: "prototype-2026-09", privacyVersion: "prototype-2026-09", ...overrides });
@@ -68,9 +68,37 @@ test("local organiser bypass fails outside loopback/local and roles restrict ope
   for (const context of [{ environment: "production", hostname: "127.0.0.1" }, { environment: "local", hostname: "example.com" }]) assert.equal(developmentActor({ ...context, headers: { "x-development-organiser": "enabled" } }).authenticated, false);
 });
 
+test("Static Web Apps principal requires the exact Organiser role", () => {
+  const header = (userRoles) => Buffer.from(JSON.stringify({ userId: "synthetic-organiser", userRoles })).toString("base64");
+  const organiser = staticWebAppActor({ "x-ms-client-principal": header(["anonymous", "authenticated", "Organiser"]) });
+  assert.equal(organiser.authenticated, true); assert.equal(authorize(organiser, "erase"), true);
+  const ordinary = staticWebAppActor({ "x-ms-client-principal": header(["anonymous", "authenticated"]) });
+  assert.equal(ordinary.authenticated, true); assert.equal(authorize(ordinary, "read"), false);
+  assert.equal(staticWebAppActor({ "x-ms-client-principal": "not-base64" }).authenticated, false);
+});
+
+test("Azure repository unwraps state and retries ETag conflicts", async () => {
+  let state = createDatabase({ environment: "development", registrationState: "test" }); let etag = "one"; let writes = 0;
+  const repository = createAzureTableRepository({
+    async loadPartition() { return { state: structuredClone(state), etag }; },
+    async submitTransaction({ after }) { writes += 1; if (writes === 1) { const error = new Error("conflict"); error.statusCode = 412; throw error; } state = structuredClone(after); etag = "two"; }
+  });
+  assert.equal((await repository.read()).environment, "development");
+  const result = await repository.transaction((working) => { working.registrationState = "paused"; return { ok: true }; });
+  assert.equal(result.ok, true); assert.equal(writes, 2); assert.equal((await repository.read()).registrationState, "paused");
+  await repository.reset(createDatabase({ environment: "development", registrationState: "test" }));
+  assert.equal((await repository.read()).registrationState, "test");
+});
+
 test("registration state transitions are server-controlled and cannot select production open", async () => {
   const { service } = setup(); for (const state of ["closed", "test", "paused", "full"]) assert.equal((await service.setState(admin, state)).state, state); assert.equal((await service.setState(admin, "open")).code, "INVALID_STATE");
   const production = setup({ environment: "production", registrationState: "closed" }); assert.equal((await production.service.setState(admin, "test")).code, "PRODUCTION_CLOSED");
+});
+
+test("cloud development rejects submissions if stored state is changed from test", async () => {
+  const { service, repository } = setup({ environment: "development", registrationState: "test" });
+  await repository.transaction((database) => { database.registrationState = "open"; return { ok: true }; });
+  assert.equal((await service.create(runner(24), { idempotencyKey: "cloud-forced-test-key" })).code, "REGISTRATION_NOT_ACCEPTING");
 });
 
 test("synthetic import uses server validation and stays local", async () => {

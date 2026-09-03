@@ -1,12 +1,21 @@
 {
   "routes": [
+    { "route": "/registration/dashboard.html", "allowedRoles": ["Organiser"] },
+    { "route": "/api/v2/organiser/*", "allowedRoles": ["Organiser"] },
     { "route": "/registration/server/*", "statusCode": 404 },
     { "route": "/registration/fixtures.json", "statusCode": 404 },
+    { "route": "/api/src/*", "statusCode": 404 },
+    { "route": "/api/package.json", "statusCode": 404 },
+    { "route": "/api/package-lock.json", "statusCode": 404 },
     { "route": "/infrastructure/*", "statusCode": 404 },
     { "route": "/docs/internal/*", "statusCode": 404 },
     { "route": "/tests/*", "statusCode": 404 }
   ],
   "responseOverrides": {
+    "401": {
+      "redirect": "/.auth/login/aad?post_login_redirect_uri=.referrer",
+      "statusCode": 302
+    },
     "404": {
       "rewrite": "/404.html"
     }

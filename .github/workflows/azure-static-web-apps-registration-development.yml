@@ -1,6 +1,3 @@
-# PROPOSED WORKFLOW ONLY.
-# After explicit approval, copy this file unchanged to:
-# .github/workflows/azure-static-web-apps-registration-development.yml
 name: Registration development Azure Static Web App
 
 on:
@@ -14,6 +11,8 @@ on:
       - "css/**"
       - "js/**"
       - "images/**"
+      - "scripts/prepare-registration-api.mjs"
+      - "scripts/validate-registration.mjs"
       - "staticwebapp.config.json"
       - ".github/workflows/azure-static-web-apps-registration-development.yml"
 

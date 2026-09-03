@@ -15,7 +15,7 @@ const SYNTHETIC_EMAIL = /@(example\.(?:com|org|net)|[^@]+\.invalid)$/i;
 export function safeRegistrationState(value, environment = "production") {
   if (!REGISTRATION_STATES.includes(value)) return "closed";
   if (environment === "production" && value !== "closed") return "closed";
-  if (environment !== "local" && environment !== "preview") return "closed";
+  if (!["local", "preview", "development"].includes(environment)) return "closed";
   return value;
 }
 

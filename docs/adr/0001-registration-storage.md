@@ -1,10 +1,10 @@
 # ADR 0001: Phase 2 registration hosting and storage
 
-Status: proposed; no Azure resources have been created.
+Status: accepted for the isolated synthetic development environment; production use is not approved.
 
 ## Decision
 
-For the isolated synthetic development environment, use a separate Azure Static Web App on the Free plan, its managed HTTP Functions under `/api/v2`, and a separate Standard LRS Azure Table Storage account. Store all synthetic records for the 2026 test event in one partition. Use ETag-guarded transactional batches for event capacity, registrations, waiting-list sequencing and race-number locks.
+For the isolated synthetic development environment, use a separate Azure Static Web App on the Free plan, its managed HTTP Functions under `/api/v2`, and a separate Standard LRS Azure Table Storage account. Store the normalized in-service model for the 2026 test event as one compressed snapshot entity in its own partition. Guard every replacement with the entity ETag and bounded conflict retries so capacity, waiting-list and race-number rules remain atomic.
 
 This supersedes the earlier standalone-Functions proposal. Managed Functions satisfy the current HTTP-only workload with lower operational overhead and no recurring compute charge. A standalone Function App remains a future option only if a documented requirement cannot be met by managed Functions.
 
@@ -12,7 +12,7 @@ This supersedes the earlier standalone-Functions proposal. Managed Functions sat
 
 | Option | Fit | Decision |
 |---|---|---|
-| Static Web Apps managed Functions plus Table Storage | Integrated `/api` routing and identity claims; Table batches and ETags support the small transactional workload. Managed Functions lack managed identity, so a scoped storage SAS must be held in encrypted app settings and rotated. | Selected for synthetic development. |
+| Static Web Apps managed Functions plus Table Storage | Integrated `/api` routing and identity claims; one ETag-guarded event snapshot supports this small transactional workload. Managed Functions lack managed identity, so a scoped storage SAS must be held in encrypted app settings and rotated. | Selected for synthetic development. |
 | Standalone Functions plus Table Storage | Supports managed identity and independent API lifecycle, but adds a resource, deployment and operational surface not currently needed. | Deferred unless managed Functions prove insufficient. |
 | Cosmos DB serverless | Flexible and transactional within a logical partition, but request-unit planning and extra concepts are disproportionate here. | Rejected for this phase. |
 | Relational database | Strong constraints and reporting, but introduces a recurring/database operational burden. | Rejected for this phase. |
@@ -22,11 +22,11 @@ This supersedes the earlier standalone-Functions proposal. Managed Functions sat
 
 - Local JSON uses one serialized transaction queue and atomic file replacement.
 - Tests use a fresh in-memory repository.
-- Azure Table uses one `blorenge-2026-test` partition. A registration action touches only a bounded set of entities in one transactional batch.
-- A number-lock entity is inserted or removed in the same partition transaction as a race-number change.
+- Azure Table uses one `blorenge-2026-test` partition and one compressed state entity. A registration action conditionally replaces that entity.
+- Capacity, waiting-list and number uniqueness changes are committed together or not at all.
 - ETag conflicts receive bounded retries; idempotency entities return the original result for repeated submissions.
 
-Table entity-group transactions are limited to one partition and 100 operations. Each planned action remains comfortably below that boundary. Bulk reset is deliberately paged rather than attempted as one transaction.
+The compressed snapshot is deliberately limited to 200 chunks within one Table entity. This is appropriate for the small synthetic test but must be replaced or re-evaluated before production scale or real data.
 
 ## Authentication and storage credential
 

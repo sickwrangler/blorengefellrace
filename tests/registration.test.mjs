@@ -27,6 +27,12 @@ test("production and invalid configurations fail closed", () => {
   assert.equal(initialState({ environment: "production", state: "open" }).registrationState, "closed");
 });
 
+test("isolated cloud development permits test mode but never production open", () => {
+  assert.equal(safeRegistrationState("test", "development"), "test");
+  assert.equal(safeRegistrationState("open", "production"), "closed");
+  assert.equal(safeRegistrationState("test", "unknown"), "closed");
+});
+
 test("closed, paused and full states reject without storing", () => {
   for (const registrationState of ["closed", "paused", "full"]) {
     const state = initialState({ environment: "local", state: registrationState });
@@ -205,6 +211,7 @@ test("production hosts remain closed and are not classified for preview persiste
   assert.equal(environmentForHostname("www.blorengefellrace.cymru"), "production");
   assert.equal(environmentForHostname("ambitious-bay-0339ed203.5.azurestaticapps.net"), "production");
   assert.equal(environmentForHostname("ambitious-bay-0339ed203-8.5.azurestaticapps.net"), "preview");
+  assert.equal(environmentForHostname("black-tree-04204eb03.3.azurestaticapps.net"), "development");
   assert.equal(environmentForHostname("127.0.0.1"), "local");
 });
 
