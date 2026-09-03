@@ -1,7 +1,6 @@
 // REVIEW ONLY. Deploy separately because budget support and permissions vary by subscription.
-targetScope = 'subscription'
+targetScope = 'resourceGroup'
 
-param resourceGroupName string = 'rg-blorenge-registration-dev-weu'
 param budgetName string = 'budget-blorenge-registration-dev-gbp1'
 param amount int = 1
 
@@ -15,12 +14,7 @@ param endDate string
 @description('Notification address supplied at deployment time; never commit it.')
 param alertEmail string
 
-resource developmentResourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' existing = {
-  name: resourceGroupName
-}
-
 resource developmentBudget 'Microsoft.Consumption/budgets@2023-11-01' = {
-  scope: developmentResourceGroup
   name: budgetName
   properties: {
     category: 'Cost'

@@ -148,8 +148,8 @@ Resource what-if and creation, only after a second explicit go-ahead on the veri
 az group create --name rg-blorenge-registration-dev-weu --location westeurope --tags project=blorenge-fell-race workload=registration environment=development dataClassification=synthetic-only managedBy=bicep
 az deployment group what-if --resource-group rg-blorenge-registration-dev-weu --template-file infrastructure/registration-development/main.bicep --parameters infrastructure/registration-development/parameters.example.json
 az deployment group create --resource-group rg-blorenge-registration-dev-weu --template-file infrastructure/registration-development/main.bicep --parameters infrastructure/registration-development/parameters.example.json
-az deployment sub what-if --location westeurope --template-file infrastructure/registration-development/budget.bicep --parameters resourceGroupName=rg-blorenge-registration-dev-weu startDate=<YYYY-MM-01T00:00:00Z> endDate=<YYYY-MM-01T00:00:00Z> alertEmail=<private-alert-address>
-az deployment sub create --location westeurope --template-file infrastructure/registration-development/budget.bicep --parameters resourceGroupName=rg-blorenge-registration-dev-weu startDate=<YYYY-MM-01T00:00:00Z> endDate=<YYYY-MM-01T00:00:00Z> alertEmail=<private-alert-address>
+az deployment group what-if --resource-group rg-blorenge-registration-dev-weu --template-file infrastructure/registration-development/budget.bicep --parameters startDate=<YYYY-MM-01T00:00:00Z> endDate=<YYYY-MM-01T00:00:00Z> alertEmail=<private-alert-address>
+az deployment group create --resource-group rg-blorenge-registration-dev-weu --template-file infrastructure/registration-development/budget.bicep --parameters startDate=<YYYY-MM-01T00:00:00Z> endDate=<YYYY-MM-01T00:00:00Z> alertEmail=<private-alert-address>
 ```
 
 Table policy/SAS and encrypted API settings (shell variables prevent values being printed; command history and debug output must remain off):

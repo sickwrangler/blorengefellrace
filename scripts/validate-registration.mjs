@@ -49,7 +49,7 @@ const phase2 = fs.readFileSync("registration/server/service.mjs", "utf8") + fs.r
 for (const required of ["IDEMPOTENCY_KEY_REQUIRED", "confirmationTokenHash", "race_number_removed", "record_anonymised", "csvFormulaSafe", "/api/v2/organiser/"])
   if (!phase2.includes(required)) errors.push(`Phase 2 server boundary is missing: ${required}`);
 const staticConfig = fs.readFileSync("staticwebapp.config.json", "utf8");
-for (const blocked of ["/registration/server/*", "/infrastructure/*", "/docs/internal/*", "/tests/*"])
+for (const blocked of ["/registration/server/*", "/registration/fixtures.json", "/infrastructure/*", "/docs/internal/*", "/tests/*"])
   if (!staticConfig.includes(blocked)) errors.push(`Preview source route is not blocked: ${blocked}`);
 if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
 console.log("Validated registration state guards, synthetic fixtures, HTML/mobile source, JavaScript syntax and external-service boundaries.");
