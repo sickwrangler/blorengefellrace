@@ -27,6 +27,21 @@ const checks = [
   ["docs/current-system-audit.md", null],
   ["docs/local-development.md", null],
   ["docs/photo-management.md", null],
+  ["docs/registration-architecture.md", null],
+  ["docs/registration-privacy.md", null],
+  ["docs/registration-test-checklist.md", null],
+  ["docs/registration-opening-runbook.md", null],
+  ["registration/index.html", "text/html"],
+  ["registration/dashboard.html", "text/html"],
+  ["registration/prototype.css", "text/css"],
+  ["registration/runner.mjs", "javascript"],
+  ["registration/runner-flow.mjs", "javascript"],
+  ["registration/dashboard.mjs", "javascript"],
+  ["registration/organiser-view.mjs", "javascript"],
+  ["registration/prototype-client.mjs", "javascript"],
+  ["registration/preview-repository.mjs", "javascript"],
+  ["registration/registration-core.mjs", "javascript"],
+  ["registration/fixtures.json", "application/json"],
 ];
 const photoManifest = JSON.parse(fs.readFileSync("data/photos/manifest.json", "utf8"));
 for (const photo of photoManifest.photos) checks.push([photo.optimizedFilename, "image/jpeg"]);

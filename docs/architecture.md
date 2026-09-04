@@ -51,6 +51,8 @@ flowchart LR
 
 The repository contains no server-side payment, email, database, or storage implementation. The JSON photo manifest and generated images are repository files, not a separate media service.
 
+The unlinked registration prototype has local and Azure-preview simulations plus a separate, stable Azure development environment for shared synthetic testing. The latter uses managed Functions, Entra organiser access and isolated Table storage. None is a production registration service; production remains closed and has no registration API or private data store.
+
 ## Deployment flow
 
 GitHub stores the source. GitHub Actions publishes reviewed website versions to Azure Static Web Apps. Pull-request previews provide a separate URL for checking proposed changes before production approval.

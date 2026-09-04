@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "staticWebAppName": { "value": "swa-blorenge-registration-dev" },
+    "storageAccountName": { "value": "stblorengeregdev2026" },
+    "location": { "value": "westeurope" },
+    "tags": {
+      "value": {
+        "project": "blorenge-fell-race",
+        "workload": "registration",
+        "environment": "development",
+        "dataClassification": "synthetic-only",
+        "managedBy": "bicep"
+      }
+    }
+  }
+}
