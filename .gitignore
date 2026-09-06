@@ -5,6 +5,16 @@
 /registrations*.xlsx
 /registration*.csv
 /registrations*.csv
+/.local-registration/
+/private-exports/
+/registration-backups/
 
 # Local, unreviewed photo masters; only reviewed public assets belong in Git
 /photo-source/
+
+# Generated managed-API copies and dependencies
+/api/src/shared/
+/api/node_modules/
+
+# Deterministic deployment staging output
+/.deployment/

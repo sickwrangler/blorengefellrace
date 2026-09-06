@@ -22,6 +22,8 @@ from the repository root:
 ```sh
 git status --short --branch
 node scripts/validate-site.mjs
+node scripts/validate-registration.mjs
+node --test tests/registration.test.mjs
 node scripts/validate-route.mjs
 node scripts/validate-photos.mjs
 node scripts/inspect-photo-metadata.mjs
@@ -88,3 +90,36 @@ Do not submit registration forms, enter personal data, or trigger external trans
 - Obtain explicit approval before merging a production change.
 
 Detailed operational and security review information is maintained separately from the public website.
+
+## Registration prototype
+
+Start the complete dependency-free Phase 1 prototype with one command:
+
+```sh
+node scripts/start-registration-prototype.mjs
+```
+
+Open <http://127.0.0.1:4173/registration/>. The server binds only to the local loopback interface and keeps synthetic registrations in memory. It starts with zero entries and Reset test returns it to zero; stopping it deletes the server-side session. No email or payment provider is configured.
+
+The Azure pull-request version uses the shared, versioned `localStorage` repository documented in `registration-architecture.md`. Runner and dashboard testing must use the same browser profile and preview origin. The production custom domain remains closed. See `registration-test-checklist.md` for a non-developer walkthrough.
+
+Phase 2 adds the preferred persistent local API without removing the safe PR-preview fallback:
+
+```sh
+node scripts/start-registration-phase2.mjs
+```
+
+The runner, organiser area, captured-email adapter, mock-payment adapter and ignored persistent store are served together at <http://127.0.0.1:4173/registration/>. Stop and restart the process to verify persistence. Reset explicitly with `node scripts/reset-registration-phase2.mjs`; backup and restore commands are documented in `registration-phase2.md`.
+
+To validate the managed development API package without using any Azure credential:
+
+```sh
+npm ci --prefix api --ignore-scripts
+node scripts/prepare-registration-api.mjs
+node scripts/validate-registration.mjs
+node --test tests/registration.test.mjs tests/registration-phase2.test.mjs
+```
+
+The preparation step creates ignored copies of the validated server modules inside the deployable API package. Never add `api/src/shared/` or `api/node_modules/` to Git.
+
+The development workflow separately applies `scripts/prepare-registration-development-routes.mjs` in GitHub Actions. Do not run that script for ordinary local or PR-preview testing; it adds the stable environment's Entra route rules to the deployment workspace.

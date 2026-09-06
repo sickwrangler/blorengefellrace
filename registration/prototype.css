@@ -1,0 +1,62 @@
+.prototype-pending body, [hidden] { display: none !important; }
+.prototype-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; padding: .8rem max(1rem, calc((100vw - 72rem) / 2)); color: #fffdf8; background: #6b291f; }
+.prototype-header a { color: #fffdf8; }
+.prototype-shell { width: min(100% - 1.25rem, 64rem); margin-inline: auto; padding-block: 1.25rem 4rem; }
+.prototype-card { margin-bottom: 1rem; padding: clamp(1.1rem, 4vw, 2rem); border: 1px solid var(--colour-stone-dark); background: var(--colour-paper-light); box-shadow: 0 .25rem 1rem rgb(32 37 31 / .08); }
+.prototype-intro h1 { font-size: clamp(2.2rem, 8vw, 4.7rem); }
+.status-grid, .summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: 1.5rem 0; }
+.status-grid div { padding: .8rem; border: 1px solid var(--colour-stone); }
+.summary-grid div { padding: 1rem; border: 1px solid var(--colour-stone-dark); background: var(--colour-paper-light); }
+.status-grid span, .status-grid strong, .summary-grid span, .summary-grid strong { display: block; }
+.summary-grid strong { color: var(--colour-forest-dark); font-family: var(--font-display); font-size: 1.8rem; }
+.status-grid span, .hint { color: var(--colour-ink-soft); font-size: .78rem; }
+.step-indicator { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
+.step-indicator progress { max-width: 10rem; accent-color: var(--colour-forest); }
+.field-grid { display: grid; gap: 1rem; }
+label { display: grid; gap: .3rem; font-weight: 650; }
+input, select { width: 100%; min-height: 2.9rem; padding: .55rem .65rem; border: 1px solid var(--colour-stone-dark); border-radius: var(--radius-small); background: #fff; color: var(--colour-ink); }
+input[aria-invalid="true"], select[aria-invalid="true"] { border: .15rem solid #a12b21; }
+.field-error { margin: 0; color: #8b2018; font-size: .85rem; font-weight: 650; }
+.checkbox-field { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: .65rem; margin-block: 1rem; }
+.checkbox-field input { width: 1.25rem; min-height: 1.25rem; margin-top: .2rem; }
+.form-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.5rem; }
+.form-alert { margin-bottom: 1rem; padding: 1rem; border-left: .3rem solid #a12b21; background: #f9ddd7; }
+.form-alert--success { border-left-color: var(--colour-forest); background: #e1ebdd; }
+.review-list { display: grid; grid-template-columns: minmax(8rem, .7fr) 1.3fr; margin: 0 0 1.5rem; }
+.review-list dt, .review-list dd { margin: 0; padding: .55rem; border-bottom: 1px solid var(--colour-stone); }
+.review-list dt { font-weight: 750; }
+.payment-simulation { display: grid; gap: .2rem; margin-top: 1rem; padding: 1rem; border: .15rem dashed #9a5a39; }
+.choice-actions { display: grid; gap: .75rem; }
+.secondary-link { align-self: center; }
+.text-button { min-height: 2.5rem; padding: .25rem; border: 0; color: var(--colour-forest); background: transparent; font-weight: 650; text-decoration: underline; text-decoration-color: var(--colour-bracken); text-underline-offset: .2em; }
+.text-button:hover { color: var(--colour-bracken); }
+.danger-link, .danger-button { color: #7b241c; }
+.secondary-actions { display: grid; gap: .25rem; margin-top: 1.25rem; color: var(--colour-ink-soft); font-size: .9rem; }
+.reset-row { margin: 2rem 0; text-align: right; }
+.organiser-filters { display: grid; gap: .75rem; margin-bottom: 1.25rem; }
+.entrant-list { display: grid; gap: .75rem; }
+.entrant-card { min-width: 0; padding: 1rem; border: 1px solid var(--colour-stone-dark); background: #fff; }
+.entrant-card--selected { border: .2rem solid var(--colour-bracken); }
+.entrant-card h3 { margin: 0; font-size: 1.35rem; }
+.entrant-reference { margin-bottom: .75rem; color: var(--colour-ink-soft); font-family: ui-monospace, monospace; font-size: .85rem; }
+.entrant-facts { display: grid; grid-template-columns: minmax(7rem, .8fr) 1.2fr; margin-bottom: 1rem; }
+.entrant-facts dt, .entrant-facts dd { margin: 0; padding: .3rem 0; border-bottom: 1px solid var(--colour-stone); }
+.entrant-facts dt { font-weight: 750; }
+.selected-entry { border-top: .35rem solid var(--colour-bracken); }
+.detail-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.progress-checklist { padding: 0; list-style: none; }
+.progress-checklist li { position: relative; padding-left: 1.8rem; }
+.progress-checklist li::before { position: absolute; left: 0; content: "○"; }
+.progress-checklist li.is-complete::before { content: "✓"; color: var(--colour-forest); font-weight: 750; }
+.success-message { padding: 1rem; border-left: .3rem solid var(--colour-forest); background: #e1ebdd; font-weight: 750; }
+.technical-details { margin-top: 2rem; padding: 1rem; border: 1px solid var(--colour-stone); color: var(--colour-ink-soft); }
+.technical-details dl { display: grid; grid-template-columns: minmax(6rem, .5fr) 1.5fr; }
+.technical-details dt { font-weight: 750; }
+.technical-details dd { margin: 0; }
+.confirmation-dialog { width: min(100% - 2rem, 32rem); padding: 1.5rem; border: 1px solid var(--colour-stone-dark); background: var(--colour-paper-light); color: var(--colour-ink); }
+.confirmation-dialog::backdrop { background: rgb(20 24 20 / .65); }
+.dashboard-controls { display: grid; gap: .75rem; margin-bottom: 1rem; }
+.message-list { padding: 0; list-style: none; }
+.message-list li { padding: .75rem 0; border-bottom: 1px solid var(--colour-stone); }
+@media (min-width: 42rem) { .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dashboard-controls, .organiser-filters { grid-template-columns: 1fr 1fr 1fr; align-items: end; } .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .entrant-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } .choice-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 30rem) { .status-grid { grid-template-columns: 1fr; } .review-list { grid-template-columns: 1fr; } .review-list dt { padding-bottom: 0; border: 0; } .review-list dd { padding-top: .15rem; } }

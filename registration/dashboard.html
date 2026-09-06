@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en" class="prototype-pending">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Organiser test area | Blorenge Fell Race</title>
+  <meta name="description" content="Synthetic organiser registration test area.">
+  <script>
+    (() => { const h = location.hostname; const allowed = h === "localhost" || h === "127.0.0.1" || h === "black-tree-04204eb03.3.azurestaticapps.net" || (/azurestaticapps\.net$/i.test(h) && /-\d+\.\d+\.azurestaticapps\.net$/i.test(h)); if (!allowed) location.replace("../404.html"); else document.documentElement.classList.remove("prototype-pending"); })();
+  </script>
+  <link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="prototype.css">
+  <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+  <script type="module" src="dashboard.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="prototype-header"><a href="index.html">← Runner test</a><strong>ORGANISER TEST AREA — SYNTHETIC DATA ONLY</strong></header>
+  <main id="main-content" class="prototype-shell">
+    <h1>Organiser test area</h1>
+    <p class="lede">Find and manage shared synthetic test entries. No real registrations, payments or emails are involved.</p>
+    <div id="organiser-alert" class="form-alert" role="status" tabindex="-1" hidden></div>
+
+    <section class="summary-grid" aria-label="Test entry summary">
+      <div><span>Accepted</span><strong id="summary-accepted">0</strong></div><div><span>Waiting list</span><strong id="summary-waiting">0</strong></div><div><span>Payments needing attention</span><strong id="summary-payments">0</strong></div><div><span>Remaining places</span><strong id="summary-remaining">110</strong></div>
+    </section>
+
+    <section class="prototype-card" aria-labelledby="progress-title">
+      <h2 id="progress-title">Testing progress</h2>
+      <ul id="testing-progress" class="progress-checklist">
+        <li data-check="submitted">Test entry submitted</li><li data-check="payment">Mock payment completed</li><li data-check="visible">Entry visible to organiser</li><li data-check="raceNumber">Race number assigned</li><li data-check="managed">Entry cancelled or retained</li><li data-check="reset">Test reset when finished</li>
+      </ul>
+      <p id="journey-complete" class="success-message" hidden>End-to-end registration test completed successfully.</p>
+    </section>
+
+    <section class="prototype-card" aria-labelledby="entries-title">
+      <h2 id="entries-title">Test entries</h2>
+      <div class="organiser-filters"><label>Search<input id="search" type="search" placeholder="Reference, name or example email"></label><label>Entry status<select id="entry-filter"><option value="">All</option><option value="accepted">Accepted</option><option value="waiting_list">Waiting list</option><option value="cancelled">Cancelled</option></select></label><label>Mock payment<select id="payment-filter"><option value="">All</option><option value="not_started">Not started</option><option value="successful">Successful</option><option value="declined">Declined</option><option value="abandoned">Abandoned</option><option value="refunded">Refunded</option></select></label></div>
+      <div id="entrant-list" class="entrant-list"></div><p id="empty-state">There are no test entries. Complete the runner test to add one.</p>
+      <div class="secondary-actions"><button id="export-csv" class="text-button" type="button">Export sanitized test CSV</button><span>The export contains test reference, name, club, category and race-management statuses—not contact or emergency details.</span></div>
+    </section>
+
+    <section id="entry-detail" class="prototype-card selected-entry" aria-labelledby="detail-title" tabindex="-1" hidden>
+      <div class="detail-heading"><div><p class="eyebrow">Selected test entry</p><h2 id="detail-title"></h2><p id="detail-reference"></p></div><button id="close-detail" class="text-button" type="button">Close details</button></div>
+      <dl id="entry-details" class="review-list"></dl>
+      <h3>Available actions</h3><div id="entry-actions" class="form-actions"></div>
+      <div id="message-preview" hidden><h3>Captured message previews</h3><ul id="entry-messages" class="message-list"></ul></div>
+      <div><h3>Audit history</h3><ol id="entry-audit" class="message-list"><li>Loading audit history…</li></ol></div>
+    </section>
+
+    <div class="reset-row"><button id="reset-test" class="text-button danger-link" type="button">Reset test</button></div>
+    <details class="technical-details"><summary>Technical details</summary><dl><dt>Environment</dt><dd id="technical-environment"></dd><dt>Storage</dt><dd id="technical-storage"></dd><dt>Schema</dt><dd id="technical-schema"></dd></dl></details>
+  </main>
+  <dialog id="cancel-entry-dialog" class="confirmation-dialog" aria-labelledby="cancel-entry-title">
+    <h2 id="cancel-entry-title">Cancel test entry</h2>
+    <p id="cancel-entry-reference"></p>
+    <p><strong>Also release race number?</strong></p>
+    <label class="checkbox-field"><input id="release-race-number" type="checkbox" checked> Yes — release it so the number becomes available for another entrant.</label>
+    <div class="form-actions"><button id="keep-entry" class="button button--quiet" type="button">Keep entry</button><button id="confirm-cancel-entry" class="button danger-button" type="button">Cancel entry</button></div>
+  </dialog>
+</body>
+</html>
