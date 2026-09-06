@@ -46,7 +46,7 @@ jobs:
           npm ci --prefix api --ignore-scripts
           node scripts/validate-site.mjs
           node scripts/validate-registration.mjs
-          node --test tests/registration.test.mjs tests/registration-phase2.test.mjs tests/deployment-artifacts.test.mjs
+          node --test tests/*.test.mjs
           node scripts/validate-route.mjs
           node scripts/validate-photos.mjs
           node scripts/stage-deployment-artifacts.mjs development

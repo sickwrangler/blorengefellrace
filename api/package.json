@@ -8,7 +8,10 @@
     "node": ">=20 <23"
   },
   "dependencies": {
+    "@azure/communication-email": "1.1.0",
     "@azure/data-tables": "^13.3.2",
-    "@azure/functions": "^4.7.2"
+    "@azure/functions": "^4.7.2",
+    "@azure/identity": "4.13.1",
+    "stripe": "22.6.1"
   }
 }

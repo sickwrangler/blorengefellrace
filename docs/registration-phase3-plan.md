@@ -82,9 +82,11 @@ These can be finalized after the core architecture and policies above are agreed
 
 Phase 3 should proceed through explicit reviews: decisions agreed; architecture and threat/privacy review approved; isolated production resources approved; provider sandboxes integrated; closed production deployment verified; recovery and launch rehearsal passed; and final go/no-go approval recorded. Deployment completion alone is never approval to open entries.
 
-## Remaining Phase 3B provider work
+## Phase 3B provider work
 
-Phase 3B should select and integrate Stripe Checkout and Azure Communication Services only after organiser decisions and account ownership are confirmed. It should add signed Stripe webhooks, idempotent payment reconciliation and approved refund handling; verified ACS sender configuration, templates and delivery/retry handling; production-specific managed configuration; and sandbox integration tests. All components should first be deployed with server state `CLOSED`. No Phase 3A adapter can make an external payment or send an email.
+Phase 3B implements controlled Stripe Checkout and Azure Communication Services boundaries with fail-closed configuration, signed webhooks, idempotent payment reconciliation, approved full-refund handling, safe-recipient email redirection, templates and scheduled-work domain logic. Provider-neutral tests are complete; real test-mode provider proof and stable-development deployment remain gated on organiser-controlled configuration. See `registration-phase3b.md`.
+
+Progression remains: `Phase 3B — controlled integrations` → `Phase 3C — production infrastructure/application deployed CLOSED` → `Phase 3D — private live pilot with real Stripe and real email` → `Public OPEN`.
 
 ## Low-priority maintenance notes
 

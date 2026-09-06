@@ -20,6 +20,8 @@ The registration development system must use invented test entrants only. The Az
 | Waiting-list name and email | Operate the queue while minimizing data before a place is offered | Private; remove promptly when no longer needed |
 | Private-invitation and management-token hashes | Authorize purpose-bound private and self-service access | Private security data; revoke/expire promptly |
 | Refund request/decision and payment references | Administer refunds and reconcile finance | Private; accounting retention must be decided separately |
+| Stripe test Checkout/payment/refund identifiers and reconciliation state | Reconcile a sandbox payment without storing card data | Private; excluded from public APIs and logs |
+| Intended email address and safe-recipient delivery evidence | Prove communication routing without emailing arbitrary development addresses | Private; actual safe addresses remain runtime configuration |
 | Race number | Race administration and results | May be public in results |
 
 Medical information remains excluded; collecting it would require a specific race-day need, lawful basis, restricted access and retention decision.
