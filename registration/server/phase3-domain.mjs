@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { WFRA_SENIOR_ENTRY_DECLARATION } from "../declarations.mjs";
 
 export const PHASE3_REGISTRATION_STATES = Object.freeze(["CLOSED", "PRIVATE_LIVE", "OPEN", "PAUSED", "CLOSED_FINAL"]);
 export const PRIVATE_INVITATION_KINDS = Object.freeze(["registration", "waiting_list_join", "waiting_list_offer"]);
@@ -12,15 +13,16 @@ export const PHASE3_EVENT = Object.freeze({
   timezone: "Europe/London",
   capacity: 120,
   entryFeePence: 600,
+  wfraMemberPricePence: null,
   transferRefundCutoffLocal: "2026-10-28T23:59:00",
   transferRefundCutoffUtc: "2026-10-28T23:59:00.000Z",
   waitingListOfferHours: 48,
   waitingListReminderHours: 24,
   raceNumbersInitiallyAssigned: false,
   declaration: Object.freeze({
-    identifier: "wfra-competitor-declaration",
-    version: null,
-    contentStatus: "organiser-supplied-approved-wording-required"
+    identifier: WFRA_SENIOR_ENTRY_DECLARATION.identifier,
+    version: WFRA_SENIOR_ENTRY_DECLARATION.version,
+    contentStatus: "organiser-supplied-versioned-content"
   })
 });
 
@@ -46,7 +48,7 @@ function recordAudit(state, actor, action, subjectId = null, before = null, afte
   });
 }
 
-export function createPhase3State({ environment = "development", registrationState, declarationVersion = null } = {}) {
+export function createPhase3State({ environment = "development", registrationState, declarationVersion = WFRA_SENIOR_ENTRY_DECLARATION.version, wfraMemberPricePence = null } = {}) {
   const requested = PHASE3_REGISTRATION_STATES.includes(registrationState) ? registrationState : "CLOSED";
   return {
     schemaVersion: 3,
@@ -54,6 +56,7 @@ export function createPhase3State({ environment = "development", registrationSta
     registrationState: environment === "production" ? "CLOSED" : requested,
     event: {
       ...PHASE3_EVENT,
+      wfraMemberPricePence: Number.isInteger(wfraMemberPricePence) && wfraMemberPricePence >= 0 ? wfraMemberPricePence : null,
       declaration: { ...PHASE3_EVENT.declaration, version: declarationVersion }
     },
     runners: [], registrations: [], payments: [], declarations: [], managementTokens: [],
@@ -108,12 +111,29 @@ export function inspectPrivateInvitation(state, token, { kind, at = new Date(), 
   return { ok: true, invitation: { ...invitation, tokenHash: undefined } };
 }
 
+export function authorizePrivateInvitation(state, token, { kind, at = new Date(), consume = false, allowDevelopmentTest = false } = {}) {
+  const statePermitsPrivateAccess = ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState) || (allowDevelopmentTest && state.environment !== "production" && state.registrationState === "test");
+  if (!statePermitsPrivateAccess) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
+  const checked = inspectPrivateInvitation(state, token, { kind, at, consume: false });
+  if (!checked.ok) return checked;
+  if (kind === "waiting_list_offer") {
+    const offer = state.waitingListOffers?.find((item) => item.invitationId === checked.invitation.id);
+    if (!offer || offer.status !== "offered" || new Date(offer.expiresAt) <= new Date(at)) return { ok: false, code: "OFFER_NOT_ACTIVE" };
+  }
+  return consume ? inspectPrivateInvitation(state, token, { kind, at, consume: true }) : checked;
+}
+
 export function revokePrivateInvitation(state, invitationId, actor, at = new Date()) {
   if (!organiser(actor)) return { ok: false, code: "FORBIDDEN" };
   const invitation = state.privateInvitations.find((item) => item.id === invitationId);
   if (!invitation) return { ok: false, code: "NOT_FOUND" };
   if (!invitation.revokedAt) {
     invitation.revokedAt = iso(at);
+    const offer = state.waitingListOffers?.find((item) => item.invitationId === invitation.id && item.status === "offered");
+    if (offer) {
+      offer.status = "revoked"; offer.completedAt = iso(at);
+      const waiting = state.waitingList?.find((item) => item.id === offer.waitingListId); if (waiting) waiting.status = "waiting";
+    }
     recordAudit(state, actor, "private_invitation_revoked", invitation.id, null, { kind: invitation.kind }, at);
   }
   return { ok: true };
@@ -124,14 +144,19 @@ export function expirePrivateInvitation(state, invitationId, actor, at = new Dat
   const invitation = state.privateInvitations.find((item) => item.id === invitationId);
   if (!invitation) return { ok: false, code: "NOT_FOUND" };
   invitation.expiresAt = iso(at);
+  const offer = state.waitingListOffers?.find((item) => item.invitationId === invitation.id && item.status === "offered");
+  if (offer) {
+    offer.status = "expired"; offer.completedAt = iso(at);
+    const waiting = state.waitingList?.find((item) => item.id === offer.waitingListId); if (waiting) waiting.status = "waiting";
+  }
   recordAudit(state, actor, "private_invitation_expired", invitation.id, null, { kind: invitation.kind }, at);
   return { ok: true };
 }
 
 export function canUsePublicRegistration(state, { invitationToken = null, kind = "registration", at = new Date() } = {}) {
-  if (state.registrationState === "OPEN") return { ok: true, access: "public" };
-  if (state.registrationState !== "PRIVATE_LIVE") return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
-  const invitation = inspectPrivateInvitation(state, invitationToken, { kind, at });
+  if (state.registrationState === "OPEN" && !invitationToken) return { ok: true, access: "public" };
+  if (!["PRIVATE_LIVE", "OPEN"].includes(state.registrationState)) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
+  const invitation = authorizePrivateInvitation(state, invitationToken, { kind, at });
   return invitation.ok ? { ok: true, access: "private", invitation: invitation.invitation } : invitation;
 }
 
@@ -141,8 +166,36 @@ export function validateProductionRunner(input) {
   for (const field of required) if (!String(input[field] ?? "").trim()) errors[field] = "This field is required.";
   if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(input.email).trim())) errors.email = "Enter a valid email address.";
   if (input.raceCategory && !RACE_CATEGORIES.includes(input.raceCategory)) errors.raceCategory = "Select Female or Male / Open.";
+  const age = ageOnRaceDate(input.dateOfBirth);
+  if (!Number.isFinite(age)) errors.dateOfBirth = "Enter a valid date of birth.";
+  else if (age < 16) errors.dateOfBirth = "Entrants must be at least 16 on race day.";
   if (input.affiliated && !String(input.membershipNumber ?? "").trim()) errors.membershipNumber = "Enter the UK Athletics membership number.";
+  if (input.wfraMember && !String(input.wfraMembershipNumber ?? "").trim()) errors.wfraMembershipNumber = "Enter the WFRA membership number.";
+  if (String(input.wfraMembershipNumber ?? "").length > 80 || /[\u0000-\u001f\u007f]/.test(String(input.wfraMembershipNumber ?? ""))) errors.wfraMembershipNumber = "Use no more than 80 ordinary text characters.";
   return errors;
+}
+
+export function ageOnRaceDate(dateOfBirth, raceDate = PHASE3_EVENT.raceDate) {
+  const birth = new Date(`${dateOfBirth}T00:00:00Z`); const race = new Date(`${raceDate}T00:00:00Z`);
+  if (!Number.isFinite(birth.valueOf()) || !Number.isFinite(race.valueOf()) || birth > race) return NaN;
+  let age = race.getUTCFullYear() - birth.getUTCFullYear();
+  if (race.getUTCMonth() < birth.getUTCMonth() || (race.getUTCMonth() === birth.getUTCMonth() && race.getUTCDate() < birth.getUTCDate())) age -= 1;
+  return age;
+}
+
+export function calculateEntryPrice(event, runnerInput = {}) {
+  const standardPricePence = event.entryFeePence;
+  const configuredMemberPrice = Number.isInteger(event.wfraMemberPricePence) && event.wfraMemberPricePence >= 0 ? event.wfraMemberPricePence : null;
+  const eligible = runnerInput.wfraMember === true && Boolean(String(runnerInput.wfraMembershipNumber ?? "").trim());
+  const wfraDiscountApplied = eligible && configuredMemberPrice !== null;
+  return {
+    standardPricePence,
+    wfraMemberPricePence: configuredMemberPrice,
+    priceActuallyChargedPence: wfraDiscountApplied ? configuredMemberPrice : standardPricePence,
+    adjustmentReason: wfraDiscountApplied ? "WFRA_MEMBER_SELF_DECLARED" : eligible ? "WFRA_MEMBER_PRICE_NOT_CONFIGURED" : "STANDARD_ENTRY",
+    wfraDiscountApplied,
+    membershipVerification: "not_automatically_verified"
+  };
 }
 
 export function capacitySummary(state) {
@@ -165,12 +218,21 @@ export function addPlaceRegistration(state, { runnerId, placeStatus = "payment_r
 function validateDeclarationInput(state, declaration) {
   if (!state.event.declaration.version || declaration?.declarationIdentifier !== state.event.declaration.identifier || declaration?.declarationVersion !== state.event.declaration.version) return { ok: false, code: "DECLARATION_VERSION_UNAVAILABLE" };
   if (declaration.accepted !== true || !String(declaration.typedFullName ?? "").trim()) return { ok: false, code: "DECLARATION_NOT_ACCEPTED" };
+  if (!["Competitor", "Parent / Legal Guardian"].includes(declaration.signatoryRole)) return { ok: false, code: "DECLARATION_SIGNATORY_REQUIRED" };
+  return { ok: true };
+}
+
+function validateUnder18Declaration(state, runner, declaration) {
+  const age = ageOnRaceDate(runner.dateOfBirth, state.event.raceDate);
+  if (age < 18) return { ok: false, code: "PARENTAL_CONSENT_REQUIREMENTS_PENDING" };
+  if (declaration.signatoryRole !== "Competitor") return { ok: false, code: "INVALID_SIGNATORY_ROLE" };
   return { ok: true };
 }
 
 function storeRunner(state, input) {
   const runner = { id: shortId("runner") };
-  for (const field of ["email", "firstName", "lastName", "phone", "addressLine1", "addressLine2", "city", "postcode", "raceCategory", "dateOfBirth", "club", "affiliated", "membershipNumber", "emergencyContactName", "emergencyContactPhone"]) runner[field] = typeof input[field] === "string" ? input[field].trim() : input[field];
+  for (const field of ["email", "firstName", "lastName", "phone", "addressLine1", "addressLine2", "city", "postcode", "raceCategory", "dateOfBirth", "club", "affiliated", "membershipNumber", "wfraMember", "wfraMembershipNumber", "emergencyContactName", "emergencyContactPhone"]) runner[field] = typeof input[field] === "string" ? input[field].trim() : input[field];
+  runner.wfraMembershipVerified = false;
   state.runners.push(runner);
   return runner;
 }
@@ -182,26 +244,35 @@ export function beginProductionRegistration(state, input, { invitationToken = nu
   if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
   const declarationCheck = validateDeclarationInput(state, input.declaration);
   if (!declarationCheck.ok) return declarationCheck;
+  const under18Check = validateUnder18Declaration(state, input.runner, input.declaration);
+  if (!under18Check.ok) return under18Check;
   if (capacitySummary(state).remaining < 1) return { ok: false, code: "CAPACITY_FULL" };
   if (state.runners.some((item) => item.email.toLowerCase() === input.runner.email.trim().toLowerCase()) && state.registrations.some((item) => item.runnerId === state.runners.find((runner) => runner.email.toLowerCase() === input.runner.email.trim().toLowerCase())?.id && activeRegistration(item))) return { ok: false, code: "DUPLICATE" };
   if (access.access === "private") {
-    const consumed = inspectPrivateInvitation(state, invitationToken, { kind: "registration", at, consume: true });
+    const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "registration", at, consume: true });
     if (!consumed.ok) return consumed;
   }
   const runner = storeRunner(state, input.runner);
   const registration = addPlaceRegistration(state, { runnerId: runner.id, placeStatus: "payment_reserved" }, { actorType: "runner" }, at).registration;
-  state.payments.push({ id: shortId("payment"), registrationId: registration.id, status: "not_configured", provider: null, externalCall: false, createdAt: iso(at) });
+  const pricing = calculateEntryPrice(state.event, input.runner);
+  runner.wfraDiscountApplied = pricing.wfraDiscountApplied;
+  state.payments.push({ id: shortId("payment"), registrationId: registration.id, status: "not_configured", provider: null, externalCall: false, ...pricing, createdAt: iso(at) });
+  recordAudit(state, { actorType: "system" }, "entry_price_calculated", registration.id, null, { priceActuallyChargedPence: pricing.priceActuallyChargedPence, adjustmentReason: pricing.adjustmentReason, wfraDiscountApplied: pricing.wfraDiscountApplied }, at);
   recordDeclaration(state, { ...input.declaration, registrationId: registration.id }, at);
   const managementToken = issueManagementToken(state, registration.id, { actorType: "system" }, at).token;
-  return { ok: true, registration, managementToken };
+  return { ok: true, registration, managementToken, pricing };
 }
 
 export function joinWaitingList(state, input, { invitationToken = null, at = new Date() } = {}) {
   const access = canUsePublicRegistration(state, { invitationToken, kind: "waiting_list_join", at });
-  if (!access.ok && state.registrationState !== "OPEN") return access;
+  if (!access.ok) return access;
   const minimal = { firstName: String(input.firstName ?? "").trim(), lastName: String(input.lastName ?? "").trim(), email: String(input.email ?? "").trim().toLowerCase() };
   if (!minimal.firstName || !minimal.lastName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(minimal.email)) return { ok: false, code: "VALIDATION_ERROR" };
   if (state.waitingList.some((item) => item.status === "waiting" && item.email === minimal.email)) return { ok: false, code: "DUPLICATE" };
+  if (access.access === "private") {
+    const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_join", at, consume: true });
+    if (!consumed.ok) return consumed;
+  }
   const item = { id: shortId("waiting"), ...minimal, sequence: state.waitingList.length + 1, status: "waiting", joinedAt: iso(at) };
   state.waitingList.push(item);
   recordAudit(state, { actorType: "runner" }, "waiting_list_join", item.id, null, { sequence: item.sequence }, at);
@@ -249,7 +320,7 @@ export function declineWaitingListOffer(state, offerId, actor = { actorType: "ru
 }
 
 export function acceptWaitingListOffer(state, invitationToken, input, at = new Date()) {
-  const checked = inspectPrivateInvitation(state, invitationToken, { kind: "waiting_list_offer", at });
+  const checked = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_offer", at });
   if (!checked.ok) return checked;
   const offer = state.waitingListOffers.find((item) => item.invitationId === checked.invitation.id && item.status === "offered");
   if (!offer || new Date(offer.expiresAt) <= new Date(at)) return { ok: false, code: "OFFER_NOT_ACTIVE" };
@@ -257,7 +328,9 @@ export function acceptWaitingListOffer(state, invitationToken, input, at = new D
   if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
   const declarationCheck = validateDeclarationInput(state, input.declaration);
   if (!declarationCheck.ok) return declarationCheck;
-  const consumed = inspectPrivateInvitation(state, invitationToken, { kind: "waiting_list_offer", at, consume: true });
+  const under18Check = validateUnder18Declaration(state, input.runner, input.declaration);
+  if (!under18Check.ok) return under18Check;
+  const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_offer", at, consume: true });
   if (!consumed.ok) return consumed;
   const runner = storeRunner(state, input.runner);
   // The active offer already reserves this place, so convert that reservation atomically.
@@ -265,20 +338,26 @@ export function acceptWaitingListOffer(state, invitationToken, input, at = new D
   const waiting = state.waitingList.find((item) => item.id === offer.waitingListId); if (waiting) waiting.status = "accepted";
   const registration = { id: shortId("reg"), runnerId: runner.id, entryStatus: "active", placeStatus: "payment_reserved", raceNumber: null, createdAt: iso(at), updatedAt: iso(at), deletedAt: null };
   state.registrations.push(registration);
-  state.payments.push({ id: shortId("payment"), registrationId: registration.id, status: "not_configured", provider: null, externalCall: false, createdAt: iso(at) });
+  const pricing = calculateEntryPrice(state.event, input.runner);
+  runner.wfraDiscountApplied = pricing.wfraDiscountApplied;
+  state.payments.push({ id: shortId("payment"), registrationId: registration.id, status: "not_configured", provider: null, externalCall: false, ...pricing, createdAt: iso(at) });
   recordAudit(state, { actorType: "runner" }, "waiting_list_offer_accepted", offer.id, null, { registrationId: registration.id }, at);
   recordAudit(state, { actorType: "runner" }, "registration_created", registration.id, null, { placeStatus: registration.placeStatus }, at);
   recordDeclaration(state, { ...input.declaration, registrationId: registration.id }, at);
   const managementToken = issueManagementToken(state, registration.id, { actorType: "system" }, at).token;
-  return { ok: true, registration, managementToken };
+  return { ok: true, registration, managementToken, pricing };
 }
 
 export function recordDeclaration(state, input, at = new Date()) {
   const registration = state.registrations.find((item) => item.id === input.registrationId && activeRegistration(item));
   if (!registration) return { ok: false, code: "NOT_FOUND" };
-  if (!state.event.declaration.version || input.declarationIdentifier !== state.event.declaration.identifier || input.declarationVersion !== state.event.declaration.version) return { ok: false, code: "DECLARATION_VERSION_UNAVAILABLE" };
-  if (input.accepted !== true || !String(input.typedFullName ?? "").trim()) return { ok: false, code: "DECLARATION_NOT_ACCEPTED" };
-  const declaration = { id: shortId("declaration"), registrationId: registration.id, runnerId: registration.runnerId, declarationIdentifier: input.declarationIdentifier, declarationVersion: input.declarationVersion, accepted: true, typedFullName: String(input.typedFullName).trim(), acceptedAt: iso(at) };
+  const declarationCheck = validateDeclarationInput(state, input);
+  if (!declarationCheck.ok) return declarationCheck;
+  const runner = state.runners.find((item) => item.id === registration.runnerId);
+  if (!runner) return { ok: false, code: "NOT_FOUND" };
+  const under18Check = validateUnder18Declaration(state, runner, input);
+  if (!under18Check.ok) return under18Check;
+  const declaration = { id: shortId("declaration"), registrationId: registration.id, runnerId: registration.runnerId, declarationIdentifier: input.declarationIdentifier, declarationVersion: input.declarationVersion, accepted: true, typedFullName: String(input.typedFullName).trim(), signatoryRole: input.signatoryRole, acceptedAt: iso(at) };
   state.declarations.push(declaration);
   recordAudit(state, { actorType: "runner" }, "declaration_accepted", registration.id, null, { declarationIdentifier: declaration.declarationIdentifier, declarationVersion: declaration.declarationVersion }, at);
   return { ok: true, declaration };
@@ -306,7 +385,7 @@ export function amendRunner(state, managementToken, changes, { actor = { actorTy
   const beforeCutoff = new Date(at) <= new Date(state.event.transferRefundCutoffUtc);
   const identityFields = ["firstName", "lastName"];
   if (!organiserOverride && !beforeCutoff && identityFields.some((field) => changes[field] !== undefined && changes[field] !== runner[field])) return { ok: false, code: "NAME_LOCKED_AFTER_CUTOFF" };
-  const allowed = ["firstName", "lastName", "email", "phone", "addressLine1", "addressLine2", "city", "postcode", "dateOfBirth", "raceCategory", "club", "affiliated", "membershipNumber", "emergencyContactName", "emergencyContactPhone"];
+  const allowed = ["firstName", "lastName", "email", "phone", "addressLine1", "addressLine2", "city", "postcode", "dateOfBirth", "raceCategory", "club", "affiliated", "membershipNumber", "wfraMember", "wfraMembershipNumber", "emergencyContactName", "emergencyContactPhone"];
   const changedFields = allowed.filter((field) => changes[field] !== undefined && changes[field] !== runner[field]);
   for (const field of changedFields) runner[field] = typeof changes[field] === "string" ? changes[field].trim() : changes[field];
   const ownershipChanged = ["firstName", "lastName", "email"].some((field) => changedFields.includes(field));

@@ -59,7 +59,7 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border: .15rem solid #
 .dashboard-controls { display: grid; gap: .75rem; margin-bottom: 1rem; }
 .message-list { padding: 0; list-style: none; }
 .message-list li { padding: .75rem 0; border-bottom: 1px solid var(--colour-stone); }
-.declaration-placeholder { margin-top: 1.25rem; padding: 1rem; border: 1px solid var(--colour-stone); background: #fff; }
+.declaration-panel { margin-top: 1.25rem; padding: 1rem; border: 1px solid var(--colour-stone); background: #fff; }
 .private-access-controls { display: grid; gap: .75rem; align-items: end; }
 #created-invitation-url { display: block; overflow-wrap: anywhere; }
 @media (min-width: 42rem) { .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dashboard-controls, .organiser-filters { grid-template-columns: 1fr 1fr 1fr; align-items: end; } .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .entrant-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } .choice-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

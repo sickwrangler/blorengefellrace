@@ -13,10 +13,12 @@ Phase 3A implements provider-neutral domain and interface foundations only. It d
 ## Phase 3A implementation status
 
 - The server domain defines `CLOSED`, `PRIVATE_LIVE`, `OPEN`, `PAUSED` and terminal `CLOSED_FINAL`. Capacity and waiting-list availability are derived, not manual states. A production state always initializes as `CLOSED`; state changes require an authenticated organiser, an expected-current-state check and an audit event.
-- Private invitations are opaque, purpose-bound (`registration`, `waiting_list_join` or `waiting_list_offer`), expiring, revocable and stored as hashes. A valid invitation never bypasses the operational state, capacity, offer or payment rules. Organiser controls create, list and revoke links without sending them.
+- Private invitations are opaque, purpose-bound (`registration`, `waiting_list_join` or `waiting_list_offer`), expiring, revocable and stored as hashes. Every protected server operation revalidates current state, purpose, expiry, revocation, usage and, for an offer, the linked offer state. A prior browser check is never treated as authorization. Organiser controls create, inspect, revoke and expire links; the original token is returned only once at creation.
 - The authoritative Phase 3 server configuration records the 28 November 2026 race, 120-place capacity, £6 fee, Europe/London cutoff at 23:59 on 28 October, 48-hour offers, 24-hour reminders and optional race numbers.
 - The runner model includes the agreed name, contact, address, birth, category, club, affiliation and emergency-contact fields. Competition categories are exactly `Female` and `Male / Open`.
-- The declaration record is separate and versioned, with identifier, version, acceptance, typed name, timestamp and runner/registration references. Production remains fail-closed for declaration acceptance until approved WFRA wording and its version are supplied.
+- The organiser-supplied WFRA senior-entry declaration is stored once as versioned content (`WFRA_SENIOR_ENTRY`, `21/02/23`). Acceptance records retain that identifier/version, the typed name, signatory role, timestamp and runner/registration references. Entrants aged 16 or 17 remain blocked pending confirmation of the applicable WFRA parental-consent form and process; the system does not infer that typing a name completes parental consent.
+- UK Athletics affiliation and WFRA membership are separate. WFRA membership is self-declared, its flexible text membership number is not automatically verified, and it is excluded from public responses/exports.
+- The server owns pricing. Standard entry remains £6.00. A configurable WFRA member price is modelled but intentionally unset, so no discount is applied until the organiser approves the amount; browser-supplied amounts are ignored.
 - Opaque management tokens support amendments without runner accounts. Before the cutoff, changing identity or email rotates and invalidates the token. After the cutoff, runner name changes are locked; other permitted details remain amendable, and an organiser override is audited.
 - Capacity distinguishes confirmed places, payment reservations and active waiting-list-offer reservations. Waiting-list joins store only name and email; offers include reminder/expiry times and progress in order after decline or expiry.
 - Refund requests, organiser approval/rejection, recorded refund and separate place release are distinct audited actions. No runner self-cancellation or live refund is implemented.
@@ -49,6 +51,8 @@ These choices affect provider integration, production resources or final policy 
 - transactional email provider, sender address/domain and responsibility for delivery problems;
 - the minimum runner, eligibility, emergency-contact and consent information that must be collected;
 - retention periods for unsuccessful attempts, active/cancelled entries, emergency details, consent/audit records and payment metadata;
+- the WFRA member price or discount amount;
+- the WFRA parental-consent form, signatory evidence and process for entrants aged 16 or 17;
 - which runner amendments are self-service, organiser-approved or prohibited, and the amendment cutoff;
 - waiting-list ordering, whether promotion is automatic or organiser-controlled, response/payment deadline and handling of expired offers;
 - cancellation rules, place release, waiting-list promotion and whether any transfer or deferral is permitted;

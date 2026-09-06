@@ -1,28 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
   PHASE3_EVENT, PHASE3_REGISTRATION_STATES, RACE_CATEGORIES,
   createPhase3State, transitionRegistrationState, environmentStateLabel,
-  issuePrivateInvitation, inspectPrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, canUsePublicRegistration,
-  validateProductionRunner, capacitySummary, addPlaceRegistration,
+  issuePrivateInvitation, inspectPrivateInvitation, authorizePrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, canUsePublicRegistration,
+  validateProductionRunner, calculateEntryPrice, capacitySummary, addPlaceRegistration,
   beginProductionRegistration, joinWaitingList, createNextWaitingListOffer, expireWaitingListOffers, declineWaitingListOffer, acceptWaitingListOffer,
   recordDeclaration, issueManagementToken, amendRunner,
   assignPhase3RaceNumber, removePhase3RaceNumber,
   requestRefund, decideRefund, markRefunded, releaseRefundedPlace
 } from "../registration/server/phase3-domain.mjs";
+import { WFRA_SENIOR_ENTRY_DECLARATION } from "../registration/declarations.mjs";
 
 const admin = { authenticated: true, role: "Organiser", actorType: "organiser", id: "organiser-test" };
 const runner = (number = 1, overrides = {}) => ({
   id: `runner_${number}`, email: `runner-${number}@example.com`, firstName: `Runner ${number}`, lastName: "Example",
   phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA",
-  raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", affiliated: false, membershipNumber: "",
+  raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", affiliated: false, membershipNumber: "", wfraMember: false, wfraMembershipNumber: "",
   emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", ...overrides
 });
 const beforeCutoff = new Date("2026-10-01T12:00:00.000Z");
 const afterCutoff = new Date("2026-10-29T00:00:00.000Z");
 
+const declaration = (overrides = {}) => ({ declarationIdentifier: "WFRA_SENIOR_ENTRY", declarationVersion: "21/02/23", accepted: true, typedFullName: "Runner 1 Example", signatoryRole: "Competitor", ...overrides });
+
 function stateWithRegistration(options = {}) {
-  const state = createPhase3State({ registrationState: "OPEN", declarationVersion: "wfra-approved-v1", ...options });
+  const state = createPhase3State({ registrationState: "OPEN", ...options });
   const person = runner(); state.runners.push(person);
   const created = addPlaceRegistration(state, { runnerId: person.id, placeStatus: "confirmed" }, { actorType: "runner" }, beforeCutoff);
   return { state, person, registration: created.registration };
@@ -80,15 +84,64 @@ test("a private URL never bypasses CLOSED, PAUSED or CLOSED_FINAL state", () => 
   }
 });
 
+test("every private-link purpose is revalidated for revocation, manual/natural expiry, purpose and usage", () => {
+  for (const kind of ["registration", "waiting_list_join"]) {
+    const revokedState = createPhase3State({ registrationState: "PRIVATE_LIVE" });
+    const revoked = issuePrivateInvitation(revokedState, { kind, expiresAt: "2026-10-02T12:00:00Z" }, admin, beforeCutoff);
+    assert.equal(authorizePrivateInvitation(revokedState, revoked.token, { kind, at: beforeCutoff }).ok, true);
+    revokePrivateInvitation(revokedState, revoked.invitation.id, admin, beforeCutoff);
+    assert.equal(authorizePrivateInvitation(revokedState, revoked.token, { kind, at: beforeCutoff }).code, "INVITATION_REVOKED");
+
+    const manualState = createPhase3State({ registrationState: "PRIVATE_LIVE" });
+    const manual = issuePrivateInvitation(manualState, { kind, expiresAt: "2026-10-02T12:00:00Z" }, admin, beforeCutoff);
+    expirePrivateInvitation(manualState, manual.invitation.id, admin, beforeCutoff);
+    assert.equal(authorizePrivateInvitation(manualState, manual.token, { kind, at: beforeCutoff }).code, "INVITATION_EXPIRED");
+
+    const naturalState = createPhase3State({ registrationState: "PRIVATE_LIVE" });
+    const natural = issuePrivateInvitation(naturalState, { kind, expiresAt: "2026-10-01T13:00:00Z" }, admin, beforeCutoff);
+    assert.equal(authorizePrivateInvitation(naturalState, natural.token, { kind, at: "2026-10-01T13:00:01Z" }).code, "INVITATION_EXPIRED");
+  }
+
+  const state = createPhase3State({ registrationState: "PRIVATE_LIVE" });
+  const invitation = issuePrivateInvitation(state, { kind: "registration", expiresAt: "2026-10-02T12:00:00Z" }, admin, beforeCutoff);
+  assert.equal(authorizePrivateInvitation(state, "unknown", { kind: "registration", at: beforeCutoff }).code, "INVITATION_NOT_FOUND");
+  assert.equal(authorizePrivateInvitation(state, `${invitation.token}tampered`, { kind: "registration", at: beforeCutoff }).code, "INVITATION_NOT_FOUND");
+  assert.equal(authorizePrivateInvitation(state, invitation.token, { kind: "waiting_list_join", at: beforeCutoff }).code, "INVITATION_WRONG_PURPOSE");
+  assert.equal(authorizePrivateInvitation(state, invitation.token, { kind: "registration", at: beforeCutoff, consume: true }).ok, true);
+  assert.equal(authorizePrivateInvitation(state, invitation.token, { kind: "registration", at: beforeCutoff }).code, "INVITATION_USED");
+});
+
+test("private waiting-list join is single-use and rechecks the invitation during the operation", () => {
+  const state = createPhase3State({ registrationState: "PRIVATE_LIVE" });
+  const invite = issuePrivateInvitation(state, { kind: "waiting_list_join", expiresAt: "2026-10-02T12:00:00Z" }, admin, beforeCutoff);
+  assert.equal(joinWaitingList(state, runner(), { invitationToken: invite.token, at: beforeCutoff }).ok, true);
+  assert.equal(joinWaitingList(state, runner(2), { invitationToken: invite.token, at: beforeCutoff }).code, "INVITATION_USED");
+});
+
+test("revoked or expired waiting-list offers cannot create a registration or claim their reserved place", () => {
+  for (const mode of ["revoke", "manual-expiry", "natural-expiry"]) {
+    const state = createPhase3State({ registrationState: "OPEN" });
+    joinWaitingList(state, runner(), { at: beforeCutoff });
+    const offered = createNextWaitingListOffer(state, admin, beforeCutoff);
+    assert.equal(authorizePrivateInvitation(state, offered.token, { kind: "waiting_list_offer", at: beforeCutoff }).ok, true);
+    if (mode === "revoke") revokePrivateInvitation(state, state.privateInvitations[0].id, admin, beforeCutoff);
+    if (mode === "manual-expiry") expirePrivateInvitation(state, state.privateInvitations[0].id, admin, beforeCutoff);
+    const attemptedAt = mode === "natural-expiry" ? new Date(offered.offer.expiresAt).getTime() + 1 : beforeCutoff;
+    const result = acceptWaitingListOffer(state, offered.token, { runner: runner(), declaration: declaration() }, attemptedAt);
+    assert.equal(result.ok, false); assert.equal(state.registrations.length, 0); assert.equal(state.payments.length, 0);
+    if (mode !== "natural-expiry") assert.equal(capacitySummary(state).offerReserved, 0);
+  }
+});
+
 test("private and open registration reserve a place only after state, capacity, runner and declaration checks", () => {
-  const state = createPhase3State({ registrationState: "PRIVATE_LIVE", declarationVersion: "wfra-approved-v1" });
+  const state = createPhase3State({ registrationState: "PRIVATE_LIVE" });
   const invite = issuePrivateInvitation(state, { kind: "registration", expiresAt: "2026-10-02T12:00:00Z" }, admin, beforeCutoff);
-  const input = { runner: runner(), declaration: { declarationIdentifier: "wfra-competitor-declaration", declarationVersion: "wfra-approved-v1", accepted: true, typedFullName: "Runner 1 Example" } };
+  const input = { runner: runner(), declaration: declaration() };
   const created = beginProductionRegistration(state, input, { invitationToken: invite.token, at: beforeCutoff });
   assert.equal(created.ok, true); assert.equal(created.registration.placeStatus, "payment_reserved"); assert.ok(created.managementToken.length >= 40);
   assert.equal(state.payments[0].status, "not_configured"); assert.equal(state.payments[0].externalCall, false);
   assert.equal(beginProductionRegistration(state, { ...input, runner: runner(2) }, { invitationToken: invite.token, at: beforeCutoff }).code, "INVITATION_USED");
-  const closed = createPhase3State({ environment: "production", declarationVersion: "wfra-approved-v1" });
+  const closed = createPhase3State({ environment: "production" });
   assert.equal(beginProductionRegistration(closed, input, { at: beforeCutoff }).code, "REGISTRATION_NOT_ACCEPTING");
 });
 
@@ -97,6 +150,59 @@ test("runner validation accepts exactly the approved competition categories and 
   for (const raceCategory of RACE_CATEGORIES) assert.deepEqual(validateProductionRunner(runner(1, { raceCategory })), {});
   assert.equal(validateProductionRunner(runner(1, { raceCategory: "Non-binary" })).raceCategory, "Select Female or Male / Open.");
   assert.ok(validateProductionRunner(runner(1, { affiliated: true })).membershipNumber);
+});
+
+test("UK Athletics and WFRA membership are separate and WFRA numbers remain format-neutral", () => {
+  assert.deepEqual(validateProductionRunner(runner(1, { affiliated: true, membershipNumber: "UKA-123", wfraMember: true, wfraMembershipNumber: "South Wales ABC / 42" })), {});
+  assert.ok(validateProductionRunner(runner(1, { wfraMember: true, wfraMembershipNumber: "" })).wfraMembershipNumber);
+  assert.deepEqual(validateProductionRunner(runner(1, { wfraMember: true, wfraMembershipNumber: "AB 12-XY/9" })), {});
+  assert.ok(validateProductionRunner(runner(1, { wfraMember: true, wfraMembershipNumber: "x".repeat(81) })).wfraMembershipNumber);
+});
+
+test("server calculates standard and configured WFRA prices and ignores browser amount fields", () => {
+  const unconfigured = createPhase3State({ registrationState: "OPEN" });
+  const standard = calculateEntryPrice(unconfigured.event, { wfraMember: false, priceActuallyChargedPence: 1, amount: 1 });
+  assert.equal(standard.priceActuallyChargedPence, 600);
+  const pending = calculateEntryPrice(unconfigured.event, { wfraMember: true, wfraMembershipNumber: "WFRA A-12", amount: 1 });
+  assert.equal(pending.priceActuallyChargedPence, 600); assert.equal(pending.adjustmentReason, "WFRA_MEMBER_PRICE_NOT_CONFIGURED"); assert.equal(pending.wfraDiscountApplied, false);
+  const configured = createPhase3State({ registrationState: "OPEN", wfraMemberPricePence: 500 });
+  const member = calculateEntryPrice(configured.event, { wfraMember: true, wfraMembershipNumber: "WFRA A-12", priceActuallyChargedPence: 1 });
+  assert.equal(member.priceActuallyChargedPence, 500); assert.equal(member.wfraDiscountApplied, true);
+  const created = beginProductionRegistration(configured, { runner: runner(9, { wfraMember: true, wfraMembershipNumber: "WFRA A-12", amount: 1 }), declaration: declaration({ typedFullName: "Runner 9 Example" }) }, { at: beforeCutoff });
+  assert.equal(created.pricing.priceActuallyChargedPence, 500); assert.equal(configured.payments[0].priceActuallyChargedPence, 500);
+});
+
+test("official declaration content and version load from one source", () => {
+  assert.equal(WFRA_SENIOR_ENTRY_DECLARATION.identifier, "WFRA_SENIOR_ENTRY");
+  assert.equal(WFRA_SENIOR_ENTRY_DECLARATION.version, "21/02/23");
+  assert.equal(WFRA_SENIOR_ENTRY_DECLARATION.paragraphs[0], "I accept the hazards inherent in fell running and acknowledge that I am entering and running at my own risk.");
+  assert.equal(WFRA_SENIOR_ENTRY_DECLARATION.paragraphs.at(-1), "(v.21/02/23)");
+  assert.equal(PHASE3_EVENT.declaration.identifier, WFRA_SENIOR_ENTRY_DECLARATION.identifier);
+});
+
+test("under-18 entries cannot falsely complete pending the parental-consent decision", () => {
+  for (const signatoryRole of ["Competitor", "Parent / Legal Guardian"]) {
+    const state = createPhase3State({ registrationState: "OPEN" });
+    const result = beginProductionRegistration(state, { runner: runner(16, { dateOfBirth: "2009-12-01" }), declaration: declaration({ signatoryRole }) }, { at: beforeCutoff });
+    assert.equal(result.code, "PARENTAL_CONSENT_REQUIREMENTS_PENDING"); assert.equal(state.registrations.length, 0);
+  }
+  const state = createPhase3State({ registrationState: "OPEN" });
+  assert.equal(beginProductionRegistration(state, { runner: runner(), declaration: declaration({ accepted: false }) }, { at: beforeCutoff }).code, "DECLARATION_NOT_ACCEPTED");
+});
+
+test("all runner data-field labels use reviewed English and South Wales Welsh copy", () => {
+  const html = fs.readFileSync("registration/index.html", "utf8");
+  for (const label of [
+    "Email address / Cyfeiriad e-bost", "First name / Enw cyntaf", "Last name / Cyfenw", "Phone number / Rhif ffôn",
+    "Address line 1 / Llinell cyfeiriad 1", "Address line 2 / Llinell cyfeiriad 2", "City / Dinas", "Postcode / Cod post",
+    "Race category / Categori ras", "Date of birth / Dyddiad geni", "Club / Clwb",
+    "Affiliated with UK Athletics? / Ydych chi'n gysylltiedig ag UK Athletics?", "UK Athletics membership number / Rhif aelodaeth UK Athletics",
+    "WFRA member? / Ydych chi'n aelod o WFRA?", "WFRA membership number / Rhif aelodaeth WFRA",
+    "Emergency contact name / Enw cyswllt mewn argyfwng", "Emergency contact phone number / Rhif ffôn cyswllt mewn argyfwng",
+    "Enter your full name to sign the declaration / Rhowch eich enw llawn i lofnodi'r datganiad"
+  ]) assert.ok(html.includes(label), `missing bilingual label: ${label}`);
+  assert.ok(html.includes("Female / Benyw")); assert.ok(html.includes("Male / Open — Gwryw / Agored"));
+  assert.equal(html.includes("Dyddiad Genu"), false); assert.equal(html.includes("Cyfeiriad (1)"), false);
 });
 
 test("capacity counts confirmed, payment reservations and live offers and never exceeds 120", () => {
@@ -130,11 +236,11 @@ test("declining an offer automatically progresses to the next eligible person", 
 });
 
 test("a waiting-list offer collects full details only on acceptance and converts its reserved place", () => {
-  const state = createPhase3State({ registrationState: "OPEN", declarationVersion: "wfra-approved-v1" });
+  const state = createPhase3State({ registrationState: "OPEN" });
   const waiting = joinWaitingList(state, runner(), { at: beforeCutoff }).waitingListEntry;
   const offer = createNextWaitingListOffer(state, admin, beforeCutoff);
   assert.equal(capacitySummary(state).offerReserved, 1);
-  const accepted = acceptWaitingListOffer(state, offer.token, { runner: runner(), declaration: { declarationIdentifier: "wfra-competitor-declaration", declarationVersion: "wfra-approved-v1", accepted: true, typedFullName: "Runner 1 Example" } }, beforeCutoff);
+  const accepted = acceptWaitingListOffer(state, offer.token, { runner: runner(), declaration: declaration() }, beforeCutoff);
   assert.equal(accepted.ok, true); assert.equal(state.waitingList.find((item) => item.id === waiting.id).status, "accepted");
   assert.deepEqual({ offerReserved: capacitySummary(state).offerReserved, paymentReserved: capacitySummary(state).paymentReserved, reserved: capacitySummary(state).reserved }, { offerReserved: 0, paymentReserved: 1, reserved: 1 });
   assert.equal(acceptWaitingListOffer(state, offer.token, { runner: runner(2), declaration: {} }, beforeCutoff).code, "INVITATION_USED");
@@ -142,10 +248,10 @@ test("a waiting-list offer collects full details only on acceptance and converts
 
 test("declaration records exact identifier/version and fails closed without approved wording", () => {
   const unavailable = stateWithRegistration({ declarationVersion: null });
-  assert.equal(recordDeclaration(unavailable.state, { registrationId: unavailable.registration.id, declarationIdentifier: "wfra-competitor-declaration", declarationVersion: null, accepted: true, typedFullName: "Runner Example" }).code, "DECLARATION_VERSION_UNAVAILABLE");
+  assert.equal(recordDeclaration(unavailable.state, { registrationId: unavailable.registration.id, ...declaration({ declarationVersion: null, typedFullName: "Runner Example" }) }).code, "DECLARATION_VERSION_UNAVAILABLE");
   const { state, registration } = stateWithRegistration();
-  const accepted = recordDeclaration(state, { registrationId: registration.id, declarationIdentifier: "wfra-competitor-declaration", declarationVersion: "wfra-approved-v1", accepted: true, typedFullName: "Runner Example" }, beforeCutoff);
-  assert.equal(accepted.declaration.acceptedAt, beforeCutoff.toISOString()); assert.equal(accepted.declaration.declarationVersion, "wfra-approved-v1");
+  const accepted = recordDeclaration(state, { registrationId: registration.id, ...declaration({ typedFullName: "Runner Example" }) }, beforeCutoff);
+  assert.equal(accepted.declaration.acceptedAt, beforeCutoff.toISOString()); assert.equal(accepted.declaration.declarationVersion, "21/02/23");
 });
 
 test("transfer before cutoff rotates the management token and names lock after cutoff", () => {

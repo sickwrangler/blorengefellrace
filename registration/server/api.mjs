@@ -1,7 +1,7 @@
 import { actorForRequest } from "./auth.mjs";
 
 const response = (status, body, headers = {}) => ({ status, body, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
-const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "NOT_FOUND" ? 404 : 409, result);
+const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "NOT_FOUND" ? 404 : result.code === "LINK_UNAVAILABLE" ? 410 : 409, result);
 
 export function createApi({ service, environment = "local" }) {
   const attempts = new Map();
@@ -10,7 +10,8 @@ export function createApi({ service, environment = "local" }) {
     const actor = actorForRequest({ environment, hostname, headers });
     if (method === "POST" && !pathname.startsWith("/api/v2/organiser/")) { const key = `${hostname}:${pathname}`; const current = attempts.get(key) ?? { startedAt: Date.now(), count: 0 }; if (Date.now() - current.startedAt > 60_000) { current.startedAt = Date.now(); current.count = 0; } current.count += 1; attempts.set(key, current); if (current.count > 30) return response(429, { ok: false, code: "RATE_LIMITED" }, { "retry-after": "60" }); }
     if (method === "GET" && pathname === "/api/v2/registration/status") return response(200, { ok: true, ...(await service.status()) });
-    if (method === "POST" && pathname === "/api/v2/registrations") return resultResponse(await service.create(body, { idempotencyKey: headers["idempotency-key"] }), 201);
+    if (method === "GET" && pathname === "/api/v2/private-access") return resultResponse(await service.inspectPrivateAccess(headers["x-private-invitation"], query.purpose));
+    if (method === "POST" && pathname === "/api/v2/registrations") return resultResponse(await service.create(body, { idempotencyKey: headers["idempotency-key"], privateInvitationToken: headers["x-private-invitation"] }), 201);
     const confirmation = pathname.match(/^\/api\/v2\/registrations\/confirmation\/([^/]+)$/);
     if (method === "GET" && confirmation) return resultResponse(await service.confirmation(decodeURIComponent(confirmation[1])));
     const mockPayment = pathname.match(/^\/api\/v2\/registrations\/([^/]+)\/mock-payment$/);

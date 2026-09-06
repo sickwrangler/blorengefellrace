@@ -8,6 +8,7 @@ export const isPreview = environment === "preview";
 export const isDevelopment = environment === "development";
 export const canTest = isLocal || isPreview || isDevelopment;
 const usesApi = isLocal || isDevelopment;
+const privateInvitationToken = new URLSearchParams(window.location.search).get("invite");
 export const supportsManagedApi = usesApi;
 const storageAdapter = {
   getItem(key) { return window.localStorage.getItem(key); },
@@ -57,6 +58,12 @@ function repositorySnapshot() {
 }
 
 export const prototype = {
+  hasPrivateInvitation: Boolean(privateInvitationToken),
+  async inspectPrivateAccess(purpose = "registration") {
+    if (!privateInvitationToken || !usesApi) return { ok: !privateInvitationToken };
+    try { return await api(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }); }
+    catch { return { ok: false, code: "LINK_UNAVAILABLE" }; }
+  },
   async status() {
     if (!canTest) return { state: "closed", operationalState: "CLOSED", environment: "production", capacity: 120, accepted: 0, remaining: 120, waiting: 0, recovery: null };
     if (usesApi) {
@@ -66,7 +73,7 @@ export const prototype = {
     return { ...statusSummary(snapshot.state), recovery: snapshot.recovery };
   },
   submit(payload) {
-    if (usesApi) return api("/registrations", { method: "POST", body: JSON.stringify(payload), headers: { "idempotency-key": submissionKey } }).then((result) => { if (result.ok) { confirmationTokens.set(result.registration.id, result.confirmationToken); submissionKey = crypto.randomUUID(); } return result; }).catch(() => ({ ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable." }));
+    if (usesApi) return api("/registrations", { method: "POST", body: JSON.stringify(payload), headers: { "idempotency-key": submissionKey, ...(privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {}) } }).then((result) => { if (result.ok) { confirmationTokens.set(result.registration.id, result.confirmationToken); submissionKey = crypto.randomUUID(); } return result; }).catch(() => ({ ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable." }));
     return localApiOrRepository("/registrations", { method: "POST", body: JSON.stringify(payload) }, (state) => submitRegistration(state, payload, { source: "runner" }));
   },
   payment(id, outcome) {

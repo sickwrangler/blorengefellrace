@@ -38,6 +38,7 @@ export const PRODUCTION_FILES = Object.freeze([
 ]);
 
 export const DEVELOPMENT_REGISTRATION_FILES = Object.freeze([
+  "registration/declarations.mjs",
   "registration/dashboard.html",
   "registration/dashboard.mjs",
   "registration/index.html",
@@ -56,6 +57,7 @@ const DEVELOPMENT_API_COPIES = Object.freeze([
   ["api/src/functions/registration.mjs", "src/functions/registration.mjs"],
   ["api/src/storage.mjs", "src/storage.mjs"],
   ["registration/registration-core.mjs", "src/shared/registration-core.mjs"],
+  ["registration/declarations.mjs", "src/shared/declarations.mjs"],
   ["registration/server/adapters.mjs", "src/shared/server/adapters.mjs"],
   ["registration/server/api.mjs", "src/shared/server/api.mjs"],
   ["registration/server/auth.mjs", "src/shared/server/auth.mjs"],

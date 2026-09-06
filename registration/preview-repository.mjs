@@ -24,7 +24,7 @@ export function createFixtureState(fixtures, environment = "preview") {
   const state = initialState({ environment, state: "test", capacity: 120 });
   const waiting = [];
   for (const fixture of fixtures.filter((item) => item.submit)) {
-    const result = submitRegistration(state, fixture.runner, { source: "seed" });
+    const result = submitRegistration(state, { wfraMember: false, wfraMembershipNumber: "", declarationSignatoryRole: "Competitor", ...fixture.runner }, { source: "seed" });
     if (!result.ok) continue;
     if (fixture.payment) applyMockPayment(state, result.registration.id, fixture.payment);
     if (fixture.refund) applyMockPayment(state, result.registration.id, "refunded");

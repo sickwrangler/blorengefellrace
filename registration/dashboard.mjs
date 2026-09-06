@@ -53,7 +53,7 @@ async function renderPrivateInvitations() {
   if (!result.ok || !result.invitations.length) { const li = document.createElement("li"); li.textContent = result.ok ? "No private links created." : "Private links are unavailable."; list.append(li); return; }
   for (const invitation of result.invitations) {
     const li = document.createElement("li");
-    const status = invitation.revokedAt ? "Revoked" : invitation.expired ? "Expired" : "Active";
+    const status = invitation.status ?? (invitation.revokedAt ? "Revoked" : "Active");
     const text = document.createElement("span"); text.textContent = `${invitation.kind.replaceAll("_", " ")} · ${status} · expires ${new Date(invitation.expiresAt).toLocaleString()}`;
     li.append(text);
     if (status === "Active") {
@@ -104,7 +104,7 @@ function renderDetail(item) {
   const panel = document.querySelector("#entry-detail"); panel.hidden = false;
   document.querySelector("#detail-title").textContent = `${item.runner.firstName} ${item.runner.lastName}`;
   document.querySelector("#detail-reference").textContent = item.testReference;
-  const fields = { "Synthetic email": item.runner.email, "Synthetic phone": item.runner.phone, Club: item.runner.club, Category: item.runner.genderCategory, "Entry status": item.entryStatus.replace("_", " "), "Mock-payment status": item.paymentStatus.replace("_", " "), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact": `${item.runner.emergencyName} — ${item.runner.emergencyPhone}`, Travel: item.runner.travelMethod };
+  const fields = { "Email address / Cyfeiriad e-bost": item.runner.email, "Phone number / Rhif ffôn": item.runner.phone, "Club / Clwb": item.runner.club, "Race category / Categori ras": item.runner.genderCategory, "UK Athletics membership number / Rhif aelodaeth UK Athletics": item.runner.membershipNumber ?? "Not supplied", "WFRA member? / Ydych chi'n aelod o WFRA?": item.runner.wfraMember ? "Yes / Ydw (self-declared, not verified)" : "No / Nac ydw", "WFRA membership number / Rhif aelodaeth WFRA": item.runner.wfraMembershipNumber ?? "Not supplied", "Entry status": item.entryStatus.replace("_", " "), "Mock-payment status": item.paymentStatus.replace("_", " "), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact name / Enw cyswllt mewn argyfwng": item.runner.emergencyName, "Emergency contact phone number / Rhif ffôn cyswllt mewn argyfwng": item.runner.emergencyPhone, "Travel method / Dull teithio": item.runner.travelMethod, "Price calculated by server": item.pricing?.priceActuallyChargedPence == null ? "Not recorded" : `£${(item.pricing.priceActuallyChargedPence / 100).toFixed(2)} · ${item.pricing.adjustmentReason}` };
   document.querySelector("#entry-details").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
   renderActions(item); renderMessages(item);
 }

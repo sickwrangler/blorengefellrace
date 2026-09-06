@@ -17,8 +17,8 @@ const runner = (number = 1, overrides = {}) => ({
   firstName: `Runner${number}`, lastName: "Example", email: `runner${number}@example.com`, phone: "07700 900123",
   addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA",
   dateOfBirth: "1990-06-15", genderCategory: "Female", club: number % 2 ? "Example Harriers" : "",
-  affiliated: false, membershipNumber: "", emergencyName: "Contact Example", emergencyPhone: "07700 900456",
-  travelMethod: "Shared car", declarationName: `Runner${number} Example`, acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, ...overrides
+  affiliated: false, membershipNumber: "", wfraMember: false, wfraMembershipNumber: "", emergencyName: "Contact Example", emergencyPhone: "07700 900456",
+  travelMethod: "Shared car", declarationName: `Runner${number} Example`, declarationSignatoryRole: "Competitor", acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, ...overrides
 });
 
 test("production and invalid configurations fail closed", () => {
@@ -61,11 +61,11 @@ test("open behaviour exists behind the server state model but cannot be selected
   assert.equal(submitRegistration(production, runner(2)).ok, false);
 });
 
-test("minimum age is calculated on race day", () => {
+test("minimum age is calculated on race day and 16/17-year-old completion is blocked pending parental consent", () => {
   assert.equal(ageOnDate("2010-11-28"), 16);
   assert.equal(ageOnDate("2010-11-29"), 15);
   const state = initialState();
-  assert.equal(submitRegistration(state, runner(1, { dateOfBirth: "2010-11-28" })).ok, true);
+  assert.equal(submitRegistration(state, runner(1, { dateOfBirth: "2010-11-28" })).code, "VALIDATION_ERROR");
   assert.equal(submitRegistration(state, runner(2, { dateOfBirth: "2010-11-29" })).code, "VALIDATION_ERROR");
 });
 

@@ -7,6 +7,7 @@ const target = path.join(root, "api", "src", "shared");
 fs.rmSync(target, { recursive: true, force: true });
 fs.mkdirSync(path.join(target, "server"), { recursive: true });
 fs.copyFileSync(path.join(root, "registration", "registration-core.mjs"), path.join(target, "registration-core.mjs"));
+fs.copyFileSync(path.join(root, "registration", "declarations.mjs"), path.join(target, "declarations.mjs"));
 for (const name of ["adapters.mjs", "api.mjs", "auth.mjs", "repositories.mjs", "service.mjs"]) {
   fs.copyFileSync(path.join(root, "registration", "server", name), path.join(target, "server", name));
 }

@@ -12,7 +12,8 @@ The registration development system must use invented test entrants only. The Az
 | Date of birth | Verify minimum age and calculate the appropriate results category | Private; derived category may be public |
 | Gender/category | Produce result categories | Private during registration; approved category may be public |
 | Running club | Race administration and results | May be public in results |
-| Affiliation and membership number | Future eligibility/fee checks, subject to organiser confirmation | Private |
+| UK Athletics affiliation and membership number | Affiliation evidence, separate from WFRA membership | Private |
+| Self-declared WFRA membership, membership number and discount evidence | Apply and audit an approved member price without claiming verification | Private; excluded from public APIs, results and public exports; retention requires organiser approval |
 | Emergency-contact name and phone | Race-day incident contact | Private; race-day use only |
 | Travel method | Event travel planning | Private/aggregate use only |
 | Terms and privacy versions/timestamp | Evidence of the agreed versions | Private |
@@ -26,6 +27,8 @@ The registration development system must use invented test entrants only. The Az
 Medical information remains excluded; collecting it would require a specific race-day need, lawful basis, restricted access and retention decision.
 
 ## Retention and rights
+
+WFRA membership and discount evidence needs an approved retention period before real registration opens; it must not be retained indefinitely by default.
 
 Prototype data should be reset after each review session and is not backed up. Final periods are deliberately not invented. The organiser must approve a production schedule covering incomplete attempts, waiting-list records, private invitations, active/cancelled entries, addresses and contact details, declarations/consent, audit records, payment/accounting metadata and public results before real collection starts. Emergency-contact data is short-lived operational information and should be deleted or anonymised soon after the event once incident needs have ended. Durable financial/accounting evidence must be separated from race-operation data and retained only for its approved purpose.
 

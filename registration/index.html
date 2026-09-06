@@ -9,86 +9,96 @@
   <script type="module" src="runner.mjs"></script>
 </head>
 <body>
-  <a class="skip-link" href="#main-content">Skip to main content</a>
-  <header class="prototype-header"><a href="../enter.html">← Back to entry information</a><span id="environment-status" class="environment-status">Development · Closed</span></header>
+  <a class="skip-link" href="#main-content">Skip to main content / Neidio i'r prif gynnwys</a>
+  <header class="prototype-header"><a href="../enter.html">← Back to entry information / Yn ôl i wybodaeth gofrestru</a><span id="environment-status" class="environment-status">Development · Closed</span></header>
   <main id="main-content" class="prototype-shell">
-    <h1>Blorenge Fell Race registration</h1>
+    <h1>Blorenge Fell Race registration / Cofrestru Ras Fell y Blorenge</h1>
+    <section id="invalid-link-panel" class="prototype-card" hidden>
+      <p class="eyebrow">Private access / Mynediad preifat</p>
+      <h2>This link is no longer available. / Dydy'r ddolen hon ddim ar gael bellach.</h2>
+      <p>Please ask the race organiser for help. / Gofynnwch i drefnydd y ras am help.</p>
+    </section>
     <section id="closed-panel" class="prototype-card" hidden>
-      <p class="eyebrow">Registration status</p><h2>2026 entries are not yet open</h2>
-      <p>This test cannot accept or store an entry on the production website.</p><p><a class="button" href="../enter.html">Return to entry information</a></p>
+      <p class="eyebrow">Registration status / Statws cofrestru</p><h2>2026 entries are not yet open / Dydy cofrestru ar gyfer 2026 ddim ar agor eto</h2>
+      <p>This test cannot accept or store an entry on the production website. / Ni all y prawf hwn dderbyn na chadw cofrestriad ar y wefan gynhyrchu.</p><p><a class="button" href="../enter.html">Return to entry information / Yn ôl i wybodaeth gofrestru</a></p>
     </section>
 
     <div id="test-experience" hidden>
       <section id="test-landing" class="prototype-card prototype-intro">
-        <p class="eyebrow">2026 race entry</p><h2>Enter the Blorenge Fell Race</h2>
-        <p class="lede">In development, this journey accepts synthetic information only. It creates no real race entry, takes no money and sends no email.</p>
-        <div class="status-grid" aria-live="polite"><div><span>Places</span><strong id="status-places">0 of 120</strong></div><div><span>Waiting list</span><strong id="status-waiting">0</strong></div></div>
+        <p class="eyebrow">2026 race entry / Cofrestru ras 2026</p><h2>Enter the Blorenge Fell Race / Cofrestrwch ar gyfer Ras Fell y Blorenge</h2>
+        <p class="lede">In development, this journey accepts synthetic information only. It creates no real race entry, takes no money and sends no email. / Wrth ddatblygu, dim ond gwybodaeth ffug y mae'r broses hon yn ei derbyn. Nid yw'n creu cofrestriad go iawn, yn cymryd arian nac yn anfon e-bost.</p>
+        <div class="status-grid" aria-live="polite"><div><span>Places / Lleoedd</span><strong id="status-places">0 of 120</strong></div><div><span>Waiting list / Rhestr aros</span><strong id="status-waiting">0</strong></div><div><span>Standard entry fee / Ffi mynediad safonol</span><strong id="status-price">£6.00</strong></div></div>
         <div id="runner-recovery" class="form-alert" role="alert" hidden></div>
-        <div class="form-actions"><button id="start-test" class="button" type="button">Start a test registration</button><a class="secondary-link" href="dashboard.html">View organiser test area</a></div>
-        <button id="reset-test" class="text-button" type="button">Reset test</button>
+        <div class="form-actions"><button id="start-test" class="button" type="button">Start a test registration / Dechrau cofrestriad prawf</button><a class="secondary-link" href="dashboard.html">View organiser test area / Gweld ardal brawf y trefnydd</a></div>
+        <button id="reset-test" class="text-button" type="button">Reset test / Ailosod y prawf</button>
       </section>
 
       <div id="runner-flow" hidden>
-        <div class="step-indicator prototype-card" aria-label="Registration progress"><span id="step-label">Stage 1 of 4 — Your details</span><progress id="step-progress" max="4" value="1">1 of 4</progress></div>
+        <div class="step-indicator prototype-card" aria-label="Registration progress / Cynnydd cofrestru"><span id="step-label">Stage / Cam 1 of / o 4 — Your details / Eich manylion</span><progress id="step-progress" max="4" value="1">1 of / o 4</progress></div>
         <form id="registration-form" class="prototype-card" novalidate>
           <div id="form-alert" class="form-alert" role="alert" tabindex="-1" hidden></div>
           <section data-stage="1" aria-labelledby="runner-heading">
-            <h2 id="runner-heading">Your details</h2>
-            <p>Use synthetic information only.</p>
+            <h2 id="runner-heading">Your details / Eich manylion</h2>
+            <p>Use synthetic information only. / Defnyddiwch wybodaeth ffug yn unig.</p>
             <div class="field-grid">
               <label>First name / Enw cyntaf <input name="firstName" autocomplete="given-name" required value="Alex"></label>
               <label>Last name / Cyfenw <input name="lastName" autocomplete="family-name" required value="Example"></label>
-              <label>Email address <span class="hint">Reserved example address in development</span><input name="email" type="email" autocomplete="email" required value="alex.runner@example.com"></label>
+              <label>Email address / Cyfeiriad e-bost <span class="hint">Reserved example address in development / Cyfeiriad enghreifftiol wrth ddatblygu</span><input name="email" type="email" autocomplete="email" required value="alex.runner@example.com"></label>
               <label>Phone number / Rhif ffôn <input name="phone" type="tel" autocomplete="tel" required value="07700 900123"></label>
-              <label>Address line 1 / Cyfeiriad (1) <input name="addressLine1" autocomplete="address-line1" required value="1 Example Street"></label>
-              <label>Address line 2 / Cyfeiriad (2) <span class="hint">Optional</span><input name="addressLine2" autocomplete="address-line2"></label>
+              <label>Address line 1 / Llinell cyfeiriad 1 <input name="addressLine1" autocomplete="address-line1" required value="1 Example Street"></label>
+              <label>Address line 2 / Llinell cyfeiriad 2 <span class="hint">Optional / Dewisol</span><input name="addressLine2" autocomplete="address-line2"></label>
               <label>City / Dinas <input name="city" autocomplete="address-level2" required value="Abergavenny"></label>
               <label>Postcode / Cod post <input name="postcode" autocomplete="postal-code" required value="NP7 5AA"></label>
-              <label>Date of birth / Dyddiad Geni <input name="dateOfBirth" type="date" autocomplete="bday" required value="1990-06-15"></label>
-              <label>Race category / Categori ras<select name="genderCategory" required><option value="">Select one</option><option>Female</option><option selected>Male / Open</option></select></label>
-              <label>Club / Clwb <span class="hint">Optional</span><input name="club" autocomplete="organization" value="Example Harriers"></label>
-              <label class="checkbox-field"><input name="affiliated" type="checkbox"> Affiliated with UK Athletics? / Rhan o UK Athletics?</label>
-              <label>UK Athletics membership number <span class="hint">Required when affiliated</span><input name="membershipNumber" autocomplete="off"></label>
+              <label>Date of birth / Dyddiad geni <input name="dateOfBirth" type="date" autocomplete="bday" required value="1990-06-15"></label>
+              <label>Race category / Categori ras<select name="genderCategory" required><option value="">Select one / Dewiswch un</option><option value="Female">Female / Benyw</option><option value="Male / Open" selected>Male / Open — Gwryw / Agored</option></select></label>
+              <label>Club / Clwb <span class="hint">Optional / Dewisol</span><input name="club" autocomplete="organization" value="Example Harriers"></label>
+              <label>Affiliated with UK Athletics? / Ydych chi'n gysylltiedig ag UK Athletics?<select name="affiliated" required><option value="no" selected>No / Nac ydw</option><option value="yes">Yes / Ydw</option></select></label>
+              <label id="uka-number-field" hidden>UK Athletics membership number / Rhif aelodaeth UK Athletics <span class="hint">Required when affiliated / Angenrheidiol os ydych yn gysylltiedig</span><input name="membershipNumber" autocomplete="off" maxlength="80"></label>
+              <label>WFRA member? / Ydych chi'n aelod o WFRA?<span class="hint">A member price is planned but has not yet been set. / Mae pris i aelodau ar y gweill ond nid yw wedi'i bennu eto.</span><select name="wfraMember" required><option value="no" selected>No / Nac ydw</option><option value="yes">Yes / Ydw</option></select></label>
+              <label id="wfra-number-field" hidden>WFRA membership number / Rhif aelodaeth WFRA <span class="hint">Not automatically verified / Heb ei wirio'n awtomatig</span><input name="wfraMembershipNumber" autocomplete="off" maxlength="80"></label>
             </div>
-            <div class="form-actions"><button id="details-continue" class="button" type="button">Continue</button></div>
+            <div class="form-actions"><button id="details-continue" class="button" type="button">Continue / Parhau</button></div>
           </section>
 
           <section data-stage="2" aria-labelledby="race-heading" hidden>
-            <h2 id="race-heading">Race details and consent</h2>
-            <p class="noteAlt">Emergency-contact information is collected for race-day safety and should be removed soon after the event under the final retention policy.</p>
+            <h2 id="race-heading">Race details and consent / Manylion y ras a chaniatâd</h2>
+            <p class="noteAlt">Emergency-contact information is collected for race-day safety and should be removed soon after the event under the final retention policy. / Cesglir manylion cyswllt mewn argyfwng er diogelwch ar ddiwrnod y ras a dylid eu dileu'n fuan ar ôl y digwyddiad yn unol â'r polisi cadw terfynol.</p>
             <div class="field-grid">
-              <label>Emergency-contact name <input name="emergencyName" autocomplete="off" required value="Sam Example"></label>
-              <label>Emergency-contact phone <input name="emergencyPhone" type="tel" autocomplete="off" required value="07700 900456"></label>
-              <label>Travel method<select name="travelMethod" required><option value="">Select one</option><option>Walk or cycle</option><option selected>Shared car</option><option>Car</option><option>Public transport</option><option>Other</option></select></label>
+              <label>Emergency contact name / Enw cyswllt mewn argyfwng <input name="emergencyName" autocomplete="off" required value="Sam Example"></label>
+              <label>Emergency contact phone number / Rhif ffôn cyswllt mewn argyfwng <input name="emergencyPhone" type="tel" autocomplete="off" required value="07700 900456"></label>
+              <label>Travel method / Dull teithio<select name="travelMethod" required><option value="">Select one / Dewiswch un</option><option value="Walk or cycle">Walk or cycle / Cerdded neu feicio</option><option value="Shared car" selected>Shared car / Rhannu car</option><option value="Car">Car / Car</option><option value="Public transport">Public transport / Trafnidiaeth gyhoeddus</option><option value="Other">Other / Arall</option></select></label>
             </div>
-            <label class="checkbox-field"><input name="acceptTerms" type="checkbox" required> I accept the prototype race terms. This is not a real entry.</label>
-            <label class="checkbox-field"><input name="acceptPrivacy" type="checkbox" required> I acknowledge the prototype privacy notice and will use synthetic data only.</label>
-            <div class="declaration-placeholder">
-              <h3>WFRA competitor declaration</h3>
-              <p>The approved declaration wording is still required from the organiser. This development step tests only the versioned acceptance record and must not be used for a real entry.</p>
-              <label>Typed full name <input name="declarationName" autocomplete="name" required value="Alex Example"></label>
-              <label class="checkbox-field"><input name="acceptDeclaration" type="checkbox" required> I confirm that I am testing the declaration-recording step.</label>
+            <label class="checkbox-field"><input name="acceptTerms" type="checkbox" required> I accept the prototype race terms. This is not a real entry. / Rwy'n derbyn telerau prawf y ras. Nid cofrestriad go iawn yw hwn.</label>
+            <label class="checkbox-field"><input name="acceptPrivacy" type="checkbox" required> I acknowledge the prototype privacy notice and will use synthetic data only. / Rwy'n cydnabod yr hysbysiad preifatrwydd prawf ac yn defnyddio data ffug yn unig.</label>
+            <div class="declaration-panel">
+              <h3>WFRA competitor declaration / Datganiad cystadleuydd WFRA</h3>
+              <p class="hint">The official declaration below is supplied in English only. / Mae'r datganiad swyddogol isod wedi'i ddarparu yn Saesneg yn unig.</p>
+              <div id="declaration-content"></div>
+              <p><a id="safety-requirements-link" href="https://www.welshfellrunnersassociation.org.uk/en/info-for-runners#safety-requirements-for-competitors" target="_blank" rel="noopener">WFRA Safety Requirements for Competitors / Gofynion Diogelwch WFRA i Gystadleuwyr</a></p>
+              <label>Who is signing? / Pwy sy'n llofnodi?<select name="declarationSignatoryRole" required><option value="">Select one / Dewiswch un</option><option value="Competitor" selected>Competitor / Cystadleuydd</option><option value="Parent / Legal Guardian">Parent / Legal Guardian / Rhiant / Gwarcheidwad Cyfreithiol</option></select></label>
+              <label>Enter your full name to sign the declaration / Rhowch eich enw llawn i lofnodi'r datganiad <input name="declarationName" autocomplete="name" required value="Alex Example"></label>
+              <label class="checkbox-field"><input name="acceptDeclaration" type="checkbox" required> I accept the WFRA declaration above. / Rwy'n derbyn datganiad WFRA uchod.</label>
             </div>
-            <div class="form-actions"><button id="race-back" class="button button--quiet" type="button">Back</button><button id="race-continue" class="button" type="button">Continue</button></div>
+            <div class="form-actions"><button id="race-back" class="button button--quiet" type="button">Back / Yn ôl</button><button id="race-continue" class="button" type="button">Continue / Parhau</button></div>
           </section>
 
           <section data-stage="3" aria-labelledby="review-heading" hidden>
-            <h2 id="review-heading">Review and submit</h2><dl id="review-list" class="review-list"></dl>
-            <div class="form-actions"><button id="review-back" class="button button--quiet" type="button">Back and edit</button><button id="submit-test" class="button" type="submit">Submit test entry</button></div>
+            <h2 id="review-heading">Review and submit / Adolygu a chyflwyno</h2><dl id="review-list" class="review-list"></dl>
+            <div class="form-actions"><button id="review-back" class="button button--quiet" type="button">Back and edit / Yn ôl i olygu</button><button id="submit-test" class="button" type="submit">Submit test entry / Cyflwyno cofrestriad prawf</button></div>
           </section>
 
           <section data-stage="4" aria-labelledby="payment-heading" hidden>
             <div id="payment-choice">
-              <h2 id="payment-heading">Test payment and confirmation</h2>
-              <p>Test reference: <strong id="payment-reference"></strong></p>
-              <p>No money, card details or real payment service are involved.</p>
-              <div class="choice-actions"><button id="payment-successful" data-payment="successful" class="button" type="button">Simulate successful payment</button><button id="payment-declined" data-payment="declined" class="button button--quiet" type="button">Simulate declined payment</button><button id="payment-abandoned" data-payment="abandoned" class="button button--quiet" type="button">Simulate abandoned payment</button></div>
+              <h2 id="payment-heading">Test payment and confirmation / Taliad prawf a chadarnhad</h2>
+              <p>Test reference / Cyfeirnod prawf: <strong id="payment-reference"></strong></p>
+              <p>No money, card details or real payment service are involved. / Nid oes arian, manylion cerdyn na gwasanaeth talu go iawn yn rhan o'r prawf.</p>
+              <div class="choice-actions"><button id="payment-successful" data-payment="successful" class="button" type="button">Simulate successful payment / Efelychu taliad llwyddiannus</button><button id="payment-declined" data-payment="declined" class="button button--quiet" type="button">Simulate declined payment / Efelychu taliad wedi'i wrthod</button><button id="payment-abandoned" data-payment="abandoned" class="button button--quiet" type="button">Simulate abandoned payment / Efelychu taliad wedi'i adael</button></div>
             </div>
             <div id="payment-result" tabindex="-1" hidden>
-              <p class="eyebrow">Test result</p><h2 id="result-title"></h2><p id="result-copy"></p>
-              <dl class="review-list"><dt>Test reference</dt><dd id="result-reference"></dd><dt>Entry status</dt><dd id="result-entry"></dd><dt>Mock payment</dt><dd id="result-payment"></dd></dl>
-              <div id="success-action"><a id="organiser-handover" class="button" href="dashboard.html">View this entry as organiser</a></div>
-              <div id="retry-action" hidden><button id="retry-payment" class="button" type="button">Retry mock payment</button></div>
+              <p class="eyebrow">Test result / Canlyniad y prawf</p><h2 id="result-title"></h2><p id="result-copy"></p>
+              <dl class="review-list"><dt>Test reference / Cyfeirnod prawf</dt><dd id="result-reference"></dd><dt>Entry status / Statws cofrestru</dt><dd id="result-entry"></dd><dt>Mock payment / Taliad ffug</dt><dd id="result-payment"></dd></dl>
+              <div id="success-action"><a id="organiser-handover" class="button" href="dashboard.html">View this entry as organiser / Gweld fel trefnydd</a></div>
+              <div id="retry-action" hidden><button id="retry-payment" class="button" type="button">Retry mock payment / Rhoi cynnig arall ar daliad ffug</button></div>
             </div>
           </section>
         </form>

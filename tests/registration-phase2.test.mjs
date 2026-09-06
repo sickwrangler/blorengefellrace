@@ -9,7 +9,7 @@ import { createMockPaymentAdapter, createCapturedEmailAdapter, assertSafeAdapter
 import { authorize, developmentActor, staticWebAppActor } from "../registration/server/auth.mjs";
 import { createApi } from "../registration/server/api.mjs";
 
-const runner = (number = 1, overrides = {}) => ({ firstName: `Runner ${number}`, lastName: "Example", email: `phase2-${number}@example.com`, phone: "+44 7700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", dateOfBirth: "1990-06-15", genderCategory: "Female", club: "Example Harriers", affiliated: false, membershipNumber: "", emergencyName: "Sam Example", emergencyPhone: "07700 900456", travelMethod: "Shared car", declarationName: `Runner ${number} Example`, acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, termsVersion: "prototype-2026-09", privacyVersion: "prototype-2026-09", ...overrides });
+const runner = (number = 1, overrides = {}) => ({ firstName: `Runner ${number}`, lastName: "Example", email: `phase2-${number}@example.com`, phone: "+44 7700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", dateOfBirth: "1990-06-15", genderCategory: "Female", club: "Example Harriers", affiliated: false, membershipNumber: "", wfraMember: false, wfraMembershipNumber: "", emergencyName: "Sam Example", emergencyPhone: "07700 900456", travelMethod: "Shared car", declarationName: `Runner ${number} Example`, declarationSignatoryRole: "Competitor", acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, termsVersion: "prototype-2026-09", privacyVersion: "prototype-2026-09", ...overrides });
 const admin = { authenticated: true, role: "administrator", actorType: "development_organiser", id: "local:administrator" };
 function setup(options = {}) { const repository = createMemoryRepository(createDatabase(options)); const paymentAdapter = createMockPaymentAdapter(); const emailAdapter = createCapturedEmailAdapter(); return { repository, service: new RegistrationService({ repository, paymentAdapter, emailAdapter }), paymentAdapter, emailAdapter }; }
 
@@ -71,6 +71,36 @@ test("public registration responses omit private contact and race-day fields", a
   }
 });
 
+test("WFRA membership evidence stays private and the development API exposes only server pricing", async () => {
+  const { service, repository } = setup();
+  const suppliedNumber = "South Wales WFRA A-12";
+  const created = await service.create(runner(28, { wfraMember: true, wfraMembershipNumber: suppliedNumber, amount: 1, priceActuallyChargedPence: 1 }), { idempotencyKey: "wfra-private-price-key" });
+  assert.equal(created.ok, true); assert.equal(created.registration.pricing.priceActuallyChargedPence, 600);
+  assert.equal(created.registration.pricing.adjustmentReason, "WFRA_MEMBER_PRICE_NOT_CONFIGURED");
+  assert.equal(JSON.stringify(created).includes(suppliedNumber), false);
+  const stored = await repository.read(); assert.equal(stored.runners[0].wfraMembershipNumber, suppliedNumber); assert.equal(stored.runners[0].wfraMembershipVerified, false);
+  const exported = await service.exportPublic(admin); assert.equal(exported.csv.includes(suppliedNumber), false);
+});
+
+test("public private-access API returns one generic response after server-side revocation", async () => {
+  const { service } = setup(); const api = createApi({ service, environment: "local" });
+  const invitation = await service.createPrivateInvitation(admin, { kind: "registration", expiresAt: "2026-12-01T12:00:00Z" });
+  const request = { method: "GET", pathname: "/api/v2/private-access", hostname: "127.0.0.1", query: { purpose: "registration" }, headers: { "x-private-invitation": invitation.token } };
+  assert.equal((await api(request)).status, 200);
+  await service.revokePrivateInvitation(admin, invitation.invitation.id);
+  const rejected = await api(request); assert.equal(rejected.status, 410); assert.deepEqual(rejected.body, { ok: false, code: "LINK_UNAVAILABLE" });
+});
+
+test("organiser expiry persists and the original invitation token is never listed again", async () => {
+  const { service } = setup();
+  const invitation = await service.createPrivateInvitation(admin, { kind: "waiting_list_join", expiresAt: "2026-12-01T12:00:00Z" });
+  assert.equal((await service.inspectPrivateAccess(invitation.token, "waiting_list_join")).ok, true);
+  assert.equal((await service.expirePrivateInvitation(admin, invitation.invitation.id)).ok, true);
+  assert.equal((await service.inspectPrivateAccess(invitation.token, "waiting_list_join")).code, "LINK_UNAVAILABLE");
+  const listed = await service.privateInvitations(admin);
+  assert.equal(listed.invitations[0].status, "Expired"); assert.equal(JSON.stringify(listed).includes(invitation.token), false);
+});
+
 test("local organiser bypass fails outside loopback/local and roles restrict operations", () => {
   const local = developmentActor({ environment: "local", hostname: "127.0.0.1", headers: { "x-development-organiser": "enabled", "x-development-role": "race_day_volunteer" } }); assert.equal(local.authenticated, true); assert.equal(authorize(local, "race_number"), true); assert.equal(authorize(local, "erase"), false);
   for (const context of [{ environment: "production", hostname: "127.0.0.1" }, { environment: "local", hostname: "example.com" }]) assert.equal(developmentActor({ ...context, headers: { "x-development-organiser": "enabled" } }).authenticated, false);
@@ -116,8 +146,8 @@ test("synthetic import uses server validation and stays local", async () => {
 });
 
 test("synthetic CSV import parses quoted fields and applies server validation", async () => {
-  const headers = "firstName,lastName,email,phone,addressLine1,addressLine2,city,postcode,dateOfBirth,genderCategory,club,affiliated,membershipNumber,emergencyName,emergencyPhone,travelMethod,declarationName,acceptDeclaration,acceptTerms,acceptPrivacy,termsVersion,privacyVersion";
-  const text = `${headers}\nAlex,Example,csv@example.com,07700900123,1 Example Street,,Abergavenny,NP7 5AA,1990-06-15,Female,"Example, Harriers",false,,Sam Example,07700900456,Shared car,Alex Example,true,true,true,prototype-2026-09,prototype-2026-09`;
+  const headers = "firstName,lastName,email,phone,addressLine1,addressLine2,city,postcode,dateOfBirth,genderCategory,club,affiliated,membershipNumber,wfraMember,wfraMembershipNumber,emergencyName,emergencyPhone,travelMethod,declarationName,declarationSignatoryRole,acceptDeclaration,acceptTerms,acceptPrivacy,termsVersion,privacyVersion";
+  const text = `${headers}\nAlex,Example,csv@example.com,07700900123,1 Example Street,,Abergavenny,NP7 5AA,1990-06-15,Female,"Example, Harriers",false,,true,WFRA ABC-12,Sam Example,07700900456,Shared car,Alex Example,Competitor,true,true,true,prototype-2026-09,prototype-2026-09`;
   assert.equal(parseSyntheticCsv(text)[0].club, "Example, Harriers"); const { service } = setup(); assert.equal((await service.importSyntheticCsv(admin, text)).imported, 1);
 });
 
@@ -139,6 +169,27 @@ test("organiser private-link controls create hashed metadata, list safely and re
   assert.equal(listed.body.invitations.length, 1); assert.equal("tokenHash" in listed.body.invitations[0], false);
   const revoked = await api({ ...context, method: "POST", pathname: `/api/v2/organiser/private-invitations/${created.body.invitation.id}/revoke` });
   assert.equal(revoked.body.ok, true);
+});
+
+test("an already-open registration page cannot submit after its private link is revoked", async () => {
+  const { service } = setup();
+  const created = await service.createPrivateInvitation(admin, {
+    kind: "registration",
+    expiresAt: "2026-12-01T12:00:00Z"
+  });
+  assert.equal(created.ok, true);
+
+  // Represents the page validating the invitation while it is still active.
+  assert.equal((await service.inspectPrivateAccess(created.token, "registration")).ok, true);
+  await service.revokePrivateInvitation(admin, created.invitation.id);
+
+  // The protected operation must revalidate server-side instead of trusting
+  // the page's earlier result.
+  const result = await service.create(runner(27), {
+    idempotencyKey: "revoked-open-page-key",
+    privateInvitationToken: created.token
+  });
+  assert.equal(result.code, "LINK_UNAVAILABLE");
 });
 
 test("public write endpoints apply a development rate limit", async () => {
