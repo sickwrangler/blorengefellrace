@@ -12,10 +12,8 @@ The registration development system must use invented test entrants only. The Az
 | Date of birth | Verify minimum age and calculate the appropriate results category | Private; derived category may be public |
 | Gender/category | Produce result categories | Private during registration; approved category may be public |
 | Running club | Race administration and results | May be public in results |
-| UK Athletics affiliation and membership number | Affiliation evidence, separate from WFRA membership | Private |
 | Self-declared WFRA membership, membership number and discount evidence | Apply and audit an approved member price without claiming verification | Private; excluded from public APIs, results and public exports; retention requires organiser approval |
 | Emergency-contact name and phone | Race-day incident contact | Private; race-day use only |
-| Travel method | Event travel planning | Private/aggregate use only |
 | Terms and privacy versions/timestamp | Evidence of the agreed versions | Private |
 | WFRA declaration identifier, version, typed name and timestamp | Evidence of the exact declaration accepted | Private; retention requires organiser approval |
 | Entry, mock-payment and waiting-list status | Administer the test workflow | Private |
@@ -25,6 +23,8 @@ The registration development system must use invented test entrants only. The Az
 | Race number | Race administration and results | May be public in results |
 
 Medical information remains excluded; collecting it would require a specific race-day need, lawful basis, restricted access and retention decision.
+
+UK Athletics affiliation, UK Athletics membership number and travel method are not collected by the active Phase 3 journey: **not required for current race registration or operations.** Older synthetic Phase 2 records may retain deprecated fields until reset or expiry, but those fields are not shown, accepted into new records or used by the current product model.
 
 ## Retention and rights
 

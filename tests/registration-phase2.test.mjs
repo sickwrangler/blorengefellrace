@@ -9,7 +9,7 @@ import { createMockPaymentAdapter, createCapturedEmailAdapter, assertSafeAdapter
 import { authorize, developmentActor, staticWebAppActor } from "../registration/server/auth.mjs";
 import { createApi } from "../registration/server/api.mjs";
 
-const runner = (number = 1, overrides = {}) => ({ firstName: `Runner ${number}`, lastName: "Example", email: `phase2-${number}@example.com`, phone: "+44 7700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", dateOfBirth: "1990-06-15", genderCategory: "Female", club: "Example Harriers", affiliated: false, membershipNumber: "", wfraMember: false, wfraMembershipNumber: "", emergencyName: "Sam Example", emergencyPhone: "07700 900456", travelMethod: "Shared car", declarationName: `Runner ${number} Example`, declarationSignatoryRole: "Competitor", acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, termsVersion: "prototype-2026-09", privacyVersion: "prototype-2026-09", ...overrides });
+const runner = (number = 1, overrides = {}) => ({ firstName: `Runner ${number}`, lastName: "Example", email: `phase2-${number}@example.com`, phone: "+44 7700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", dateOfBirth: "1990-06-15", genderCategory: "Female", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyName: "Sam Example", emergencyPhone: "07700 900456", declarationName: `Runner ${number} Example`, declarationSignatoryRole: "Competitor", acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, termsVersion: "prototype-2026-09", privacyVersion: "prototype-2026-09", ...overrides });
 const admin = { authenticated: true, role: "administrator", actorType: "development_organiser", id: "local:administrator" };
 function setup(options = {}) { const repository = createMemoryRepository(createDatabase(options)); const paymentAdapter = createMockPaymentAdapter(); const emailAdapter = createCapturedEmailAdapter(); return { repository, service: new RegistrationService({ repository, paymentAdapter, emailAdapter }), paymentAdapter, emailAdapter }; }
 
@@ -17,9 +17,9 @@ test("production and invalid configuration fail closed", async () => {
   for (const registrationState of [undefined, "open", "invalid"]) { const { service } = setup({ environment: "production", registrationState }); assert.equal((await service.status()).state, "closed"); assert.equal((await service.create(runner(), { idempotencyKey: "production-key-123" })).code, "REGISTRATION_NOT_ACCEPTING"); }
 });
 
-test("server validation normalizes names and enforces age, consent and affiliation", async () => {
-  const { service } = setup(); const invalid = await service.create(runner(1, { firstName: "  A   Runner ", dateOfBirth: "2011-11-29", acceptTerms: false, affiliated: true }), { idempotencyKey: "validation-key-1" });
-  assert.equal(invalid.code, "VALIDATION_ERROR"); assert.ok(invalid.errors.dateOfBirth && invalid.errors.acceptTerms && invalid.errors.membershipNumber);
+test("server validation normalizes names and enforces age, consent and WFRA membership", async () => {
+  const { service } = setup(); const invalid = await service.create(runner(1, { firstName: "  A   Runner ", dateOfBirth: "2011-11-29", acceptTerms: false, wfraMember: true }), { idempotencyKey: "validation-key-1" });
+  assert.equal(invalid.code, "VALIDATION_ERROR"); assert.ok(invalid.errors.dateOfBirth && invalid.errors.acceptTerms && invalid.errors.wfraMembershipNumber);
   const valid = await service.create(runner(2, { firstName: "  Alex   Example " }), { idempotencyKey: "validation-key-2" }); assert.equal(valid.registration.runner.firstName, "Alex Example");
 });
 
@@ -66,7 +66,7 @@ test("confirmation tokens are opaque and non-enumerable", async () => {
 test("public registration responses omit private contact and race-day fields", async () => {
   const { service } = setup(); const created = await service.create(runner(25), { idempotencyKey: "runner-safe-response" });
   const serializedCreate = JSON.stringify(created); const confirmation = await service.confirmation(created.confirmationToken); const serializedConfirmation = JSON.stringify(confirmation);
-  for (const privateValue of [runner(25).email, runner(25).phone, runner(25).emergencyName, runner(25).emergencyPhone, runner(25).dateOfBirth, runner(25).travelMethod]) {
+  for (const privateValue of [runner(25).email, runner(25).phone, runner(25).emergencyName, runner(25).emergencyPhone, runner(25).dateOfBirth]) {
     assert.equal(serializedCreate.includes(privateValue), false); assert.equal(serializedConfirmation.includes(privateValue), false);
   }
 });
@@ -80,6 +80,20 @@ test("WFRA membership evidence stays private and the development API exposes onl
   assert.equal(JSON.stringify(created).includes(suppliedNumber), false);
   const stored = await repository.read(); assert.equal(stored.runners[0].wfraMembershipNumber, suppliedNumber); assert.equal(stored.runners[0].wfraMembershipVerified, false);
   const exported = await service.exportPublic(admin); assert.equal(exported.csv.includes(suppliedNumber), false);
+});
+
+test("new registrations ignore retired UK Athletics and travel fields", async () => {
+  const { service, repository } = setup();
+  const created = await service.create(runner(29, { affiliated: true, membershipNumber: "UKA-LEGACY", travelMethod: "Car" }), { idempotencyKey: "retired-fields-key" });
+  assert.equal(created.ok, true);
+  const stored = (await repository.read()).runners[0];
+  for (const field of ["affiliated", "membershipNumber", "travelMethod"]) assert.equal(field in stored, false);
+});
+
+test("a non-member does not retain a stale hidden WFRA number", async () => {
+  const { service, repository } = setup();
+  assert.equal((await service.create(runner(30, { wfraMember: false, wfraMembershipNumber: "STALE-VALUE" }), { idempotencyKey: "clear-stale-wfra-key" })).ok, true);
+  assert.equal((await repository.read()).runners[0].wfraMembershipNumber, null);
 });
 
 test("public private-access API returns one generic response after server-side revocation", async () => {
@@ -146,8 +160,8 @@ test("synthetic import uses server validation and stays local", async () => {
 });
 
 test("synthetic CSV import parses quoted fields and applies server validation", async () => {
-  const headers = "firstName,lastName,email,phone,addressLine1,addressLine2,city,postcode,dateOfBirth,genderCategory,club,affiliated,membershipNumber,wfraMember,wfraMembershipNumber,emergencyName,emergencyPhone,travelMethod,declarationName,declarationSignatoryRole,acceptDeclaration,acceptTerms,acceptPrivacy,termsVersion,privacyVersion";
-  const text = `${headers}\nAlex,Example,csv@example.com,07700900123,1 Example Street,,Abergavenny,NP7 5AA,1990-06-15,Female,"Example, Harriers",false,,true,WFRA ABC-12,Sam Example,07700900456,Shared car,Alex Example,Competitor,true,true,true,prototype-2026-09,prototype-2026-09`;
+  const headers = "firstName,lastName,email,phone,addressLine1,addressLine2,city,postcode,dateOfBirth,genderCategory,club,wfraMember,wfraMembershipNumber,emergencyName,emergencyPhone,declarationName,declarationSignatoryRole,acceptDeclaration,acceptTerms,acceptPrivacy,termsVersion,privacyVersion";
+  const text = `${headers}\nAlex,Example,csv@example.com,07700900123,1 Example Street,,Abergavenny,NP7 5AA,1990-06-15,Female,"Example, Harriers",true,WFRA ABC-12,Sam Example,07700900456,Alex Example,Competitor,true,true,true,prototype-2026-09,prototype-2026-09`;
   assert.equal(parseSyntheticCsv(text)[0].club, "Example, Harriers"); const { service } = setup(); assert.equal((await service.importSyntheticCsv(admin, text)).imported, 1);
 });
 

@@ -17,8 +17,8 @@ const runner = (number = 1, overrides = {}) => ({
   firstName: `Runner${number}`, lastName: "Example", email: `runner${number}@example.com`, phone: "07700 900123",
   addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA",
   dateOfBirth: "1990-06-15", genderCategory: "Female", club: number % 2 ? "Example Harriers" : "",
-  affiliated: false, membershipNumber: "", wfraMember: false, wfraMembershipNumber: "", emergencyName: "Contact Example", emergencyPhone: "07700 900456",
-  travelMethod: "Shared car", declarationName: `Runner${number} Example`, declarationSignatoryRole: "Competitor", acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, ...overrides
+  wfraMember: false, wfraMembershipNumber: "", emergencyName: "Contact Example", emergencyPhone: "07700 900456",
+  declarationName: `Runner${number} Example`, declarationSignatoryRole: "Competitor", acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, ...overrides
 });
 
 test("production and invalid configurations fail closed", () => {

@@ -15,15 +15,21 @@ Phase 3A implements provider-neutral domain and interface foundations only. It d
 - The server domain defines `CLOSED`, `PRIVATE_LIVE`, `OPEN`, `PAUSED` and terminal `CLOSED_FINAL`. Capacity and waiting-list availability are derived, not manual states. A production state always initializes as `CLOSED`; state changes require an authenticated organiser, an expected-current-state check and an audit event.
 - Private invitations are opaque, purpose-bound (`registration`, `waiting_list_join` or `waiting_list_offer`), expiring, revocable and stored as hashes. Every protected server operation revalidates current state, purpose, expiry, revocation, usage and, for an offer, the linked offer state. A prior browser check is never treated as authorization. Organiser controls create, inspect, revoke and expire links; the original token is returned only once at creation.
 - The authoritative Phase 3 server configuration records the 28 November 2026 race, 120-place capacity, £6 fee, Europe/London cutoff at 23:59 on 28 October, 48-hour offers, 24-hour reminders and optional race numbers.
-- The runner model includes the agreed name, contact, address, birth, category, club, affiliation and emergency-contact fields. Competition categories are exactly `Female` and `Male / Open`.
+- The runner model includes the agreed name, contact, address, birth, category, club, WFRA-membership and emergency-contact fields. Competition categories are exactly `Female` and `Male / Open`.
 - The organiser-supplied WFRA senior-entry declaration is stored once as versioned content (`WFRA_SENIOR_ENTRY`, `21/02/23`). Acceptance records retain that identifier/version, the typed name, signatory role, timestamp and runner/registration references. Entrants aged 16 or 17 remain blocked pending confirmation of the applicable WFRA parental-consent form and process; the system does not infer that typing a name completes parental consent.
-- UK Athletics affiliation and WFRA membership are separate. WFRA membership is self-declared, its flexible text membership number is not automatically verified, and it is excluded from public responses/exports.
+- WFRA membership is the only active membership question. It is self-declared, its flexible text membership number is not automatically verified, and it is excluded from public responses/exports. UK Athletics affiliation and membership number are not collected because they are **not required for current race registration or operations**.
 - The server owns pricing. Standard entry remains £6.00. A configurable WFRA member price is modelled but intentionally unset, so no discount is applied until the organiser approves the amount; browser-supplied amounts are ignored.
 - Opaque management tokens support amendments without runner accounts. Before the cutoff, changing identity or email rotates and invalidates the token. After the cutoff, runner name changes are locked; other permitted details remain amendable, and an organiser override is audited.
 - Capacity distinguishes confirmed places, payment reservations and active waiting-list-offer reservations. Waiting-list joins store only name and email; offers include reminder/expiry times and progress in order after decline or expiry.
 - Refund requests, organiser approval/rejection, recorded refund and separate place release are distinct audited actions. No runner self-cancellation or live refund is implemented.
 - Race numbers remain nullable, unique while assigned, removable and reusable.
 - Runner and organiser pages use a small environment/state badge. Development-only explanations are integrated into normal copy; payment remains mock and messages remain captured-only.
+
+### Runner-language direction
+
+Welsh is intentionally not duplicated beside every English field because that made the runner journey visually dense, especially on mobile. There is no English/Welsh language toggle at this stage. The current UI renders in English while the reviewed Welsh copy is retained separately for possible future reuse.
+
+The intended future approach is **selective Welsh exposure** within an otherwise accessible interface—for example occasional Welsh section titles, familiar race terminology, small secondary phrases, greetings or confirmation wording, place and landscape terms, selected high-value bilingual labels, and useful links to Welsh-language information. The final pattern is a future UX decision, not a Phase 3 blocker.
 
 ## Proposed implementation scope
 

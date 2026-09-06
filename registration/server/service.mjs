@@ -49,8 +49,13 @@ function view(db, registration, { runnerSafe = false } = {}) {
     declaration: consent?.declaration
   };
   delete result.confirmationTokenHash;
+  // Legacy Phase 2 fields can remain in old synthetic storage, but are retired
+  // from every active API response and are never written for new entries.
+  delete result.runner.affiliated;
+  delete result.runner.membershipNumber;
+  delete result.runner.travelMethod;
   if (runnerSafe) {
-    delete result.runner.email; delete result.runner.phone; delete result.runner.addressLine1; delete result.runner.addressLine2; delete result.runner.city; delete result.runner.postcode; delete result.runner.dateOfBirth; delete result.runner.membershipNumber; delete result.runner.wfraMembershipNumber; delete result.runner.travelMethod;
+    delete result.runner.email; delete result.runner.phone; delete result.runner.addressLine1; delete result.runner.addressLine2; delete result.runner.city; delete result.runner.postcode; delete result.runner.dateOfBirth; delete result.runner.wfraMembershipNumber;
     delete result.runner.emergencyName; delete result.runner.emergencyPhone;
     delete result.declaration;
   }
@@ -93,7 +98,7 @@ export function parseSyntheticCsv(text) {
   for (let index = 0; index < String(text).length; index += 1) { const character = text[index]; const next = text[index + 1]; if (character === '"' && quoted && next === '"') { cell += '"'; index += 1; } else if (character === '"') quoted = !quoted; else if (character === "," && !quoted) { row.push(cell); cell = ""; } else if ((character === "\n" || character === "\r") && !quoted) { if (character === "\r" && next === "\n") index += 1; row.push(cell); if (row.some((value) => value !== "")) records.push(row); row = []; cell = ""; } else cell += character; }
   row.push(cell); if (row.some((value) => value !== "")) records.push(row); if (records.length < 2) return [];
   const headers = records[0].map((value) => value.trim());
-  return records.slice(1).map((values) => Object.fromEntries(headers.map((header, index) => [header, ["affiliated", "wfraMember", "acceptDeclaration", "acceptTerms", "acceptPrivacy"].includes(header) ? /^(true|yes|1)$/i.test(values[index] ?? "") : values[index] ?? ""])));
+  return records.slice(1).map((values) => Object.fromEntries(headers.map((header, index) => [header, ["wfraMember", "acceptDeclaration", "acceptTerms", "acceptPrivacy"].includes(header) ? /^(true|yes|1)$/i.test(values[index] ?? "") : values[index] ?? ""])));
 }
 
 export class RegistrationService {
@@ -112,7 +117,7 @@ export class RegistrationService {
       if (db.environment === "development" && db.registrationState !== "test") return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
       if (!["test", "open"].includes(db.registrationState)) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
       if (db.environment === "production") return { ok: false, code: "PRODUCTION_CLOSED" };
-      const normalized = { ...input, affiliated: input.affiliated === true, wfraMember: input.wfraMember === true, firstName: normalizeName(input.firstName), lastName: normalizeName(input.lastName), email: String(input.email ?? "").trim().toLowerCase(), phone: String(input.phone ?? "").trim(), addressLine1: normalizeName(input.addressLine1), addressLine2: normalizeName(input.addressLine2), city: normalizeName(input.city), postcode: normalizeName(input.postcode).toUpperCase(), membershipNumber: normalizeName(input.membershipNumber), wfraMembershipNumber: normalizeName(input.wfraMembershipNumber), declarationName: normalizeName(input.declarationName), emergencyName: normalizeName(input.emergencyName), emergencyPhone: String(input.emergencyPhone ?? "").trim() };
+      const normalized = { ...input, wfraMember: input.wfraMember === true, firstName: normalizeName(input.firstName), lastName: normalizeName(input.lastName), email: String(input.email ?? "").trim().toLowerCase(), phone: String(input.phone ?? "").trim(), addressLine1: normalizeName(input.addressLine1), addressLine2: normalizeName(input.addressLine2), city: normalizeName(input.city), postcode: normalizeName(input.postcode).toUpperCase(), wfraMembershipNumber: normalizeName(input.wfraMembershipNumber), declarationName: normalizeName(input.declarationName), emergencyName: normalizeName(input.emergencyName), emergencyPhone: String(input.emergencyPhone ?? "").trim() };
       const errors = validateRunner(normalized, { requireSynthetic: true });
       if (normalized.termsVersion && normalized.termsVersion !== db.event.termsVersion) errors.acceptTerms = "The terms version is no longer current.";
       if (normalized.privacyVersion && normalized.privacyVersion !== db.event.privacyVersion) errors.acceptPrivacy = "The privacy version is no longer current.";
@@ -123,7 +128,7 @@ export class RegistrationService {
       const accepted = status(db).accepted < db.event.capacity;
       const createdAt = now(); const registrationId = id("reg"); const runnerId = id("runner"); const confirmationToken = replayableToken(idempotencyKey, registrationId);
       const pricing = calculateEntryPrice(db.event, normalized);
-      db.runners.push({ id: runnerId, firstName: normalized.firstName, lastName: normalized.lastName, email: normalized.email, phone: normalized.phone, addressLine1: normalized.addressLine1, addressLine2: normalized.addressLine2 || null, city: normalized.city, postcode: normalized.postcode, dateOfBirth: normalized.dateOfBirth, genderCategory: normalized.genderCategory, club: normalizeName(normalized.club) || "Unattached", affiliated: normalized.affiliated, membershipNumber: normalized.membershipNumber || null, wfraMember: normalized.wfraMember, wfraMembershipNumber: normalized.wfraMembershipNumber || null, wfraMembershipVerified: false, wfraDiscountApplied: pricing.wfraDiscountApplied, travelMethod: normalized.travelMethod, anonymisedAt: null });
+      db.runners.push({ id: runnerId, firstName: normalized.firstName, lastName: normalized.lastName, email: normalized.email, phone: normalized.phone, addressLine1: normalized.addressLine1, addressLine2: normalized.addressLine2 || null, city: normalized.city, postcode: normalized.postcode, dateOfBirth: normalized.dateOfBirth, genderCategory: normalized.genderCategory, club: normalizeName(normalized.club) || "Unattached", wfraMember: normalized.wfraMember, wfraMembershipNumber: normalized.wfraMember ? normalized.wfraMembershipNumber || null : null, wfraMembershipVerified: false, wfraDiscountApplied: pricing.wfraDiscountApplied, anonymisedAt: null });
       db.emergencyContacts.push({ id: id("emergency"), registrationId, name: normalized.emergencyName, phone: normalized.emergencyPhone, deleteAfterEvent: true });
       db.consents.push({ id: id("consent"), registrationId, termsVersion: db.event.termsVersion, privacyVersion: db.event.privacyVersion, recordedAt: createdAt, declaration: { identifier: db.event.declarationIdentifier, version: db.event.declarationVersion, accepted: true, typedFullName: normalized.declarationName, signatoryRole: normalized.declarationSignatoryRole, acceptedAt: createdAt, contentStatus: db.event.declarationContentStatus } });
       db.payments.push({ id: id("payment"), registrationId, status: "created", providerReference: null, ...pricing, updatedAt: createdAt });
@@ -230,7 +235,7 @@ export class RegistrationService {
         else if (requested === "waiting_list" && registration.entryStatus === "accepted") { registration.entryStatus = "waiting_list"; registration.waitingSequence = ++db.counters.waitingSequence; refreshWaiting(db, actor); audit(db, actor, "entry_status_changed", registration.id, { entryStatus: before.entryStatus }, { entryStatus: "waiting_list" }); }
         else return { ok: false, code: "INVALID_ENTRY_TRANSITION" };
       } else if (action === "correct") {
-        const runner = entities(db, registration).runner; const allowed = ["firstName", "lastName", "phone", "club", "travelMethod"]; const changed = {}; for (const field of allowed) if (payload[field] !== undefined) { changed[field] = { before: field === "phone" ? "redacted" : runner[field], after: field === "phone" ? "redacted" : normalizeName(payload[field]) }; runner[field] = normalizeName(payload[field]); } audit(db, actor, "data_corrected", registration.id, null, { fields: Object.keys(changed) });
+        const runner = entities(db, registration).runner; const allowed = ["firstName", "lastName", "phone", "club"]; const changed = {}; for (const field of allowed) if (payload[field] !== undefined) { changed[field] = { before: field === "phone" ? "redacted" : runner[field], after: field === "phone" ? "redacted" : normalizeName(payload[field]) }; runner[field] = normalizeName(payload[field]); } audit(db, actor, "data_corrected", registration.id, null, { fields: Object.keys(changed) });
       } else return { ok: false, code: "INVALID_ACTION" };
       registration.updatedAt = now(); return { ok: true, registration: view(db, registration), ...metadata };
     });

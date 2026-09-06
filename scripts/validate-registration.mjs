@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const files = ["registration/index.html", "registration/dashboard.html", "registration/prototype.css", "registration/runner.mjs", "registration/runner-flow.mjs", "registration/dashboard.mjs", "registration/organiser-view.mjs", "registration/prototype-client.mjs", "registration/preview-repository.mjs", "registration/registration-core.mjs", "registration/fixtures.json", "registration/server/service.mjs", "registration/server/api.mjs", "registration/server/auth.mjs", "registration/server/adapters.mjs", "registration/server/phase3-domain.mjs", "registration/server/repositories.mjs", "api/package.json", "api/src/storage.mjs", "api/src/functions/registration.mjs", "scripts/prepare-registration-api.mjs", "scripts/prepare-registration-development-routes.mjs", "scripts/start-registration-prototype.mjs", "scripts/start-registration-phase2.mjs", "scripts/reset-registration-phase2.mjs", "scripts/backup-registration-phase2.mjs", "scripts/restore-registration-phase2.mjs"];
-files.push("registration/declarations.mjs");
+files.push("registration/declarations.mjs", "registration/localisation.cy.mjs");
 const errors = [];
 for (const file of files) if (!fs.existsSync(file)) errors.push(`Missing ${file}`);
 for (const file of files.filter((name) => name.endsWith(".mjs"))) {
@@ -15,10 +15,13 @@ for (const htmlFile of ["registration/index.html", "registration/dashboard.html"
   if (!/<title>[^<]+<\/title>/.test(html)) errors.push(`${htmlFile} missing title`);
 }
 const runnerPage = fs.readFileSync("registration/index.html", "utf8");
-for (const required of ["Development · Closed", "takes no money", "dateOfBirth", "addressLine1", "postcode", "Male / Open — Gwryw / Agored", "acceptTerms", "acceptPrivacy", "acceptDeclaration", "declarationName", "Emergency contact phone number / Rhif ffôn cyswllt mewn argyfwng"])
+for (const required of ["Development · Closed", "takes no money", "dateOfBirth", "addressLine1", "postcode", ">Male / Open<", "acceptTerms", "acceptPrivacy", "acceptDeclaration", "declarationName", "Emergency contact phone number"])
   if (!runnerPage.includes(required)) errors.push(`Runner prototype missing: ${required}`);
-for (const required of ["Stage / Cam 1 of / o 4", "Submit test entry / Cyflwyno cofrestriad prawf", "View this entry as organiser / Gweld fel trefnydd", "Start a test registration / Dechrau cofrestriad prawf"])
+for (const required of ["Stage 1 of 4", "Submit test entry", "View this entry as organiser", "Start a test registration"])
   if (!runnerPage.includes(required)) errors.push(`Runner journey is missing: ${required}`);
+for (const retired of ["Affiliated with UK Athletics?", "UK Athletics membership number", "name=\"affiliated\"", "name=\"membershipNumber\"", "name=\"travelMethod\""])
+  if (runnerPage.includes(retired)) errors.push(`Runner journey still renders retired field: ${retired}`);
+if (/lang(?:uage)?[- ]?toggle|Cymraeg/i.test(runnerPage)) errors.push("Runner journey unexpectedly includes a language toggle");
 const client = fs.readFileSync("registration/prototype-client.mjs", "utf8");
 if (!client.includes("PRODUCTION_CLOSED") || !client.includes("canTest")) errors.push("Production-closed client guard is missing");
 if (/searchParams\.get\(["'](?:mode|state|open|environment)["']\)|querySelector\([^)]*mode/i.test(client)) errors.push("A URL/query override could alter registration mode");

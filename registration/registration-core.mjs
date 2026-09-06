@@ -43,28 +43,27 @@ export function ageOnDate(dateOfBirth, eventDate = EVENT.date) {
 
 export function validateRunner(input, { requireSynthetic = true } = {}) {
   const errors = {};
-  const required = ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "emergencyName", "emergencyPhone", "travelMethod", "declarationName"];
-  for (const field of required) if (!String(input[field] ?? "").trim()) errors[field] = "This field is required. / Mae angen llenwi'r maes hwn.";
+  const required = ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "emergencyName", "emergencyPhone", "declarationName"];
+  for (const field of required) if (!String(input[field] ?? "").trim()) errors[field] = "This field is required.";
   const email = String(input.email ?? "").trim().toLowerCase();
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address. / Rhowch gyfeiriad e-bost dilys.";
-  else if (requireSynthetic && email && !SYNTHETIC_EMAIL.test(email)) errors.email = "Use a synthetic example.com, example.org, example.net or .invalid address. / Defnyddiwch gyfeiriad prawf yn unig.";
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address.";
+  else if (requireSynthetic && email && !SYNTHETIC_EMAIL.test(email)) errors.email = "Use a synthetic example.com, example.org, example.net or .invalid address.";
   for (const field of ["phone", "emergencyPhone"]) {
     const value = String(input[field] ?? "").trim();
-    if (value && !/^[+()\d\s-]{7,24}$/.test(value)) errors[field] = "Enter a valid test phone number. / Rhowch rif ffôn prawf dilys.";
+    if (value && !/^[+()\d\s-]{7,24}$/.test(value)) errors[field] = "Enter a valid test phone number.";
   }
   const age = ageOnDate(String(input.dateOfBirth ?? ""));
-  if (!Number.isFinite(age)) errors.dateOfBirth = "Enter a valid date of birth. / Rhowch ddyddiad geni dilys.";
-  else if (age < EVENT.minimumAge) errors.dateOfBirth = `Entrants must be at least ${EVENT.minimumAge} on ${EVENT.date}. / Rhaid i ymgeiswyr fod yn ${EVENT.minimumAge} oed o leiaf ar ${EVENT.date}.`;
-  else if (age < 18) errors.declarationSignatoryRole = "Registration for runners aged 16 or 17 is paused until the organiser confirms the WFRA parental-consent process. / Mae cofrestru rhedwyr 16 neu 17 oed wedi'i oedi nes bod y trefnydd yn cadarnhau proses caniatâd rhieni WFRA.";
-  if (input.affiliated && !String(input.membershipNumber ?? "").trim()) errors.membershipNumber = "Enter a UK Athletics membership number or select No. / Rhowch rif aelodaeth UK Athletics neu dewiswch Nac ydw.";
-  if (input.wfraMember && !String(input.wfraMembershipNumber ?? "").trim()) errors.wfraMembershipNumber = "Enter a WFRA membership number or select No. / Rhowch rif aelodaeth WFRA neu dewiswch Nac ydw.";
-  if (String(input.wfraMembershipNumber ?? "").length > 80 || /[\u0000-\u001f\u007f]/.test(String(input.wfraMembershipNumber ?? ""))) errors.wfraMembershipNumber = "Use no more than 80 ordinary text characters. / Defnyddiwch hyd at 80 nod testun arferol.";
-  if (input.genderCategory && !EVENT.raceCategories.includes(input.genderCategory)) errors.genderCategory = "Select Female or Male / Open. / Dewiswch Benyw neu Gwryw / Agored.";
-  if (!input.declarationSignatoryRole) errors.declarationSignatoryRole = "Select who is signing. / Dewiswch pwy sy'n llofnodi.";
-  else if (age >= 18 && input.declarationSignatoryRole !== "Competitor") errors.declarationSignatoryRole = "An adult entrant must sign as the competitor. / Rhaid i ymgeisydd sy'n oedolyn lofnodi fel y cystadleuydd.";
-  if (!input.acceptDeclaration) errors.acceptDeclaration = "Accept the declaration to continue. / Derbyniwch y datganiad i barhau.";
-  if (!input.acceptTerms) errors.acceptTerms = "You must accept the prototype race terms. / Rhaid i chi dderbyn telerau prawf y ras.";
-  if (!input.acceptPrivacy) errors.acceptPrivacy = "You must acknowledge the prototype privacy notice. / Rhaid i chi gydnabod yr hysbysiad preifatrwydd prawf.";
+  if (!Number.isFinite(age)) errors.dateOfBirth = "Enter a valid date of birth.";
+  else if (age < EVENT.minimumAge) errors.dateOfBirth = `Entrants must be at least ${EVENT.minimumAge} on ${EVENT.date}.`;
+  else if (age < 18) errors.declarationSignatoryRole = "Registration for runners aged 16 or 17 is paused until the organiser confirms the WFRA parental-consent process.";
+  if (input.wfraMember && !String(input.wfraMembershipNumber ?? "").trim()) errors.wfraMembershipNumber = "Enter a WFRA membership number or select No.";
+  if (String(input.wfraMembershipNumber ?? "").length > 80 || /[\u0000-\u001f\u007f]/.test(String(input.wfraMembershipNumber ?? ""))) errors.wfraMembershipNumber = "Use no more than 80 ordinary text characters.";
+  if (input.genderCategory && !EVENT.raceCategories.includes(input.genderCategory)) errors.genderCategory = "Select Female or Male / Open.";
+  if (!input.declarationSignatoryRole) errors.declarationSignatoryRole = "Select who is signing.";
+  else if (age >= 18 && input.declarationSignatoryRole !== "Competitor") errors.declarationSignatoryRole = "An adult entrant must sign as the competitor.";
+  if (!input.acceptDeclaration) errors.acceptDeclaration = "Accept the declaration to continue.";
+  if (!input.acceptTerms) errors.acceptTerms = "You must accept the prototype race terms.";
+  if (!input.acceptPrivacy) errors.acceptPrivacy = "You must acknowledge the prototype privacy notice.";
   return errors;
 }
 
@@ -147,11 +146,9 @@ export function submitRegistration(state, input, { source = "runner" } = {}) {
       addressLine1: String(input.addressLine1).trim(), addressLine2: String(input.addressLine2 ?? "").trim() || null,
       city: String(input.city).trim(), postcode: String(input.postcode).trim(),
       genderCategory: input.genderCategory, club: String(input.club ?? "").trim() || "Unattached",
-      affiliated: Boolean(input.affiliated), membershipNumber: String(input.membershipNumber ?? "").trim() || null,
-      wfraMember: Boolean(input.wfraMember), wfraMembershipNumber: String(input.wfraMembershipNumber ?? "").trim() || null,
+      wfraMember: Boolean(input.wfraMember), wfraMembershipNumber: input.wfraMember ? String(input.wfraMembershipNumber ?? "").trim() || null : null,
       wfraMembershipVerified: false, wfraDiscountApplied: false,
       emergencyName: String(input.emergencyName).trim(), emergencyPhone: String(input.emergencyPhone).trim(),
-      travelMethod: input.travelMethod
     },
     entryStatus, waitingListPosition: null, raceNumber: null,
     paymentStatus: "not_started", termsVersion: EVENT.termsVersion, privacyVersion: EVENT.privacyVersion,

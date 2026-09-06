@@ -17,7 +17,7 @@ const admin = { authenticated: true, role: "Organiser", actorType: "organiser", 
 const runner = (number = 1, overrides = {}) => ({
   id: `runner_${number}`, email: `runner-${number}@example.com`, firstName: `Runner ${number}`, lastName: "Example",
   phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA",
-  raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", affiliated: false, membershipNumber: "", wfraMember: false, wfraMembershipNumber: "",
+  raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "",
   emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", ...overrides
 });
 const beforeCutoff = new Date("2026-10-01T12:00:00.000Z");
@@ -145,18 +145,26 @@ test("private and open registration reserve a place only after state, capacity, 
   assert.equal(beginProductionRegistration(closed, input, { at: beforeCutoff }).code, "REGISTRATION_NOT_ACCEPTING");
 });
 
-test("runner validation accepts exactly the approved competition categories and conditional affiliation", () => {
+test("runner validation accepts exactly the approved competition categories", () => {
   assert.deepEqual(RACE_CATEGORIES, ["Female", "Male / Open"]);
   for (const raceCategory of RACE_CATEGORIES) assert.deepEqual(validateProductionRunner(runner(1, { raceCategory })), {});
   assert.equal(validateProductionRunner(runner(1, { raceCategory: "Non-binary" })).raceCategory, "Select Female or Male / Open.");
-  assert.ok(validateProductionRunner(runner(1, { affiliated: true })).membershipNumber);
 });
 
-test("UK Athletics and WFRA membership are separate and WFRA numbers remain format-neutral", () => {
-  assert.deepEqual(validateProductionRunner(runner(1, { affiliated: true, membershipNumber: "UKA-123", wfraMember: true, wfraMembershipNumber: "South Wales ABC / 42" })), {});
+test("WFRA is the only active membership model and its number remains format-neutral", () => {
+  assert.deepEqual(validateProductionRunner(runner(1, { wfraMember: true, wfraMembershipNumber: "South Wales ABC / 42" })), {});
   assert.ok(validateProductionRunner(runner(1, { wfraMember: true, wfraMembershipNumber: "" })).wfraMembershipNumber);
   assert.deepEqual(validateProductionRunner(runner(1, { wfraMember: true, wfraMembershipNumber: "AB 12-XY/9" })), {});
   assert.ok(validateProductionRunner(runner(1, { wfraMember: true, wfraMembershipNumber: "x".repeat(81) })).wfraMembershipNumber);
+  assert.ok(validateProductionRunner(runner(1, { wfraMember: true, wfraMembershipNumber: "AB\n12" })).wfraMembershipNumber);
+  const state = createPhase3State({ registrationState: "OPEN" });
+  const created = beginProductionRegistration(state, { runner: runner(1, { affiliated: true, membershipNumber: "UKA-LEGACY" }), declaration: declaration() }, { at: beforeCutoff });
+  assert.equal(created.ok, true);
+  assert.equal("affiliated" in state.runners[0], false);
+  assert.equal("membershipNumber" in state.runners[0], false);
+  const nonMemberState = createPhase3State({ registrationState: "OPEN" });
+  beginProductionRegistration(nonMemberState, { runner: runner(2, { wfraMember: false, wfraMembershipNumber: "STALE-VALUE" }), declaration: declaration({ typedFullName: "Runner 2 Example" }) }, { at: beforeCutoff });
+  assert.equal(nonMemberState.runners[0].wfraMembershipNumber, null);
 });
 
 test("server calculates standard and configured WFRA prices and ignores browser amount fields", () => {
@@ -190,19 +198,24 @@ test("under-18 entries cannot falsely complete pending the parental-consent deci
   assert.equal(beginProductionRegistration(state, { runner: runner(), declaration: declaration({ accepted: false }) }, { at: beforeCutoff }).code, "DECLARATION_NOT_ACCEPTED");
 });
 
-test("all runner data-field labels use reviewed English and South Wales Welsh copy", () => {
+test("runner UI is English-only, contains the approved fields and has no language toggle", () => {
   const html = fs.readFileSync("registration/index.html", "utf8");
   for (const label of [
-    "Email address / Cyfeiriad e-bost", "First name / Enw cyntaf", "Last name / Cyfenw", "Phone number / Rhif ffôn",
-    "Address line 1 / Llinell cyfeiriad 1", "Address line 2 / Llinell cyfeiriad 2", "City / Dinas", "Postcode / Cod post",
-    "Race category / Categori ras", "Date of birth / Dyddiad geni", "Club / Clwb",
-    "Affiliated with UK Athletics? / Ydych chi'n gysylltiedig ag UK Athletics?", "UK Athletics membership number / Rhif aelodaeth UK Athletics",
-    "WFRA member? / Ydych chi'n aelod o WFRA?", "WFRA membership number / Rhif aelodaeth WFRA",
-    "Emergency contact name / Enw cyswllt mewn argyfwng", "Emergency contact phone number / Rhif ffôn cyswllt mewn argyfwng",
-    "Enter your full name to sign the declaration / Rhowch eich enw llawn i lofnodi'r datganiad"
-  ]) assert.ok(html.includes(label), `missing bilingual label: ${label}`);
-  assert.ok(html.includes("Female / Benyw")); assert.ok(html.includes("Male / Open — Gwryw / Agored"));
-  assert.equal(html.includes("Dyddiad Genu"), false); assert.equal(html.includes("Cyfeiriad (1)"), false);
+    "Email address", "First name", "Last name", "Phone number", "Address line 1", "Address line 2", "City", "Postcode",
+    "Race category", "Date of birth", "Club", "WFRA member?", "WFRA membership number",
+    "Emergency contact name", "Emergency contact phone number", "Enter your full name to sign the declaration"
+  ]) assert.ok(html.includes(label), `missing English label: ${label}`);
+  assert.ok(html.includes('<option value="Female">Female</option>'));
+  assert.ok(html.includes('<option value="Male / Open" selected>Male / Open</option>'));
+  for (const absent of ["Affiliated with UK Athletics?", "UK Athletics membership number", "name=\"affiliated\"", "name=\"membershipNumber\"", "name=\"travelMethod\"", "Cymraeg", " / Cyfeiriad", " / Enw", " / Rhif", "language-toggle"])
+    assert.equal(html.includes(absent), false, `unexpected runner UI content: ${absent}`);
+});
+
+test("Welsh copy is retained separately without becoming an active language pack", async () => {
+  const retained = await import("../registration/localisation.cy.mjs");
+  assert.equal(retained.RETAINED_WELSH_RUNNER_COPY.email, "Cyfeiriad e-bost");
+  const html = fs.readFileSync("registration/index.html", "utf8");
+  assert.equal(html.includes("localisation.cy.mjs"), false);
 });
 
 test("capacity counts confirmed, payment reservations and live offers and never exceeds 120", () => {

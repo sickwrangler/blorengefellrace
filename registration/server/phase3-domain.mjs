@@ -169,7 +169,6 @@ export function validateProductionRunner(input) {
   const age = ageOnRaceDate(input.dateOfBirth);
   if (!Number.isFinite(age)) errors.dateOfBirth = "Enter a valid date of birth.";
   else if (age < 16) errors.dateOfBirth = "Entrants must be at least 16 on race day.";
-  if (input.affiliated && !String(input.membershipNumber ?? "").trim()) errors.membershipNumber = "Enter the UK Athletics membership number.";
   if (input.wfraMember && !String(input.wfraMembershipNumber ?? "").trim()) errors.wfraMembershipNumber = "Enter the WFRA membership number.";
   if (String(input.wfraMembershipNumber ?? "").length > 80 || /[\u0000-\u001f\u007f]/.test(String(input.wfraMembershipNumber ?? ""))) errors.wfraMembershipNumber = "Use no more than 80 ordinary text characters.";
   return errors;
@@ -231,7 +230,8 @@ function validateUnder18Declaration(state, runner, declaration) {
 
 function storeRunner(state, input) {
   const runner = { id: shortId("runner") };
-  for (const field of ["email", "firstName", "lastName", "phone", "addressLine1", "addressLine2", "city", "postcode", "raceCategory", "dateOfBirth", "club", "affiliated", "membershipNumber", "wfraMember", "wfraMembershipNumber", "emergencyContactName", "emergencyContactPhone"]) runner[field] = typeof input[field] === "string" ? input[field].trim() : input[field];
+  for (const field of ["email", "firstName", "lastName", "phone", "addressLine1", "addressLine2", "city", "postcode", "raceCategory", "dateOfBirth", "club", "wfraMember", "wfraMembershipNumber", "emergencyContactName", "emergencyContactPhone"]) runner[field] = typeof input[field] === "string" ? input[field].trim() : input[field];
+  if (runner.wfraMember !== true) runner.wfraMembershipNumber = null;
   runner.wfraMembershipVerified = false;
   state.runners.push(runner);
   return runner;
@@ -385,7 +385,7 @@ export function amendRunner(state, managementToken, changes, { actor = { actorTy
   const beforeCutoff = new Date(at) <= new Date(state.event.transferRefundCutoffUtc);
   const identityFields = ["firstName", "lastName"];
   if (!organiserOverride && !beforeCutoff && identityFields.some((field) => changes[field] !== undefined && changes[field] !== runner[field])) return { ok: false, code: "NAME_LOCKED_AFTER_CUTOFF" };
-  const allowed = ["firstName", "lastName", "email", "phone", "addressLine1", "addressLine2", "city", "postcode", "dateOfBirth", "raceCategory", "club", "affiliated", "membershipNumber", "wfraMember", "wfraMembershipNumber", "emergencyContactName", "emergencyContactPhone"];
+  const allowed = ["firstName", "lastName", "email", "phone", "addressLine1", "addressLine2", "city", "postcode", "dateOfBirth", "raceCategory", "club", "wfraMember", "wfraMembershipNumber", "emergencyContactName", "emergencyContactPhone"];
   const changedFields = allowed.filter((field) => changes[field] !== undefined && changes[field] !== runner[field]);
   for (const field of changedFields) runner[field] = typeof changes[field] === "string" ? changes[field].trim() : changes[field];
   const ownershipChanged = ["firstName", "lastName", "email"].some((field) => changedFields.includes(field));
