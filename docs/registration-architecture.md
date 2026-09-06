@@ -75,3 +75,7 @@ The prototype uses one authoritative state mutation path, so only one of two fin
 - separate development and production configuration and data boundaries.
 
 The Phase 2 cloud resources are development-only and synthetic-only. Detailed operational and security review information is maintained separately from the public website.
+
+## Phase 3A production-readiness foundation
+
+Phase 3A adds a separate server domain for production operational states, private invitations, capacity reservations, waiting-list offers, declaration evidence, secure management links, cutoff-aware amendments, refund decisions and optional race numbers. Production initialization is always `CLOSED`, and the existing deployment allowlist still excludes all registration pages and APIs. The development service remains synthetic with mock payment and captured-only email adapters. See `registration-phase3-plan.md` for implemented boundaries and the provider work still requiring approval.

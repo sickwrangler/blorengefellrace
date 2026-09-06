@@ -59,6 +59,7 @@ const DEVELOPMENT_API_COPIES = Object.freeze([
   ["registration/server/adapters.mjs", "src/shared/server/adapters.mjs"],
   ["registration/server/api.mjs", "src/shared/server/api.mjs"],
   ["registration/server/auth.mjs", "src/shared/server/auth.mjs"],
+  ["registration/server/phase3-domain.mjs", "src/shared/server/phase3-domain.mjs"],
   ["registration/server/repositories.mjs", "src/shared/server/repositories.mjs"],
   ["registration/server/service.mjs", "src/shared/server/service.mjs"]
 ]);

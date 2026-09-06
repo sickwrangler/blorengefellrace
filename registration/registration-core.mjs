@@ -2,10 +2,19 @@ export const EVENT = Object.freeze({
   id: "blorenge-2026",
   name: "Blorenge Fell Race 2026",
   date: "2026-11-28",
-  capacity: 110,
+  capacity: 120,
+  entryFeePence: 600,
+  timezone: "Europe/London",
+  transferRefundCutoff: "2026-10-28T23:59:00.000Z",
+  waitingListOfferHours: 48,
+  waitingListReminderHours: 24,
+  raceCategories: Object.freeze(["Female", "Male / Open"]),
   minimumAge: 16,
   termsVersion: "prototype-2026-09",
-  privacyVersion: "prototype-2026-09"
+  privacyVersion: "prototype-2026-09",
+  declarationIdentifier: "wfra-competitor-declaration",
+  declarationVersion: "development-placeholder-v1",
+  declarationContentStatus: "approved-wording-required-before-production"
 });
 
 export const REGISTRATION_STATES = Object.freeze(["closed", "test", "open", "paused", "full"]);
@@ -31,7 +40,7 @@ export function ageOnDate(dateOfBirth, eventDate = EVENT.date) {
 
 export function validateRunner(input, { requireSynthetic = true } = {}) {
   const errors = {};
-  const required = ["firstName", "lastName", "email", "phone", "dateOfBirth", "genderCategory", "emergencyName", "emergencyPhone", "travelMethod"];
+  const required = ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "emergencyName", "emergencyPhone", "travelMethod", "declarationName"];
   for (const field of required) if (!String(input[field] ?? "").trim()) errors[field] = "This field is required.";
   const email = String(input.email ?? "").trim().toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address.";
@@ -44,6 +53,8 @@ export function validateRunner(input, { requireSynthetic = true } = {}) {
   if (!Number.isFinite(age)) errors.dateOfBirth = "Enter a valid date of birth.";
   else if (age < EVENT.minimumAge) errors.dateOfBirth = `Entrants must be at least ${EVENT.minimumAge} on ${EVENT.date}.`;
   if (input.affiliated && !String(input.membershipNumber ?? "").trim()) errors.membershipNumber = "Enter a test membership number or select not affiliated.";
+  if (input.genderCategory && !EVENT.raceCategories.includes(input.genderCategory)) errors.genderCategory = "Select Female or Male / Open.";
+  if (!input.acceptDeclaration) errors.acceptDeclaration = "Confirm the declaration-recording step.";
   if (!input.acceptTerms) errors.acceptTerms = "You must accept the prototype race terms.";
   if (!input.acceptPrivacy) errors.acceptPrivacy = "You must acknowledge the prototype privacy notice.";
   return errors;
@@ -125,6 +136,8 @@ export function submitRegistration(state, input, { source = "runner" } = {}) {
     runner: {
       id: identifier("runner"), firstName: String(input.firstName).trim(), lastName: String(input.lastName).trim(),
       email, phone: String(input.phone).trim(), dateOfBirth: input.dateOfBirth,
+      addressLine1: String(input.addressLine1).trim(), addressLine2: String(input.addressLine2 ?? "").trim() || null,
+      city: String(input.city).trim(), postcode: String(input.postcode).trim(),
       genderCategory: input.genderCategory, club: String(input.club ?? "").trim() || "Unattached",
       affiliated: Boolean(input.affiliated), membershipNumber: String(input.membershipNumber ?? "").trim() || null,
       emergencyName: String(input.emergencyName).trim(), emergencyPhone: String(input.emergencyPhone).trim(),
@@ -132,6 +145,7 @@ export function submitRegistration(state, input, { source = "runner" } = {}) {
     },
     entryStatus, waitingListPosition: null, raceNumber: null,
     paymentStatus: "not_started", termsVersion: EVENT.termsVersion, privacyVersion: EVENT.privacyVersion,
+    declaration: { identifier: EVENT.declarationIdentifier, version: EVENT.declarationVersion, accepted: true, typedFullName: String(input.declarationName).trim(), acceptedAt: new Date().toISOString() },
     consentRecordedAt: new Date().toISOString()
   };
   state.registrations.push(registration);

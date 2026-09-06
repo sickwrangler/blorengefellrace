@@ -21,7 +21,7 @@ export function queryRegistrations(state, { search = "", entry = "", payment = "
 }
 
 export function createFixtureState(fixtures, environment = "preview") {
-  const state = initialState({ environment, state: "test", capacity: 110 });
+  const state = initialState({ environment, state: "test", capacity: 120 });
   const waiting = [];
   for (const fixture of fixtures.filter((item) => item.submit)) {
     const result = submitRegistration(state, fixture.runner, { source: "seed" });
@@ -55,7 +55,7 @@ export function createPreviewRepository({ storage, environment = "preview", now 
       return { ok: false, code: "STORAGE_UNAVAILABLE", message: "Test data could not be saved in this browser. Use a normal browser window with site storage enabled, then choose Reset test." };
     }
   }
-  function baseline() { return initialState({ environment, state: "test", capacity: 110 }); }
+  function baseline() { return initialState({ environment, state: "test", capacity: 120 }); }
   function read() {
     let raw;
     try { raw = storage.getItem(STORAGE_KEY); }

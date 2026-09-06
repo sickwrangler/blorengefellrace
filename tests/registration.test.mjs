@@ -15,9 +15,10 @@ function previewRepository(storage = memoryStorage()) { return createPreviewRepo
 
 const runner = (number = 1, overrides = {}) => ({
   firstName: `Runner${number}`, lastName: "Example", email: `runner${number}@example.com`, phone: "07700 900123",
+  addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA",
   dateOfBirth: "1990-06-15", genderCategory: "Female", club: number % 2 ? "Example Harriers" : "",
   affiliated: false, membershipNumber: "", emergencyName: "Contact Example", emergencyPhone: "07700 900456",
-  travelMethod: "Shared car", acceptTerms: true, acceptPrivacy: true, ...overrides
+  travelMethod: "Shared car", declarationName: `Runner${number} Example`, acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, ...overrides
 });
 
 test("production and invalid configurations fail closed", () => {
@@ -88,12 +89,12 @@ test("repeated Stage 3 submission cannot create two records", () => {
   assert.equal(state.registrations.length, 1);
 });
 
-test("capacity accepts entries 109 and 110 then wait-lists entry 111", () => {
-  const state = initialState({ capacity: 110 });
-  for (let number = 1; number <= 108; number += 1) assert.equal(submitRegistration(state, runner(number)).registration.entryStatus, "accepted");
-  assert.equal(submitRegistration(state, runner(109)).registration.entryStatus, "accepted");
-  assert.equal(submitRegistration(state, runner(110)).registration.entryStatus, "accepted");
-  const final = submitRegistration(state, runner(111)).registration;
+test("capacity accepts entries 119 and 120 then wait-lists entry 121", () => {
+  const state = initialState({ capacity: 120 });
+  for (let number = 1; number <= 118; number += 1) assert.equal(submitRegistration(state, runner(number)).registration.entryStatus, "accepted");
+  assert.equal(submitRegistration(state, runner(119)).registration.entryStatus, "accepted");
+  assert.equal(submitRegistration(state, runner(120)).registration.entryStatus, "accepted");
+  const final = submitRegistration(state, runner(121)).registration;
   assert.equal(final.entryStatus, "waiting_list");
   assert.equal(final.waitingListPosition, 1);
 });

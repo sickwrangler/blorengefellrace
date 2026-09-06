@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
-const files = ["registration/index.html", "registration/dashboard.html", "registration/prototype.css", "registration/runner.mjs", "registration/runner-flow.mjs", "registration/dashboard.mjs", "registration/organiser-view.mjs", "registration/prototype-client.mjs", "registration/preview-repository.mjs", "registration/registration-core.mjs", "registration/fixtures.json", "registration/server/service.mjs", "registration/server/api.mjs", "registration/server/auth.mjs", "registration/server/adapters.mjs", "registration/server/repositories.mjs", "api/package.json", "api/src/storage.mjs", "api/src/functions/registration.mjs", "scripts/prepare-registration-api.mjs", "scripts/prepare-registration-development-routes.mjs", "scripts/start-registration-prototype.mjs", "scripts/start-registration-phase2.mjs", "scripts/reset-registration-phase2.mjs", "scripts/backup-registration-phase2.mjs", "scripts/restore-registration-phase2.mjs"];
+const files = ["registration/index.html", "registration/dashboard.html", "registration/prototype.css", "registration/runner.mjs", "registration/runner-flow.mjs", "registration/dashboard.mjs", "registration/organiser-view.mjs", "registration/prototype-client.mjs", "registration/preview-repository.mjs", "registration/registration-core.mjs", "registration/fixtures.json", "registration/server/service.mjs", "registration/server/api.mjs", "registration/server/auth.mjs", "registration/server/adapters.mjs", "registration/server/phase3-domain.mjs", "registration/server/repositories.mjs", "api/package.json", "api/src/storage.mjs", "api/src/functions/registration.mjs", "scripts/prepare-registration-api.mjs", "scripts/prepare-registration-development-routes.mjs", "scripts/start-registration-prototype.mjs", "scripts/start-registration-phase2.mjs", "scripts/reset-registration-phase2.mjs", "scripts/backup-registration-phase2.mjs", "scripts/restore-registration-phase2.mjs"];
 const errors = [];
 for (const file of files) if (!fs.existsSync(file)) errors.push(`Missing ${file}`);
 for (const file of files.filter((name) => name.endsWith(".mjs"))) {
@@ -10,11 +10,11 @@ for (const file of files.filter((name) => name.endsWith(".mjs"))) {
 for (const htmlFile of ["registration/index.html", "registration/dashboard.html"]) {
   const html = fs.readFileSync(htmlFile, "utf8");
   for (const required of ["<meta name=\"viewport\"", "skip-link"]) if (!html.includes(required)) errors.push(`${htmlFile} missing ${required}`);
-  if (!/prototype/i.test(html)) errors.push(`${htmlFile} is not clearly labelled as a prototype`);
+  if (!/(development|synthetic|test)/i.test(html)) errors.push(`${htmlFile} does not disclose its non-production context`);
   if (!/<title>[^<]+<\/title>/.test(html)) errors.push(`${htmlFile} missing title`);
 }
 const runnerPage = fs.readFileSync("registration/index.html", "utf8");
-for (const required of ["TEST REGISTRATION — NOT A REAL ENTRY", "No money, card details", "dateOfBirth", "acceptTerms", "acceptPrivacy", "Emergency-contact"])
+for (const required of ["Development · Closed", "takes no money", "dateOfBirth", "addressLine1", "postcode", "Male / Open", "acceptTerms", "acceptPrivacy", "acceptDeclaration", "declarationName", "Emergency-contact"])
   if (!runnerPage.includes(required)) errors.push(`Runner prototype missing: ${required}`);
 for (const required of ["Stage 1 of 4", "Submit test entry", "View this entry as organiser", "Start a test registration"])
   if (!runnerPage.includes(required)) errors.push(`Runner journey is missing: ${required}`);
@@ -31,7 +31,7 @@ if (fixtures.some((fixture) => fixture.runner?.email && !/@(example\.(com|org|ne
 const repository = fs.readFileSync("registration/preview-repository.mjs", "utf8");
 if (!repository.includes('STORAGE_KEY = "blorenge-registration-preview"') || !repository.includes("SCHEMA_VERSION = 3")) errors.push("Shared preview storage contract is missing");
 const dashboard = fs.readFileSync("registration/dashboard.html", "utf8");
-for (const required of ["Testing progress", "Technical details", "Reset test", "There are no test entries", "Also release race number?", "available for another entrant", "Audit history", "entry-audit"])
+for (const required of ["Development · Closed", "Private access", "create-invitation", "Development test checklist", "Technical details", "Reset test", "There are no test entries", "Also release race number?", "available for another entrant", "Audit history", "entry-audit"])
   if (!dashboard.includes(required)) errors.push(`Dashboard workflow is missing: ${required}`);
 if (!dashboard.includes("prototype-pending") || !dashboard.includes('location.replace("../404.html")')) errors.push("Production organiser redirect/hidden guard is missing");
 const prototypeCss = fs.readFileSync("registration/prototype.css", "utf8");
@@ -48,6 +48,9 @@ for (const required of ["Remove race number", "removeRaceNumber", "releaseRaceNu
 const phase2 = fs.readFileSync("registration/server/service.mjs", "utf8") + fs.readFileSync("registration/server/api.mjs", "utf8");
 for (const required of ["IDEMPOTENCY_KEY_REQUIRED", "confirmationTokenHash", "race_number_removed", "record_anonymised", "csvFormulaSafe", "/api/v2/organiser/"])
   if (!phase2.includes(required)) errors.push(`Phase 2 server boundary is missing: ${required}`);
+const phase3 = fs.readFileSync("registration/server/phase3-domain.mjs", "utf8");
+for (const required of ["PRIVATE_LIVE", "CLOSED_FINAL", "waiting_list_offer", "transferRefundCutoffUtc", "declarationVersion", "DUPLICATE_RACE_NUMBER", "MANAGEMENT_TOKEN_INVALID"])
+  if (!phase3.includes(required)) errors.push(`Phase 3 foundation is missing: ${required}`);
 const staticConfig = fs.readFileSync("staticwebapp.config.json", "utf8");
 for (const blocked of ["/registration/server/*", "/registration/fixtures.json", "/api/src/*", "/api/package.json", "/api/package-lock.json", "/infrastructure/*", "/docs/internal/*", "/tests/*"])
   if (!staticConfig.includes(blocked)) errors.push(`Preview source route is not blocked: ${blocked}`);

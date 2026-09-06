@@ -8,6 +8,7 @@ The registration development system must use invented test entrants only. The Az
 |---|---|---|
 | First and last name | Identify the entrant and prepare race/result records | Private during registration; may later appear in approved public results |
 | Email and phone | Registration contact | Private |
+| Postal address | Entry administration and any confirmed eligibility/operational need | Private; final necessity and retention require organiser approval |
 | Date of birth | Verify minimum age and calculate the appropriate results category | Private; derived category may be public |
 | Gender/category | Produce result categories | Private during registration; approved category may be public |
 | Running club | Race administration and results | May be public in results |
@@ -15,14 +16,18 @@ The registration development system must use invented test entrants only. The Az
 | Emergency-contact name and phone | Race-day incident contact | Private; race-day use only |
 | Travel method | Event travel planning | Private/aggregate use only |
 | Terms and privacy versions/timestamp | Evidence of the agreed versions | Private |
+| WFRA declaration identifier, version, typed name and timestamp | Evidence of the exact declaration accepted | Private; retention requires organiser approval |
 | Entry, mock-payment and waiting-list status | Administer the test workflow | Private |
+| Waiting-list name and email | Operate the queue while minimizing data before a place is offered | Private; remove promptly when no longer needed |
+| Private-invitation and management-token hashes | Authorize purpose-bound private and self-service access | Private security data; revoke/expire promptly |
+| Refund request/decision and payment references | Administer refunds and reconcile finance | Private; accounting retention must be decided separately |
 | Race number | Race administration and results | May be public in results |
 
-A full postal address is excluded because no operational need has been established. Medical information is excluded; collecting it would require a specific race-day need, lawful basis, restricted access and retention decision.
+Medical information remains excluded; collecting it would require a specific race-day need, lawful basis, restricted access and retention decision.
 
 ## Retention and rights
 
-Prototype data should be reset after each review session and is not backed up. A future retention schedule for production registration, finance/audit records, emergency contacts and result records requires organiser approval before collection starts.
+Prototype data should be reset after each review session and is not backed up. Final periods are deliberately not invented. The organiser must approve a production schedule covering incomplete attempts, waiting-list records, private invitations, active/cancelled entries, addresses and contact details, declarations/consent, audit records, payment/accounting metadata and public results before real collection starts. Emergency-contact data is short-lived operational information and should be deleted or anonymised soon after the event once incident needs have ended. Durable financial/accounting evidence must be separated from race-operation data and retained only for its approved purpose.
 
 The production design must provide documented processes to:
 

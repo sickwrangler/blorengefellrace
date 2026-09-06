@@ -18,6 +18,7 @@ function payload() {
   data.affiliated = form.elements.affiliated.checked;
   data.acceptTerms = form.elements.acceptTerms.checked;
   data.acceptPrivacy = form.elements.acceptPrivacy.checked;
+  data.acceptDeclaration = form.elements.acceptDeclaration.checked;
   return data;
 }
 function clearErrors() {
@@ -38,8 +39,8 @@ function showErrors(errors) {
 function validateStage(target) {
   const errors = validateRunner(payload());
   const relevantFields = target === 1
-    ? ["firstName", "lastName", "email", "phone", "dateOfBirth", "genderCategory", "membershipNumber"]
-    : target === 2 ? ["emergencyName", "emergencyPhone", "travelMethod", "acceptTerms", "acceptPrivacy"] : Object.keys(errors);
+    ? ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "membershipNumber"]
+    : target === 2 ? ["emergencyName", "emergencyPhone", "travelMethod", "declarationName", "acceptDeclaration", "acceptTerms", "acceptPrivacy"] : Object.keys(errors);
   const relevant = Object.fromEntries(Object.entries(errors).filter(([name]) => relevantFields.includes(name)));
   if (Object.keys(relevant).length) { showErrors(relevant); return false; }
   clearErrors(); return true;
@@ -55,7 +56,7 @@ function showStage(number) {
 }
 function renderReview() {
   const data = payload();
-  const fields = { Name: `${data.firstName} ${data.lastName}`, "Test email": data.email, "Test phone": data.phone, "Date of birth": data.dateOfBirth, Category: data.genderCategory, Club: data.club || "Unattached", Affiliation: data.affiliated ? `Affiliated — ${data.membershipNumber}` : "Not affiliated", "Emergency contact": `${data.emergencyName} — ${data.emergencyPhone}`, Travel: data.travelMethod, Consent: "Prototype terms and privacy acknowledged" };
+  const fields = { Name: `${data.firstName} ${data.lastName}`, Email: data.email, Phone: data.phone, Address: [data.addressLine1, data.addressLine2, data.city, data.postcode].filter(Boolean).join(", "), "Date of birth": data.dateOfBirth, Category: data.genderCategory, Club: data.club || "Unattached", Affiliation: data.affiliated ? `Affiliated — ${data.membershipNumber}` : "Not affiliated", "Emergency contact": `${data.emergencyName} — ${data.emergencyPhone}`, Travel: data.travelMethod, Declaration: `${data.declarationName} — development recording step acknowledged` };
   document.querySelector("#review-list").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => {
     const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd];
   }));
@@ -64,6 +65,9 @@ async function refreshStatus() {
   const status = await prototype.status();
   document.querySelector("#status-places").textContent = `${status.accepted} of ${status.capacity} test places`;
   document.querySelector("#status-waiting").textContent = status.waiting;
+  const environment = status.environment === "production" ? "Production" : "Development";
+  const operational = status.operationalState === "PRIVATE_LIVE" ? "Private" : status.operationalState === "OPEN" ? "Open" : status.operationalState === "PAUSED" ? "Paused" : "Closed";
+  document.querySelector("#environment-status").textContent = environment === "Production" && operational === "Open" ? "" : `${environment} · ${operational}`;
   const recovery = document.querySelector("#runner-recovery"); recovery.hidden = !status.recovery; recovery.textContent = status.recovery?.message || "";
   document.querySelector("#start-test").disabled = Boolean(status.recovery);
 }

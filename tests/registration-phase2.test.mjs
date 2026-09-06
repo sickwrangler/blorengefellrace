@@ -9,7 +9,7 @@ import { createMockPaymentAdapter, createCapturedEmailAdapter, assertSafeAdapter
 import { authorize, developmentActor, staticWebAppActor } from "../registration/server/auth.mjs";
 import { createApi } from "../registration/server/api.mjs";
 
-const runner = (number = 1, overrides = {}) => ({ firstName: `Runner ${number}`, lastName: "Example", email: `phase2-${number}@example.com`, phone: "+44 7700 900123", dateOfBirth: "1990-06-15", genderCategory: "Female", club: "Example Harriers", affiliated: false, membershipNumber: "", emergencyName: "Sam Example", emergencyPhone: "07700 900456", travelMethod: "Shared car", acceptTerms: true, acceptPrivacy: true, termsVersion: "prototype-2026-09", privacyVersion: "prototype-2026-09", ...overrides });
+const runner = (number = 1, overrides = {}) => ({ firstName: `Runner ${number}`, lastName: "Example", email: `phase2-${number}@example.com`, phone: "+44 7700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", dateOfBirth: "1990-06-15", genderCategory: "Female", club: "Example Harriers", affiliated: false, membershipNumber: "", emergencyName: "Sam Example", emergencyPhone: "07700 900456", travelMethod: "Shared car", declarationName: `Runner ${number} Example`, acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, termsVersion: "prototype-2026-09", privacyVersion: "prototype-2026-09", ...overrides });
 const admin = { authenticated: true, role: "administrator", actorType: "development_organiser", id: "local:administrator" };
 function setup(options = {}) { const repository = createMemoryRepository(createDatabase(options)); const paymentAdapter = createMockPaymentAdapter(); const emailAdapter = createCapturedEmailAdapter(); return { repository, service: new RegistrationService({ repository, paymentAdapter, emailAdapter }), paymentAdapter, emailAdapter }; }
 
@@ -116,14 +116,29 @@ test("synthetic import uses server validation and stays local", async () => {
 });
 
 test("synthetic CSV import parses quoted fields and applies server validation", async () => {
-  const headers = "firstName,lastName,email,phone,dateOfBirth,genderCategory,club,affiliated,membershipNumber,emergencyName,emergencyPhone,travelMethod,acceptTerms,acceptPrivacy,termsVersion,privacyVersion";
-  const text = `${headers}\nAlex,Example,csv@example.com,07700900123,1990-06-15,Female,"Example, Harriers",false,,Sam Example,07700900456,Shared car,true,true,prototype-2026-09,prototype-2026-09`;
+  const headers = "firstName,lastName,email,phone,addressLine1,addressLine2,city,postcode,dateOfBirth,genderCategory,club,affiliated,membershipNumber,emergencyName,emergencyPhone,travelMethod,declarationName,acceptDeclaration,acceptTerms,acceptPrivacy,termsVersion,privacyVersion";
+  const text = `${headers}\nAlex,Example,csv@example.com,07700900123,1 Example Street,,Abergavenny,NP7 5AA,1990-06-15,Female,"Example, Harriers",false,,Sam Example,07700900456,Shared car,Alex Example,true,true,true,prototype-2026-09,prototype-2026-09`;
   assert.equal(parseSyntheticCsv(text)[0].club, "Example, Harriers"); const { service } = setup(); assert.equal((await service.importSyntheticCsv(admin, text)).imported, 1);
 });
 
 test("organiser API rejects anonymous requests and permits explicit local identity", async () => {
   const { service } = setup(); const api = createApi({ service, environment: "local" }); assert.equal((await api({ method: "GET", pathname: "/api/v2/organiser/snapshot", hostname: "127.0.0.1" })).status, 403);
   assert.equal((await api({ method: "GET", pathname: "/api/v2/organiser/snapshot", hostname: "127.0.0.1", headers: { "x-development-organiser": "enabled" } })).status, 200);
+});
+
+test("organiser private-link controls create hashed metadata, list safely and revoke", async () => {
+  const { service, repository } = setup();
+  const api = createApi({ service, environment: "local" });
+  const anonymous = await api({ method: "POST", pathname: "/api/v2/organiser/private-invitations", hostname: "127.0.0.1", body: { kind: "registration", expiresAt: "2026-12-01T12:00:00Z" } });
+  assert.equal(anonymous.status, 403);
+  const context = { hostname: "127.0.0.1", headers: { "x-development-organiser": "enabled" } };
+  const created = await api({ ...context, method: "POST", pathname: "/api/v2/organiser/private-invitations", body: { kind: "registration", expiresAt: "2026-12-01T12:00:00Z" } });
+  assert.equal(created.status, 201); assert.ok(created.body.token.length >= 40);
+  assert.equal(JSON.stringify(await repository.read()).includes(created.body.token), false);
+  const listed = await api({ ...context, method: "GET", pathname: "/api/v2/organiser/private-invitations" });
+  assert.equal(listed.body.invitations.length, 1); assert.equal("tokenHash" in listed.body.invitations[0], false);
+  const revoked = await api({ ...context, method: "POST", pathname: `/api/v2/organiser/private-invitations/${created.body.invitation.id}/revoke` });
+  assert.equal(revoked.body.ok, true);
 });
 
 test("public write endpoints apply a development rate limit", async () => {

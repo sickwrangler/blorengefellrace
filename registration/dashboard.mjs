@@ -1,4 +1,4 @@
-import { prototype, canTest } from "./prototype-client.mjs";
+import { prototype, canTest, supportsManagedApi } from "./prototype-client.mjs";
 import { queryRegistrations } from "./preview-repository.mjs";
 import { availableOrganiserActions } from "./organiser-view.mjs";
 
@@ -22,11 +22,15 @@ async function render() {
   document.querySelector("#summary-waiting").textContent = waiting;
   document.querySelector("#summary-payments").textContent = attention;
   document.querySelector("#summary-remaining").textContent = Math.max(0, currentState.event.capacity - accepted);
+  const environment = currentState.environment === "production" ? "Production" : "Development";
+  const currentOperationalState = currentState.phase3RegistrationState ?? "CLOSED";
+  const stateLabel = currentOperationalState === "PRIVATE_LIVE" ? "Private" : currentOperationalState === "CLOSED_FINAL" ? "Closed" : `${currentOperationalState[0]}${currentOperationalState.slice(1).toLowerCase()}`;
+  document.querySelector("#environment-status").textContent = `${environment} · ${stateLabel}`;
   document.querySelector("#technical-environment").textContent = snapshot.diagnostics.environment;
   document.querySelector("#technical-storage").textContent = snapshot.diagnostics.storageType;
   document.querySelector("#technical-schema").textContent = snapshot.diagnostics.schemaVersion;
   if (snapshot.recovery) showNotice(snapshot.recovery.message, true);
-  renderList(); renderProgress();
+  renderList(); renderProgress(); await renderPrivateInvitations();
   const selected = currentState.registrations.find((item) => item.testReference === selectedReference);
   if (selected) {
     renderDetail(selected);
@@ -38,6 +42,25 @@ async function render() {
   } else {
     document.querySelector("#entry-detail").hidden = true;
     if (selectedReference) { selectedReference = null; history.replaceState(null, "", "dashboard.html"); }
+  }
+}
+async function renderPrivateInvitations() {
+  const section = document.querySelector("#private-access");
+  section.hidden = !supportsManagedApi;
+  if (!supportsManagedApi) return;
+  const result = await prototype.privateInvitations();
+  const list = document.querySelector("#private-invitation-list"); list.replaceChildren();
+  if (!result.ok || !result.invitations.length) { const li = document.createElement("li"); li.textContent = result.ok ? "No private links created." : "Private links are unavailable."; list.append(li); return; }
+  for (const invitation of result.invitations) {
+    const li = document.createElement("li");
+    const status = invitation.revokedAt ? "Revoked" : invitation.expired ? "Expired" : "Active";
+    const text = document.createElement("span"); text.textContent = `${invitation.kind.replaceAll("_", " ")} · ${status} · expires ${new Date(invitation.expiresAt).toLocaleString()}`;
+    li.append(text);
+    if (status === "Active") {
+      li.append(actionButton("Expire now", async () => { const expired = await prototype.expirePrivateInvitation(invitation.id); showNotice(expired.ok ? "Private link expired." : `Link could not be expired: ${expired.code}`, !expired.ok); await renderPrivateInvitations(); }, "text-button"));
+      li.append(actionButton("Revoke", async () => { const revoked = await prototype.revokePrivateInvitation(invitation.id); showNotice(revoked.ok ? "Private link revoked." : `Link could not be revoked: ${revoked.code}`, !revoked.ok); await renderPrivateInvitations(); }, "text-button danger-link"));
+    }
+    list.append(li);
   }
 }
 async function renderAudit(item) {
@@ -143,6 +166,16 @@ for (const selector of ["#search", "#entry-filter", "#payment-filter"]) document
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
 document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });
+document.querySelector("#create-invitation")?.addEventListener("click", async () => {
+  const expires = document.querySelector("#invitation-expiry");
+  if (!expires.value) expires.value = new Date(Date.now() + 48 * 3_600_000).toISOString().slice(0, 16);
+  const result = await prototype.createPrivateInvitation({ kind: document.querySelector("#invitation-kind").value, expiresAt: new Date(expires.value).toISOString(), maximumUses: 1 });
+  if (!result.ok) { showNotice(`Private link could not be created: ${result.code}`, true); return; }
+  const url = new URL("./", window.location.href); url.searchParams.set("invite", result.token);
+  document.querySelector("#created-invitation-url").textContent = url.href;
+  document.querySelector("#created-invitation").hidden = false;
+  await renderPrivateInvitations();
+});
 document.querySelector("#keep-entry")?.addEventListener("click", () => { pendingCancellation = null; document.querySelector("#cancel-entry-dialog").close(); });
 document.querySelector("#confirm-cancel-entry")?.addEventListener("click", async () => {
   if (!pendingCancellation) return;

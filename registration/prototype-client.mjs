@@ -8,6 +8,7 @@ export const isPreview = environment === "preview";
 export const isDevelopment = environment === "development";
 export const canTest = isLocal || isPreview || isDevelopment;
 const usesApi = isLocal || isDevelopment;
+export const supportsManagedApi = usesApi;
 const storageAdapter = {
   getItem(key) { return window.localStorage.getItem(key); },
   setItem(key, value) { window.localStorage.setItem(key, value); },
@@ -57,9 +58,9 @@ function repositorySnapshot() {
 
 export const prototype = {
   async status() {
-    if (!canTest) return { state: "closed", environment: "production", capacity: 110, accepted: 0, remaining: 110, waiting: 0, recovery: null };
+    if (!canTest) return { state: "closed", operationalState: "CLOSED", environment: "production", capacity: 120, accepted: 0, remaining: 120, waiting: 0, recovery: null };
     if (usesApi) {
-      try { return await api("/registration/status"); } catch { return { state: "closed", environment: "local", capacity: 110, accepted: 0, remaining: 110, waiting: 0, recovery: { required: true, message: "The persistent development API is unavailable." } }; }
+      try { return await api("/registration/status"); } catch { return { state: "closed", operationalState: "CLOSED", environment: "local", capacity: 120, accepted: 0, remaining: 120, waiting: 0, recovery: { required: true, message: "The persistent development API is unavailable." } }; }
     }
     const snapshot = repositorySnapshot();
     return { ...statusSummary(snapshot.state), recovery: snapshot.recovery };
@@ -103,6 +104,10 @@ export const prototype = {
     return repository.reset();
   },
   async csv() { if (usesApi) { const result = await api("/organiser/export/public", {}, true); return result.csv; } const { state } = await this.all(); return sanitizedCsv(state); },
+  async privateInvitations() { return usesApi ? api("/organiser/private-invitations", {}, true) : { ok: false, code: "MANAGED_API_REQUIRED", invitations: [] }; },
+  async createPrivateInvitation(input) { return usesApi ? api("/organiser/private-invitations", { method: "POST", body: JSON.stringify(input) }, true) : { ok: false, code: "MANAGED_API_REQUIRED" }; },
+  async revokePrivateInvitation(id) { return usesApi ? api(`/organiser/private-invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" }, true) : { ok: false, code: "MANAGED_API_REQUIRED" }; },
+  async expirePrivateInvitation(id) { return usesApi ? api(`/organiser/private-invitations/${encodeURIComponent(id)}/expire`, { method: "POST" }, true) : { ok: false, code: "MANAGED_API_REQUIRED" }; },
   subscribe(callback) {
     const localHandler = () => callback("same-tab");
     const storageHandler = (event) => { if (isRepositoryStorageEvent(event)) callback("cross-tab"); };

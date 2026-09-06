@@ -8,7 +8,20 @@ Phase 3 will turn the tested registration model into a supportable production se
 
 The frontend, API, database, organiser authentication, payment configuration and email configuration must be deployable and testable while the server-side event state remains closed. Opening entries must be a separate, deliberate, authenticated organiser action or approved configuration change, with an audit record and a tested way to close or pause entries again.
 
-No Phase 3 functionality is implemented by this plan.
+Phase 3A implements provider-neutral domain and interface foundations only. It does not deploy a production registration service, open entries, call Stripe or deliver email.
+
+## Phase 3A implementation status
+
+- The server domain defines `CLOSED`, `PRIVATE_LIVE`, `OPEN`, `PAUSED` and terminal `CLOSED_FINAL`. Capacity and waiting-list availability are derived, not manual states. A production state always initializes as `CLOSED`; state changes require an authenticated organiser, an expected-current-state check and an audit event.
+- Private invitations are opaque, purpose-bound (`registration`, `waiting_list_join` or `waiting_list_offer`), expiring, revocable and stored as hashes. A valid invitation never bypasses the operational state, capacity, offer or payment rules. Organiser controls create, list and revoke links without sending them.
+- The authoritative Phase 3 server configuration records the 28 November 2026 race, 120-place capacity, £6 fee, Europe/London cutoff at 23:59 on 28 October, 48-hour offers, 24-hour reminders and optional race numbers.
+- The runner model includes the agreed name, contact, address, birth, category, club, affiliation and emergency-contact fields. Competition categories are exactly `Female` and `Male / Open`.
+- The declaration record is separate and versioned, with identifier, version, acceptance, typed name, timestamp and runner/registration references. Production remains fail-closed for declaration acceptance until approved WFRA wording and its version are supplied.
+- Opaque management tokens support amendments without runner accounts. Before the cutoff, changing identity or email rotates and invalidates the token. After the cutoff, runner name changes are locked; other permitted details remain amendable, and an organiser override is audited.
+- Capacity distinguishes confirmed places, payment reservations and active waiting-list-offer reservations. Waiting-list joins store only name and email; offers include reminder/expiry times and progress in order after decline or expiry.
+- Refund requests, organiser approval/rejection, recorded refund and separate place release are distinct audited actions. No runner self-cancellation or live refund is implemented.
+- Race numbers remain nullable, unique while assigned, removable and reusable.
+- Runner and organiser pages use a small environment/state badge. Development-only explanations are integrated into normal copy; payment remains mock and messages remain captured-only.
 
 ## Proposed implementation scope
 
@@ -25,11 +38,11 @@ No Phase 3 functionality is implemented by this plan.
 11. **Secrets and configuration** — keep production secrets in approved managed configuration, separate them from development, restrict and review access, document rotation, and ensure missing or invalid configuration fails closed.
 12. **Pre-launch testing** — add provider sandbox tests, authorization and negative-path tests, concurrency/load checks, accessibility and device testing, backup restoration, closed-state deployment tests and a final privacy/security review using synthetic data.
 13. **Launch and rollback** — rehearse deployment while closed, verify production components, take an approved go/no-go decision, open registration separately, monitor the initial period, and retain documented pause/close and rollback procedures that do not lose confirmed entries or payment evidence.
-14. **Operational controls** — expose only authenticated, authorized controls for closed, open, paused and full states. Require clear confirmation, current-state display and audit history; dates or client-side settings must never open registration automatically.
+14. **Operational controls** — expose only authenticated, authorized controls for closed, private-live, open, paused and closed-final states. Require clear confirmation, current-state display and audit history; dates or client-side settings must never open registration automatically.
 
-## Organiser decisions needed before implementation
+## Organiser decisions needed before Phase 3B
 
-These choices affect architecture, contracts or the data model and should be agreed before Phase 3 code or production resources are created:
+These choices affect provider integration, production resources or final policy and should be agreed before Phase 3B:
 
 - payment provider, settlement account owner, supported payment methods and fee handling;
 - refund policy, including eligibility, deadlines, partial refunds and who may authorize them;
@@ -58,6 +71,10 @@ These can be finalized after the core architecture and policies above are agreed
 ## Phase gates
 
 Phase 3 should proceed through explicit reviews: decisions agreed; architecture and threat/privacy review approved; isolated production resources approved; provider sandboxes integrated; closed production deployment verified; recovery and launch rehearsal passed; and final go/no-go approval recorded. Deployment completion alone is never approval to open entries.
+
+## Remaining Phase 3B provider work
+
+Phase 3B should select and integrate Stripe Checkout and Azure Communication Services only after organiser decisions and account ownership are confirmed. It should add signed Stripe webhooks, idempotent payment reconciliation and approved refund handling; verified ACS sender configuration, templates and delivery/retry handling; production-specific managed configuration; and sandbox integration tests. All components should first be deployed with server state `CLOSED`. No Phase 3A adapter can make an external payment or send an email.
 
 ## Low-priority maintenance notes
 

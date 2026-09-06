@@ -2,8 +2,8 @@
 <html lang="en" class="prototype-pending">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Organiser test area | Blorenge Fell Race</title>
-  <meta name="description" content="Synthetic organiser registration test area.">
+  <title>Registration organiser | Blorenge Fell Race</title>
+  <meta name="description" content="Blorenge Fell Race registration organiser area.">
   <script>
     (() => { const h = location.hostname; const allowed = h === "localhost" || h === "127.0.0.1" || h === "black-tree-04204eb03.3.azurestaticapps.net" || (/azurestaticapps\.net$/i.test(h) && /-\d+\.\d+\.azurestaticapps\.net$/i.test(h)); if (!allowed) location.replace("../404.html"); else document.documentElement.classList.remove("prototype-pending"); })();
   </script>
@@ -13,23 +13,31 @@
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
-  <header class="prototype-header"><a href="index.html">← Runner test</a><strong>ORGANISER TEST AREA — SYNTHETIC DATA ONLY</strong></header>
+  <header class="prototype-header"><a href="index.html">← Runner registration</a><span id="environment-status" class="environment-status">Development · Closed</span></header>
   <main id="main-content" class="prototype-shell">
-    <h1>Organiser test area</h1>
-    <p class="lede">Find and manage shared synthetic test entries. No real registrations, payments or emails are involved.</p>
+    <h1>Registration organiser</h1>
+    <p class="lede">Manage registration operations. This development environment uses synthetic entries, mock payments and captured messages only.</p>
     <div id="organiser-alert" class="form-alert" role="status" tabindex="-1" hidden></div>
 
     <section class="summary-grid" aria-label="Test entry summary">
-      <div><span>Accepted</span><strong id="summary-accepted">0</strong></div><div><span>Waiting list</span><strong id="summary-waiting">0</strong></div><div><span>Payments needing attention</span><strong id="summary-payments">0</strong></div><div><span>Remaining places</span><strong id="summary-remaining">110</strong></div>
+      <div><span>Accepted</span><strong id="summary-accepted">0</strong></div><div><span>Waiting list</span><strong id="summary-waiting">0</strong></div><div><span>Payments needing attention</span><strong id="summary-payments">0</strong></div><div><span>Remaining places</span><strong id="summary-remaining">120</strong></div>
     </section>
 
-    <section class="prototype-card" aria-labelledby="progress-title">
-      <h2 id="progress-title">Testing progress</h2>
+    <section id="private-access" class="prototype-card" aria-labelledby="private-access-title">
+      <div class="detail-heading"><div><p class="eyebrow">Phase 3 foundation</p><h2 id="private-access-title">Private access</h2></div></div>
+      <p>Create a single-use private link for controlled testing. Creating a link does not open registration, bypass capacity or send anything externally.</p>
+      <div class="private-access-controls"><label>Purpose<select id="invitation-kind"><option value="registration">Registration</option><option value="waiting_list_join">Waiting-list join</option><option value="waiting_list_offer">Waiting-list place offer</option></select></label><label>Expires<input id="invitation-expiry" type="datetime-local"></label><button id="create-invitation" class="button button--quiet" type="button">Create private link</button></div>
+      <div id="created-invitation" class="form-alert form-alert--success" hidden><p>Copy this link now. Only a hash is retained by the server.</p><code id="created-invitation-url"></code></div>
+      <ul id="private-invitation-list" class="message-list"><li>No private links created.</li></ul>
+    </section>
+
+    <details class="technical-details">
+      <summary id="progress-title">Development test checklist</summary>
       <ul id="testing-progress" class="progress-checklist">
         <li data-check="submitted">Test entry submitted</li><li data-check="payment">Mock payment completed</li><li data-check="visible">Entry visible to organiser</li><li data-check="raceNumber">Race number assigned</li><li data-check="managed">Entry cancelled or retained</li><li data-check="reset">Test reset when finished</li>
       </ul>
       <p id="journey-complete" class="success-message" hidden>End-to-end registration test completed successfully.</p>
-    </section>
+    </details>
 
     <section class="prototype-card" aria-labelledby="entries-title">
       <h2 id="entries-title">Test entries</h2>

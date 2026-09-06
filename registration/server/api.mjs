@@ -19,6 +19,12 @@ export function createApi({ service, environment = "local" }) {
     if (method === "POST" && amendment) return resultResponse(await service.requestAmendment(decodeURIComponent(amendment[1]), body), 201);
     if (method === "GET" && pathname === "/api/v2/organiser/snapshot") return resultResponse(await service.snapshot(actor, query));
     if (method === "POST" && pathname === "/api/v2/organiser/state") return resultResponse(await service.setState(actor, body.state));
+    if (method === "GET" && pathname === "/api/v2/organiser/private-invitations") return resultResponse(await service.privateInvitations(actor));
+    if (method === "POST" && pathname === "/api/v2/organiser/private-invitations") return resultResponse(await service.createPrivateInvitation(actor, body), 201);
+    const revokeInvitation = pathname.match(/^\/api\/v2\/organiser\/private-invitations\/([^/]+)\/revoke$/);
+    if (method === "POST" && revokeInvitation) return resultResponse(await service.revokePrivateInvitation(actor, decodeURIComponent(revokeInvitation[1])));
+    const expireInvitation = pathname.match(/^\/api\/v2\/organiser\/private-invitations\/([^/]+)\/expire$/);
+    if (method === "POST" && expireInvitation) return resultResponse(await service.expirePrivateInvitation(actor, decodeURIComponent(expireInvitation[1])));
     if (method === "POST" && pathname === "/api/v2/organiser/import/synthetic") return resultResponse(await service.importSynthetic(actor, body.rows));
     if (method === "POST" && pathname === "/api/v2/organiser/import/synthetic-csv") return resultResponse(await service.importSyntheticCsv(actor, body.csv));
     if (method === "GET" && pathname === "/api/v2/organiser/export/public") return resultResponse(await service.exportPublic(actor));
