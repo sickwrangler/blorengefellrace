@@ -8,7 +8,7 @@ html, body { margin:0; color:var(--paper); background:var(--forest); font-family
 }
 .brand-heading { min-width:0; margin:0; font:inherit; }
 .brand { display:inline-flex; align-items:center; gap:.75rem; min-height:2.75rem; color:var(--paper); text-decoration:none; }
-.logo_navbar { width:3.15rem; height:3.15rem; }
+.logo_navbar { width:5.5rem; height:auto; }
 .brand__name { font-family:"Suez One",Georgia,serif; font-size:clamp(1.15rem,2.5vw,1.55rem); line-height:1; }
 .menu-toggle {
   display:none; min-width:2.75rem; min-height:2.75rem; padding:.55rem .8rem;
@@ -16,20 +16,22 @@ html, body { margin:0; color:var(--paper); background:var(--forest); font-family
   color:var(--paper); background:transparent; font:700 .9rem/1 "Inter",sans-serif;
 }
 .nav-links { display:flex; justify-content:flex-end; gap:.25rem; padding:0; margin:0; list-style:none; }
+.nav-links li { display:flex; align-items:stretch; }
 .nav-links a {
-  display:inline-flex; align-items:center; min-height:2.75rem; padding:.45rem .8rem;
+  display:inline-flex; align-items:center; justify-content:center; min-height:2.75rem; padding:.45rem .8rem;
   border-bottom:.2rem solid transparent; color:var(--paper); font-size:.92rem; font-weight:700; text-decoration:none;
+  line-height:1;
 }
 .nav-links a:hover, .nav-links a[aria-current="page"] { border-bottom-color:var(--bracken); }
 a:focus-visible, button:focus-visible { outline:.2rem solid var(--focus); outline-offset:.15rem; }
 @media (max-width:47.99rem) {
   .navbar { align-content:start; width:calc(100% - 1.25rem); min-height:4.5rem; padding-top:.35rem; }
-  .logo_navbar { width:2.75rem; height:2.75rem; }
+  .logo_navbar { width:4.75rem; height:auto; }
   .menu-toggle { display:block; }
   .nav-links { display:none; grid-column:1/-1; grid-template-columns:1fr 1fr; gap:0; padding:.5rem 0 1rem; }
   .navbar.is-open .nav-links { display:grid; }
   .nav-links li { border-top:1px solid rgba(245,241,232,.25); }
   .nav-links li:nth-child(odd) { border-right:1px solid rgba(245,241,232,.25); }
-  .nav-links a { min-height:3.35rem; padding-inline:1rem; border-bottom:0; }
+  .nav-links a { width:100%; min-height:3.35rem; padding-inline:1rem; border-bottom:0; }
   .nav-links a:hover, .nav-links a[aria-current="page"] { color:var(--paper); background:var(--forest-light); }
 }

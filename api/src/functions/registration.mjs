@@ -27,17 +27,19 @@ const transport = createAzureTableTransport({
 });
 const repository = createAzureTableRepository(transport);
 const paymentAdapter = createMockPaymentAdapter();
-const emailAdapter = createCapturedEmailAdapter();
-assertSafeAdapters({ payment: paymentAdapter, email: emailAdapter }, "development");
+const capturedEmailAdapter = createCapturedEmailAdapter();
+assertSafeAdapters({ payment: paymentAdapter, email: capturedEmailAdapter }, "development");
 const stripeEnabled = process.env.STRIPE_ENABLED === "true";
 const emailEnabled = process.env.ACS_EMAIL_ENABLED === "true";
+const publicBaseUrl = stripeEnabled || emailEnabled ? required("REGISTRATION_PUBLIC_BASE_URL") : "";
+const lifecycleEmailAdapter = emailEnabled ? createDevelopmentEmailAdapter() : createControlledDevelopmentEmail();
 const phase3Integrations = new Phase3IntegrationService({
   repository,
   stripeGateway: stripeEnabled ? createDevelopmentStripeGateway() : null,
-  emailAdapter: emailEnabled ? createDevelopmentEmailAdapter() : createControlledDevelopmentEmail(),
-  publicBaseUrl: stripeEnabled ? required("REGISTRATION_PUBLIC_BASE_URL") : ""
+  emailAdapter: lifecycleEmailAdapter,
+  publicBaseUrl
 });
-const handle = createApi({ service: new RegistrationService({ repository, paymentAdapter, emailAdapter }), phase3Integrations, environment: "development" });
+const handle = createApi({ service: new RegistrationService({ repository, paymentAdapter, emailAdapter: lifecycleEmailAdapter, publicBaseUrl }), phase3Integrations, environment: "development" });
 
 const handler = async (request, context) => {
   try {

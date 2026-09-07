@@ -9,6 +9,12 @@ param staticWebAppName string = 'swa-blorenge-registration-dev'
 @maxLength(24)
 param storageAccountName string = 'stblorengeregdev2026'
 
+@description('Development-only Azure Communication Services resource name.')
+param communicationServiceName string = 'acs-blorenge-registration-dev'
+
+@description('Development-only Email Communication Service resource name.')
+param emailServiceName string = 'ecs-blorenge-registration-dev'
+
 @description('A region supported by both Static Web Apps and Table Storage.')
 param location string = 'westeurope'
 
@@ -64,7 +70,40 @@ resource registrations 'Microsoft.Storage/storageAccounts/tableServices/tables@2
   name: 'RegistrationDevelopment'
 }
 
+resource emailService 'Microsoft.Communication/emailServices@2023-03-31' = {
+  name: emailServiceName
+  location: 'global'
+  tags: tags
+  properties: {
+    dataLocation: 'Europe'
+  }
+}
+
+resource managedEmailDomain 'Microsoft.Communication/emailServices/domains@2023-03-31' = {
+  parent: emailService
+  name: 'AzureManagedDomain'
+  location: 'global'
+  tags: tags
+  properties: {
+    domainManagement: 'AzureManaged'
+    userEngagementTracking: 'Disabled'
+  }
+}
+
+resource communicationService 'Microsoft.Communication/communicationServices@2023-03-31' = {
+  name: communicationServiceName
+  location: 'global'
+  tags: tags
+  properties: {
+    dataLocation: 'Europe'
+    linkedDomains: [managedEmailDomain.id]
+  }
+}
+
 output staticWebAppName string = registrationSite.name
 output staticWebAppDefaultHostname string = registrationSite.properties.defaultHostname
 output storageAccountName string = storage.name
 output tableName string = registrations.name
+output communicationServiceName string = communicationService.name
+output emailServiceName string = emailService.name
+output managedSenderDomainId string = managedEmailDomain.id

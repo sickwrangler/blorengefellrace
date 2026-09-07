@@ -185,6 +185,8 @@ test("official declaration content and version load from one source", () => {
   assert.equal(WFRA_SENIOR_ENTRY_DECLARATION.version, "21/02/23");
   assert.equal(WFRA_SENIOR_ENTRY_DECLARATION.paragraphs[0], "I accept the hazards inherent in fell running and acknowledge that I am entering and running at my own risk.");
   assert.equal(WFRA_SENIOR_ENTRY_DECLARATION.paragraphs.at(-1), "(v.21/02/23)");
+  assert.equal(WFRA_SENIOR_ENTRY_DECLARATION.paragraphs.some((paragraph) => /^(?:Signed|Date)\s+\.+/.test(paragraph)), false);
+  assert.ok(WFRA_SENIOR_ENTRY_DECLARATION.paragraphs.some((paragraph) => paragraph.includes("Parent/Legal Guardian")));
   assert.equal(PHASE3_EVENT.declaration.identifier, WFRA_SENIOR_ENTRY_DECLARATION.identifier);
 });
 
@@ -209,6 +211,23 @@ test("runner UI is English-only, contains the approved fields and has no languag
   assert.ok(html.includes('<option value="Male / Open" selected>Male / Open</option>'));
   for (const absent of ["Affiliated with UK Athletics?", "UK Athletics membership number", "name=\"affiliated\"", "name=\"membershipNumber\"", "name=\"travelMethod\"", "Cymraeg", " / Cyfeiriad", " / Enw", " / Rhif", "language-toggle"])
     assert.equal(html.includes(absent), false, `unexpected runner UI content: ${absent}`);
+});
+
+test("selective Welsh headings do not add bilingual navigation or form labels", () => {
+  const expected = new Map([
+    ["enter.html", "Cofrestru"],
+    ["info.html", "Gwybodaeth y ras"],
+    ["result.html", "Canlyniadau"],
+    ["route.html", "Llwybr"],
+    ["registration/index.html", "Cofrestru"]
+  ]);
+  for (const [file, translation] of expected) {
+    const html = fs.readFileSync(file, "utf8");
+    assert.ok(html.includes(`<span class="heading-translation" lang="cy">${translation}</span>`));
+  }
+  const navigation = fs.readFileSync("components/navbar/navbar.html", "utf8");
+  assert.equal(navigation.includes('lang="cy"'), false);
+  assert.equal(navigation.includes("language-toggle"), false);
 });
 
 test("Welsh copy is retained separately without becoming an active language pack", async () => {

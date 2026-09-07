@@ -4,6 +4,8 @@
   "parameters": {
     "staticWebAppName": { "value": "swa-blorenge-registration-dev" },
     "storageAccountName": { "value": "stblorengeregdev2026" },
+    "communicationServiceName": { "value": "acs-blorenge-registration-dev" },
+    "emailServiceName": { "value": "ecs-blorenge-registration-dev" },
     "location": { "value": "westeurope" },
     "tags": {
       "value": {

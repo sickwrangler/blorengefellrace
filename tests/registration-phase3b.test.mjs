@@ -16,11 +16,20 @@ import { REGISTRATION_EMAIL_TEMPLATE_NAMES, renderRegistrationEmail } from "../r
 import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
 import { createMemoryRepository } from "../registration/server/repositories.mjs";
 import { createApi } from "../registration/server/api.mjs";
+import { createDatabase, RegistrationService } from "../registration/server/service.mjs";
+import { createMockPaymentAdapter } from "../registration/server/adapters.mjs";
 
 const at = new Date("2026-10-01T12:00:00.000Z");
 const admin = { authenticated: true, role: "Organiser", actorType: "organiser", id: "organiser-test" };
 const runner = (number = 1, overrides = {}) => ({ email: `runner-${number}@example.com`, firstName: `Runner ${number}`, lastName: "Example", phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", ...overrides });
 const declaration = (number = 1) => ({ declarationIdentifier: "WFRA_SENIOR_ENTRY", declarationVersion: "21/02/23", accepted: true, typedFullName: `Runner ${number} Example`, signatoryRole: "Competitor" });
+const phase2Runner = (number = 1, overrides = {}) => ({ firstName: `Runner ${number}`, lastName: "Example", email: `phase3b-${number}@example.com`, phone: "+44 7700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", dateOfBirth: "1990-06-15", genderCategory: "Female", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyName: "Sam Example", emergencyPhone: "07700 900456", declarationName: `Runner ${number} Example`, declarationSignatoryRole: "Competitor", acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, termsVersion: "prototype-2026-09", privacyVersion: "prototype-2026-09", ...overrides });
+
+function controlledEmail() {
+  const sent = [];
+  const email = createControlledDevelopmentEmail({ senderAddress: "sender@example.test", safeRecipients: ["approved@example.test"], transport: { async send(message) { sent.push(message); return { id: `acs_${sent.length}` }; } } });
+  return { email, sent };
+}
 
 function fakeStripe({ refundStatus = "succeeded" } = {}) {
   const calls = { checkout: [], refund: [] };
@@ -155,7 +164,7 @@ test("amount mismatch cannot confirm an entry", async () => {
 });
 
 test("all production-quality email templates render without duplicated Welsh content", () => {
-  assert.equal(REGISTRATION_EMAIL_TEMPLATE_NAMES.length, 16);
+  assert.equal(REGISTRATION_EMAIL_TEMPLATE_NAMES.length, 19);
   for (const name of REGISTRATION_EMAIL_TEMPLATE_NAMES) {
     const rendered = renderRegistrationEmail(name, { intendedRecipientAddress: "runner@example.com", secureUrl: "https://example.test/secure", expiresAt: "2026-10-03T12:00:00Z" });
     assert.ok(rendered.subject && rendered.text && rendered.html); assert.equal(/Cymraeg|Cyfeiriad|Cofrestru/.test(rendered.text), false);
@@ -291,4 +300,114 @@ test("v3 public Checkout is rate limited and invalid webhook signatures return a
   let checkout;
   for (let attempt = 0; attempt < 31; attempt += 1) checkout = await api({ method: "POST", pathname: "/api/v3/payments/checkout", hostname: "example.test", headers: { "x-management-token": "invalid" } });
   assert.equal(checkout.status, 429); assert.equal(checkout.body.code, "RATE_LIMITED");
+});
+
+test("registration email supplies a fresh-browser management link without persisting its token", async () => {
+  const repository = createMemoryRepository(createDatabase({ environment: "development", registrationState: "test" }));
+  const mail = controlledEmail();
+  const service = new RegistrationService({ repository, paymentAdapter: createMockPaymentAdapter(), emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
+  const created = await service.create(phase2Runner(1), { idempotencyKey: "phase3b-management-link-1" });
+  assert.equal(created.ok, true); assert.equal(mail.sent.length, 1);
+  assert.deepEqual(mail.sent[0].recipients, ["approved@example.test"]);
+  assert.ok(mail.sent[0].text.includes("/registration/manage.html#token="));
+  const persisted = await repository.read();
+  assert.equal(JSON.stringify(persisted).includes(created.managementToken), false);
+  const phase3 = new Phase3IntegrationService({ repository, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
+  const freshBrowser = await phase3.managementEntry(created.managementToken, at);
+  assert.equal(freshBrowser.registration.runner.firstName, "Runner 1");
+  assert.equal(JSON.stringify(freshBrowser).includes("emergency"), false);
+});
+
+test("management recovery is non-enumerating, rotates tokens and is rate limited", async () => {
+  const repository = createMemoryRepository(createDatabase({ environment: "development", registrationState: "test" }));
+  const mail = controlledEmail();
+  const service = new RegistrationService({ repository, paymentAdapter: createMockPaymentAdapter(), emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
+  const created = await service.create(phase2Runner(2), { idempotencyKey: "phase3b-recovery-link-2" });
+  const phase3 = new Phase3IntegrationService({ repository, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
+  const absent = await phase3.recoverManagementLink("absent@example.com", at);
+  const known = await phase3.recoverManagementLink("phase3b-2@example.com", at);
+  assert.deepEqual(known, absent); assert.equal(mail.sent.length, 2);
+  const match = mail.sent.at(-1).text.match(/#token=([^\s]+)/); assert.ok(match);
+  const replacement = decodeURIComponent(match[1]);
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
+  assert.equal((await phase3.managementEntry(replacement, at)).ok, true);
+  await phase3.recoverManagementLink("phase3b-2@example.com", at);
+  await phase3.recoverManagementLink("phase3b-2@example.com", at);
+  await phase3.recoverManagementLink("phase3b-2@example.com", at);
+  assert.equal(mail.sent.length, 4);
+  assert.equal((await repository.read()).managementRecoveryAttempts.every((item) => /^[a-f0-9]{64}$/.test(item.emailHash)), true);
+});
+
+test("management amendments communicate once and expose refund lifecycle state", async () => {
+  const repository = createMemoryRepository(createDatabase({ environment: "development", registrationState: "test" })); const mail = controlledEmail();
+  const service = new RegistrationService({ repository, paymentAdapter: createMockPaymentAdapter(), emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
+  const created = await service.create(phase2Runner(3), { idempotencyKey: "phase3b-amendment-link-3" });
+  const provider = gateway(); const phase3 = new Phase3IntegrationService({ repository, stripeGateway: provider.gateway, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
+  const amended = await phase3.amend(created.managementToken, { phone: "07700 900999", club: "Synthetic Fell Club" }, at);
+  await phase3.amend(created.managementToken, { phone: "07700 900999", club: "Synthetic Fell Club" }, at);
+  assert.equal(amended.registration.runner.club, "Synthetic Fell Club");
+  assert.equal(mail.sent.filter((message) => message.subject.includes("entry updated")).length, 1);
+  await phase3.checkout(created.managementToken, at); const payment = (await repository.read()).payments[0];
+  const event = stripeEvent("checkout.session.completed", payment, {}, "evt_management_paid"); const raw = JSON.stringify(event); const signature = crypto.createHmac("sha256", "whsec_example_only").update(raw).digest("hex");
+  await phase3.webhook(raw, signature, at); await phase3.webhook(raw, signature, at);
+  assert.equal(mail.sent.filter((message) => message.subject.includes("entry confirmed")).length, 1);
+  const requested = await phase3.requestRefund(created.managementToken, at);
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).registration.payment.state, "refund_requested");
+  await phase3.decideRefund(admin, requested.request.id, "approved", at);
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).registration.payment.state, "refund_approved");
+  await phase3.refund(admin, requested.request.id, at);
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).registration.payment.state, "refunded");
+});
+
+test("transfer requires a new adult declaration, rotates ownership and invalidates the old token", async () => {
+  const repository = createMemoryRepository(createDatabase({ environment: "development", registrationState: "test" })); const mail = controlledEmail();
+  const service = new RegistrationService({ repository, paymentAdapter: createMockPaymentAdapter(), emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
+  const created = await service.create(phase2Runner(4), { idempotencyKey: "phase3b-transfer-link-4" });
+  const phase3 = new Phase3IntegrationService({ repository, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
+  const invalid = await phase3.transfer(created.managementToken, { runner: runner(40), declaration: { ...declaration(40), accepted: false } }, at);
+  assert.equal(invalid.code, "DECLARATION_NOT_ACCEPTED");
+  const transferred = await phase3.transfer(created.managementToken, { runner: runner(41), declaration: declaration(41) }, at);
+  assert.equal(transferred.ok, true); assert.equal(transferred.registration.runner.firstName, "Runner 41");
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
+  assert.equal((await phase3.managementEntry(transferred.replacementManagementToken, at)).registration.runner.email, "runner-41@example.com");
+  const state = await repository.read();
+  assert.equal(state.consents.filter((item) => item.registrationId === state.registrations[0].id).length, 2);
+  assert.equal(state.consents.at(-1).declaration.typedFullName, "Runner 41 Example");
+  assert.equal(state.emergencyContacts.find((item) => item.registrationId === state.registrations[0].id).name, "Contact Example");
+  assert.equal(JSON.stringify(state).includes(transferred.replacementManagementToken), false);
+});
+
+test("development waiting-list communications cover join, offer, reminder, decline and expiry without duplicates", async () => {
+  const state = createDatabase({ environment: "development", registrationState: "test" }); const repository = createMemoryRepository(state); const mail = controlledEmail();
+  const phase3 = new Phase3IntegrationService({ repository, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
+  const first = await phase3.joinWaitingList({ firstName: "Alys", lastName: "Example", email: "alys@example.com" }, at);
+  const second = await phase3.joinWaitingList({ firstName: "Bryn", lastName: "Example", email: "bryn@example.com" }, at);
+  assert.equal(first.ok && second.ok, true); assert.equal((await phase3.joinWaitingList({ firstName: "Alys", lastName: "Example", email: "alys@example.com" }, at)).duplicate, true);
+  const offered = await phase3.offerNextWaitingPlace(admin, at); assert.equal(offered.ok, true);
+  await phase3.runScheduledWork(admin, new Date("2026-10-02T12:01:00Z"));
+  await phase3.runScheduledWork(admin, new Date("2026-10-02T12:01:00Z"));
+  assert.equal(mail.sent.filter((message) => message.subject.includes("reminder")).length, 1);
+  await phase3.runScheduledWork(admin, new Date("2026-10-03T12:01:00Z"));
+  const final = await repository.read();
+  assert.equal(final.waitingListOffers[0].status, "expired"); assert.equal(final.waitingListOffers[1].status, "offered");
+  assert.ok(mail.sent.some((message) => message.subject.includes("expired")));
+  assert.equal(final.communications.every((item) => !JSON.stringify(item).includes("#token=")), true);
+});
+
+test("management browser assets use fragment tokens and production staging still excludes registration", () => {
+  const source = fs.readFileSync("registration/manage.mjs", "utf8");
+  assert.ok(source.includes("location.hash")); assert.ok(source.includes("history.replaceState"));
+  assert.equal(source.includes("localStorage"), false);
+  const staging = fs.readFileSync("scripts/stage-deployment-artifacts.mjs", "utf8");
+  assert.ok(staging.includes('"registration/manage.html"'));
+  assert.ok(staging.includes('forbiddenProductionPrefixes'));
+});
+
+test("organisers can revoke a management link without learning its token", async () => {
+  const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
+  const created = beginProductionRegistration(state, { runner: runner(90), declaration: declaration(90) }, { at });
+  const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), emailAdapter: createControlledDevelopmentEmail() });
+  assert.equal((await phase3.revokeManagementLink({ authenticated: false }, created.registration.id, at)).code, "FORBIDDEN");
+  assert.equal((await phase3.revokeManagementLink(admin, created.registration.id, at)).revoked, 1);
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
 });

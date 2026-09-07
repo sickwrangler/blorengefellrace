@@ -60,6 +60,16 @@ h1 { max-width: 18ch; font-size: clamp(2.5rem, 8vw, 5.75rem); letter-spacing: -.
 h2 { font-size: clamp(1.85rem, 4vw, 3.25rem); letter-spacing: -.02em; }
 h3 { margin-top: var(--space-6); font-size: clamp(1.35rem, 2.5vw, 2rem); }
 h4 { margin-top: var(--space-5); font-size: 1.2rem; }
+.heading-translation {
+  display: block;
+  margin-top: .2em;
+  color: var(--colour-bracken);
+  font-family: var(--font-body);
+  font-size: .36em;
+  font-weight: 750;
+  letter-spacing: .04em;
+  line-height: 1.15;
+}
 p, ul, ol, dl, blockquote { margin-top: 0; margin-bottom: var(--space-5); }
 ul, ol { padding-left: 1.35rem; }
 li + li { margin-top: var(--space-2); }

@@ -36,7 +36,10 @@ export function runnerMessageForCode(code) {
     MANAGEMENT_TOKEN_INVALID: "This secure entry link is no longer available.",
     CAPACITY_FULL: "There are currently no entry places available.",
     REFUND_NOT_READY: "A refund can only be requested after payment is confirmed.",
-    REFUND_CUTOFF_PASSED: "The refund-request deadline has passed. Please contact the organiser if you need help."
+    REFUND_CUTOFF_PASSED: "The refund-request deadline has passed. Please contact the organiser if you need help.",
+    AMENDMENT_CUTOFF_PASSED: "The amendment deadline has passed. Please contact the organiser if you need help.",
+    TRANSFER_CUTOFF_PASSED: "The transfer deadline has passed. Please contact the organiser if you need help.",
+    MANAGEMENT_UNAVAILABLE: "Entry management is temporarily unavailable. Please try again later."
   };
   return messages[code] ?? "We could not complete that request. Please review your details and try again.";
 }

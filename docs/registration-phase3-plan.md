@@ -88,6 +88,21 @@ Phase 3B implements controlled Stripe Checkout and Azure Communication Services 
 
 Progression remains: `Phase 3B — controlled integrations` → `Phase 3C — production infrastructure/application deployed CLOSED` → `Phase 3D — private live pilot with real Stripe and real email` → `Public OPEN`.
 
+## Approved Phase 3B.3 roadmap item — multi-runner registration
+
+Multi-runner registration is an approved pre-production feature and is the next intended phase after Phase 3B.2. It is not implemented in Phase 3B.2. The intended journey allows a purchaser to add several runners, review them together and pay one server-calculated total in one Stripe Checkout.
+
+The design must keep a registration/runner distinct from an order/checkout. Personal details, category, date of birth, WFRA evidence, server-calculated price, declaration acceptance, amendment/transfer/refund state, race number and secure management identity remain per runner. Each adult entrant supplies their own declaration; a future approved parent/legal-guardian process applies separately to every under-18 entrant. One signature must never cover unrelated adults.
+
+Phase 3B.3 must address these decisions and constraints explicitly:
+
+- the server total is the sum of each runner's authoritative price; the browser never supplies the group total;
+- group capacity is allocated atomically, with a product decision required between all-or-nothing race places and an explicit race/waiting-list split;
+- one runner can be refunded and have only their capacity released without forcing refunds for the rest of the order;
+- one secure management identity per registration remains preferred, although a purchaser summary may link the registrations safely;
+- current payment records use one `registrationId` per Checkout and refund idempotency is keyed to that payment; Phase 3B.3 should introduce an order with line items rather than overloading a registration;
+- payment emails currently describe one runner. Individual runner messages should remain, while a new purchaser/order summary can be added without replacing them.
+
 ## Low-priority maintenance notes
 
 - Remove tracked `.DS_Store` files in a future, separate maintenance change. This is not a Phase 3 blocker.
