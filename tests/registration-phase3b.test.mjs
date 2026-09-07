@@ -239,6 +239,47 @@ test("v3 Checkout/status and raw signed webhook routes use the Phase 3 integrati
   assert.equal(status.body.label, "Entry confirmed"); assert.equal(JSON.stringify(status.body).includes("cs_test_"), false);
 });
 
+test("secure runner refund request requires organiser approval before one full Stripe refund", async () => {
+  const fresh = createPhase3State({ environment: "development", registrationState: "OPEN" });
+  const created = beginProductionRegistration(fresh, { runner: runner(7), declaration: declaration(7) }, { at });
+  const provider = gateway();
+  const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(fresh), stripeGateway: provider.gateway, emailAdapter: createControlledDevelopmentEmail(), publicBaseUrl: "https://development.example" });
+  await phase3.checkout(created.managementToken, at);
+  const storedPayment = (await phase3.repository.read()).payments[0];
+  const event = stripeEvent("checkout.session.completed", storedPayment); const raw = JSON.stringify(event);
+  await phase3.webhook(raw, crypto.createHmac("sha256", "whsec_example_only").update(raw).digest("hex"), at);
+  const requested = await phase3.requestRefund(created.managementToken, at);
+  const duplicate = await phase3.requestRefund(created.managementToken, at);
+  assert.equal(requested.ok, true); assert.equal(duplicate.duplicate, true); assert.equal(duplicate.request.id, requested.request.id);
+  assert.equal((await phase3.refund(admin, requested.request.id, at)).code, "REFUND_NOT_READY");
+  assert.equal((await phase3.decideRefund(admin, requested.request.id, "approved", at)).ok, true);
+  const refunded = await phase3.refund(admin, requested.request.id, at);
+  const finalState = await phase3.repository.read();
+  assert.equal(refunded.ok, true); assert.equal(provider.stripe.calls.refund.length, 1);
+  assert.equal(finalState.payments[0].expectedAmountPence, 600); assert.equal(finalState.payments[0].status, "refunded");
+  assert.equal(finalState.registrations[0].placeStatus, "none"); assert.equal(capacitySummary(finalState).remaining, 120);
+  assert.ok(finalState.auditEvents.some((event) => event.action === "refund_requested"));
+  assert.ok(finalState.auditEvents.some((event) => event.action === "refund_approved"));
+  assert.ok(finalState.auditEvents.some((event) => event.action === "stripe_refund_completed"));
+});
+
+test("v3 refund request and organiser decision routes preserve the authentication boundary", async () => {
+  const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
+  const created = beginProductionRegistration(state, { runner: runner(8), declaration: declaration(8) }, { at });
+  const provider = gateway();
+  const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), stripeGateway: provider.gateway, emailAdapter: createControlledDevelopmentEmail() });
+  await phase3.checkout(created.managementToken, at);
+  const payment = (await phase3.repository.read()).payments[0]; const event = stripeEvent("checkout.session.completed", payment); const raw = JSON.stringify(event);
+  await phase3.webhook(raw, crypto.createHmac("sha256", "whsec_example_only").update(raw).digest("hex"), at);
+  const api = createApi({ service: {}, phase3Integrations: phase3, environment: "local" });
+  const requested = await api({ method: "POST", pathname: "/api/v3/refunds/request", hostname: "127.0.0.1", headers: { "x-management-token": created.managementToken } });
+  assert.equal(requested.status, 201);
+  const anonymous = await api({ method: "POST", pathname: `/api/v3/organiser/refunds/${requested.body.request.id}/approve`, hostname: "127.0.0.1" });
+  assert.equal(anonymous.status, 403);
+  const approved = await api({ method: "POST", pathname: `/api/v3/organiser/refunds/${requested.body.request.id}/approve`, hostname: "127.0.0.1", headers: { "x-development-organiser": "enabled" } });
+  assert.equal(approved.status, 200); assert.equal(approved.body.request.status, "approved");
+});
+
 test("v3 public Checkout is rate limited and invalid webhook signatures return a client error", async () => {
   const phase3Integrations = {
     async checkout() { return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" }; },

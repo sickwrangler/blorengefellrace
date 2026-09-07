@@ -7,6 +7,7 @@ const message = document.querySelector("#payment-status-message");
 const actions = document.querySelector("#payment-actions");
 const retry = document.querySelector("#retry-payment");
 const refresh = document.querySelector("#refresh-payment");
+const requestRefund = document.querySelector("#request-refund");
 const help = document.querySelector("#payment-help");
 
 const fragment = new URLSearchParams(location.hash.replace(/^#/, ""));
@@ -29,6 +30,7 @@ async function render() {
   const presentation = paymentPresentation(status.state, { paymentsAvailable: integrations.paymentsAvailable === true });
   title.textContent = presentation.title; message.textContent = presentation.message;
   retry.hidden = !presentation.canRetry && !presentation.unavailable;
+  requestRefund.hidden = status.state !== "paid";
   retry.disabled = !integrations.paymentsAvailable;
   actions.hidden = false; help.hidden = !presentation.unavailable;
 }
@@ -38,6 +40,15 @@ retry.addEventListener("click", async () => {
   const result = await prototype.checkout(prototype.managementToken());
   if (result.ok && result.checkoutUrl) location.assign(result.checkoutUrl);
   else { title.textContent = "Payments unavailable"; message.textContent = runnerMessageForCode(result.code); retry.disabled = true; help.hidden = false; }
+});
+requestRefund.addEventListener("click", async () => {
+  if (!window.confirm("Request a full refund for this test entry? The organiser must review and approve it before any refund is made.")) return;
+  requestRefund.disabled = true;
+  const result = await prototype.requestRefund(prototype.managementToken());
+  title.textContent = result.ok ? "Refund requested" : "Refund request unavailable";
+  message.textContent = result.ok ? "Your full refund request is awaiting organiser review." : runnerMessageForCode(result.code);
+  requestRefund.hidden = result.ok;
+  requestRefund.disabled = false;
 });
 refresh.addEventListener("click", render);
 await render();

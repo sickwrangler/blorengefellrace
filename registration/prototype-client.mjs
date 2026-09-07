@@ -35,10 +35,10 @@ async function api(path, options = {}, organiser = false) {
   return response.json();
 }
 
-async function phase3Api(path, options = {}) {
+async function phase3Api(path, options = {}, organiser = false) {
   const response = await fetch(`/api/v3${path}`, {
     ...options,
-    headers: { "content-type": "application/json", ...(options.headers ?? {}) }
+    headers: { "content-type": "application/json", ...(organiser && isLocal ? { "x-development-organiser": "enabled" } : {}), ...(options.headers ?? {}) }
   });
   const type = response.headers.get("content-type") || "";
   if (!type.includes("application/json")) throw new Error(`API ${response.status}`);
@@ -103,6 +103,21 @@ export const prototype = {
     if (!usesApi || !token) return { ok: false, code: "PAYMENTS_UNAVAILABLE" };
     try { return await phase3Api("/payments/checkout", { method: "POST", headers: { "x-management-token": token } }); }
     catch { return { ok: false, code: "PAYMENTS_UNAVAILABLE" }; }
+  },
+  async requestRefund(token = this.managementToken()) {
+    if (!usesApi || !token) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
+    try { return await phase3Api("/refunds/request", { method: "POST", headers: { "x-management-token": token } }); }
+    catch { return { ok: false, code: "REFUND_UNAVAILABLE" }; }
+  },
+  async decideRefund(id, decision) {
+    if (!usesApi || !["approve", "reject"].includes(decision)) return { ok: false, code: "REFUND_UNAVAILABLE" };
+    try { return await phase3Api(`/organiser/refunds/${encodeURIComponent(id)}/${decision}`, { method: "POST" }, true); }
+    catch { return { ok: false, code: "REFUND_UNAVAILABLE" }; }
+  },
+  async executeRefund(id) {
+    if (!usesApi) return { ok: false, code: "REFUND_UNAVAILABLE" };
+    try { return await phase3Api(`/organiser/refunds/${encodeURIComponent(id)}/execute`, { method: "POST" }, true); }
+    catch { return { ok: false, code: "REFUND_UNAVAILABLE" }; }
   },
   payment(id, outcome) {
     if (usesApi) { const confirmationToken = confirmationTokens.get(id); const key = paymentKeys.get(id) ?? crypto.randomUUID(); paymentKeys.set(id, key); return api(`/registrations/${encodeURIComponent(confirmationToken)}/mock-payment`, { method: "POST", body: JSON.stringify({ outcome }), headers: { "idempotency-key": key } }).then((result) => { if (result.ok) paymentKeys.delete(id); return result; }); }

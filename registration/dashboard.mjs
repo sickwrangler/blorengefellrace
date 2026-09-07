@@ -16,13 +16,14 @@ function showNotice(message, error = false) {
 async function render() {
   const [snapshot, integrations] = await Promise.all([prototype.all(), prototype.integrationStatus()]); currentState = snapshot.state; currentIntegrations = integrations;
   const active = currentState.registrations.filter((item) => item.entryStatus !== "cancelled");
-  const accepted = active.filter((item) => item.entryStatus === "accepted").length;
+  const accepted = active.filter((item) => item.placeStatus === "confirmed").length;
+  const reserved = active.filter((item) => item.placeStatus === "payment_reserved").length;
   const waiting = active.filter((item) => item.entryStatus === "waiting_list").length;
   const attention = active.filter((item) => ["created", "not_configured", "declined", "abandoned", "failed", "expired"].includes(item.paymentStatus)).length;
   document.querySelector("#summary-accepted").textContent = accepted;
   document.querySelector("#summary-waiting").textContent = waiting;
   document.querySelector("#summary-payments").textContent = attention;
-  document.querySelector("#summary-remaining").textContent = Math.max(0, currentState.event.capacity - accepted);
+  document.querySelector("#summary-remaining").textContent = Math.max(0, currentState.event.capacity - accepted - reserved);
   const environment = currentState.environment === "production" ? "Production" : "Development";
   const currentOperationalState = currentState.phase3RegistrationState ?? "CLOSED";
   const stateLabel = currentOperationalState === "PRIVATE_LIVE" ? "Private" : currentOperationalState === "CLOSED_FINAL" ? "Closed" : `${currentOperationalState[0]}${currentOperationalState.slice(1).toLowerCase()}`;
@@ -106,7 +107,8 @@ function renderDetail(item) {
   const panel = document.querySelector("#entry-detail"); panel.hidden = false;
   document.querySelector("#detail-title").textContent = `${item.runner.firstName} ${item.runner.lastName}`;
   document.querySelector("#detail-reference").textContent = item.testReference;
-  const fields = { "Email address": item.runner.email, "Phone number": item.runner.phone, "Club": item.runner.club, "Race category": item.runner.genderCategory, "WFRA member?": item.runner.wfraMember ? "Yes (self-declared, not verified)" : "No", "WFRA membership number": item.runner.wfraMembershipNumber ?? "Not supplied", "Entry status": item.entryStatus.replace("_", " "), "Payment status": item.paymentStatus.replaceAll("_", " "), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact name": item.runner.emergencyName, "Emergency contact phone number": item.runner.emergencyPhone, "Price calculated by server": item.pricing?.priceActuallyChargedPence == null ? "Not recorded" : `£${(item.pricing.priceActuallyChargedPence / 100).toFixed(2)} · ${item.pricing.adjustmentReason}` };
+  const money = (value, currency = "gbp") => value == null ? "Not recorded" : `${new Intl.NumberFormat("en-GB", { style: "currency", currency: String(currency).toUpperCase() }).format(value / 100)} ${String(currency).toUpperCase()}`;
+  const fields = { "Email address": item.runner.email, "Phone number": item.runner.phone, "Club": item.runner.club, "Race category": item.runner.genderCategory, "WFRA member?": item.runner.wfraMember ? "Yes (self-declared, not verified)" : "No", "WFRA membership number": item.runner.wfraMembershipNumber ?? "Not supplied", "Entry status": item.entryStatus.replace("_", " "), "Place status": item.placeStatus.replaceAll("_", " "), "Payment status": item.paymentStatus.replaceAll("_", " "), "Expected charge": money(item.payment?.expectedAmountPence, item.payment?.currency), "Actual charge": money(item.payment?.actualPaidAmountPence, item.payment?.currency), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact name": item.runner.emergencyName, "Emergency contact phone number": item.runner.emergencyPhone, "Price calculated by server": item.pricing?.priceActuallyChargedPence == null ? "Not recorded" : `£${(item.pricing.priceActuallyChargedPence / 100).toFixed(2)} · ${item.pricing.adjustmentReason}` };
   document.querySelector("#entry-details").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
   renderActions(item); renderMessages(item);
 }
@@ -116,6 +118,7 @@ function actionButton(label, handler, className = "button button--quiet") {
 function renderActions(item) {
   const actions = document.querySelector("#entry-actions"); actions.replaceChildren();
   const available = availableOrganiserActions(item);
+  const refundRequest = currentState.refundRequests?.find((request) => request.registrationId === item.id && ["requested", "approved"].includes(request.status));
   if (available.includes("race_number")) actions.append(actionButton(item.raceNumber ? "Change race number" : "Assign race number", async () => {
     const value = window.prompt("Enter a synthetic race number", item.raceNumber ?? ""); if (value === null) return;
     const result = await prototype.assign(item.id, value); if (!result.ok) showNotice(`Race number not changed: ${result.code}`, true); else showNotice(`Race number ${value} assigned to ${item.testReference}.`); await render();
@@ -127,7 +130,11 @@ function renderActions(item) {
     await render();
   }));
   if (available.includes("promote")) actions.append(actionButton("Promote from waiting list", async () => { const result = await prototype.promote(item.id); showNotice(result.ok ? `${item.testReference} promoted.` : `Promotion unavailable: ${result.code}`, !result.ok); await render(); }));
-  if (available.includes("refund") && currentIntegrations.paymentsAvailable) actions.append(actionButton("Process approved test refund", async () => { if (!window.confirm(`Process the approved test refund for ${item.testReference}?`)) return; const result = await prototype.refund(item.id); showNotice(result.ok ? "Test refund recorded." : "The refund could not be processed.", !result.ok); await render(); }));
+  if (refundRequest?.status === "requested") {
+    actions.append(actionButton("Approve full test refund", async () => { const result = await prototype.decideRefund(refundRequest.id, "approve"); showNotice(result.ok ? "Full test refund approved. It has not been sent to Stripe yet." : `Refund could not be approved: ${result.code}`, !result.ok); await render(); }));
+    actions.append(actionButton("Reject refund request", async () => { const result = await prototype.decideRefund(refundRequest.id, "reject"); showNotice(result.ok ? "Refund request rejected." : `Refund could not be rejected: ${result.code}`, !result.ok); await render(); }, "button button--quiet danger-button"));
+  }
+  if (refundRequest?.status === "approved" && currentIntegrations.paymentsAvailable) actions.append(actionButton("Execute approved full test refund", async () => { if (!window.confirm(`Send a full Stripe sandbox refund for ${item.testReference}?`)) return; const result = await prototype.executeRefund(refundRequest.id); showNotice(result.ok ? "Full Stripe sandbox refund completed and the place released." : `The refund could not be processed: ${result.code}`, !result.ok); await render(); }));
   if (available.includes("cancel")) actions.append(actionButton("Cancel entry", async () => {
     if (item.raceNumber) {
       pendingCancellation = item.id;

@@ -25,6 +25,15 @@ export function createApi({ service, phase3Integrations = null, environment = "l
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.paymentStatus(headers["x-management-token"]));
     }
+    if (method === "POST" && pathname === "/api/v3/refunds/request") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.requestRefund(headers["x-management-token"]), 201);
+    }
+    const refundDecision = pathname.match(/^\/api\/v3\/organiser\/refunds\/([^/]+)\/(approve|reject)$/);
+    if (method === "POST" && refundDecision) {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.decideRefund(actor, decodeURIComponent(refundDecision[1]), refundDecision[2] === "approve" ? "approved" : "rejected"));
+    }
     if (method === "POST" && pathname.match(/^\/api\/v3\/organiser\/refunds\/[^/]+\/execute$/)) {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       const refundId = decodeURIComponent(pathname.split("/").at(-2)); return resultResponse(await phase3Integrations.refund(actor, refundId));

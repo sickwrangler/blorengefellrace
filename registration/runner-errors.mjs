@@ -34,7 +34,9 @@ export function runnerMessageForCode(code) {
     PARENTAL_CONSENT_REQUIREMENTS_PENDING: "Entries for runners aged 16 or 17 are paused while the parental-consent process is confirmed.",
     PAYMENTS_UNAVAILABLE: "Online payment is not available yet. Your synthetic entry details have been retained.",
     MANAGEMENT_TOKEN_INVALID: "This secure entry link is no longer available.",
-    CAPACITY_FULL: "There are currently no entry places available."
+    CAPACITY_FULL: "There are currently no entry places available.",
+    REFUND_NOT_READY: "A refund can only be requested after payment is confirmed.",
+    REFUND_CUTOFF_PASSED: "The refund-request deadline has passed. Please contact the organiser if you need help."
   };
   return messages[code] ?? "We could not complete that request. Please review your details and try again.";
 }
