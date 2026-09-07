@@ -66,7 +66,7 @@ const staticConfig = fs.readFileSync("staticwebapp.config.json", "utf8");
 for (const blocked of ["/registration/server/*", "/registration/fixtures.json", "/api/src/*", "/api/package.json", "/api/package-lock.json", "/infrastructure/*", "/docs/internal/*", "/tests/*"])
   if (!staticConfig.includes(blocked)) errors.push(`Preview source route is not blocked: ${blocked}`);
 const developmentRoutes = fs.readFileSync("scripts/prepare-registration-development-routes.mjs", "utf8");
-for (const protectedRoute of ["/registration/dashboard.html", "/api/v2/organiser/*", "/api/v3/organiser/*", '"Organiser"', "/.auth/login/aad"])
+for (const protectedRoute of ["/registration/dashboard.html", "/api/v2/organiser/*", "/api/v3/organiser/*", '"organiser"', "/.auth/login/aad"])
   if (!developmentRoutes.includes(protectedRoute)) errors.push(`Cloud organiser boundary is missing: ${protectedRoute}`);
 if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
 console.log("Validated registration state guards, synthetic fixtures, HTML/mobile source, JavaScript syntax and external-service boundaries.");

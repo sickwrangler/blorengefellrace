@@ -141,9 +141,9 @@ function productionConfiguration() {
 function developmentConfiguration() {
   return {
     routes: [
-      { route: "/registration/dashboard.html", allowedRoles: ["Organiser"] },
-      { route: "/api/v2/organiser/*", allowedRoles: ["Organiser"] },
-      { route: "/api/v3/organiser/*", allowedRoles: ["Organiser"] }
+      { route: "/registration/dashboard.html", allowedRoles: ["organiser"] },
+      { route: "/api/v2/organiser/*", allowedRoles: ["organiser"] },
+      { route: "/api/v3/organiser/*", allowedRoles: ["organiser"] }
     ],
     responseOverrides: {
       "401": { redirect: "/.auth/login/aad?post_login_redirect_uri=.referrer", statusCode: 302 },

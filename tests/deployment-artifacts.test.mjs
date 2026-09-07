@@ -95,7 +95,7 @@ test("development staging separates browser files from managed API source", () =
     assert.ok(apiFiles.includes("src/shared/server/service.mjs"));
     assert.equal(apiFiles.some((file) => file.startsWith("docs/") || file.startsWith("infrastructure/")), false);
     const configuration = JSON.parse(fs.readFileSync(path.join(outputRoot, "app/staticwebapp.config.json"), "utf8"));
-    assert.deepEqual(configuration.routes[0].allowedRoles, ["Organiser"]);
+    assert.deepEqual(configuration.routes[0].allowedRoles, ["organiser"]);
     assert.equal(configuration.responseOverrides["401"].statusCode, 302);
   } finally {
     fs.rmSync(outputRoot, { recursive: true, force: true });
