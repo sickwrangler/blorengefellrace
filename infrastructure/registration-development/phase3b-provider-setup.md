@@ -7,7 +7,7 @@ This runbook is for the isolated development environment only. Do not reuse prod
 1. In a Stripe account controlled by the organiser, obtain a test-mode server key.
 2. Register the development endpoint `/api/v3/stripe/webhook` for the reviewed event types in `docs/registration-phase3b.md`.
 3. Place the server key and endpoint signing secret in Azure runtime configuration.
-4. Leave `REGISTRATION_PHASE3B_ENABLED` disabled until the new Phase 3 state partition and deployment have passed validation.
+4. Leave `STRIPE_ENABLED=false` until the Phase 3 deployment and disabled-provider checks have passed. Keep `ACS_EMAIL_ENABLED=false` until controlled email is configured and separately approved.
 5. Use Stripe test card data only on Stripe-hosted Checkout.
 
 The API rejects live secret/restricted-key prefixes in development. Do not place a publishable key or mode selector in the browser.
