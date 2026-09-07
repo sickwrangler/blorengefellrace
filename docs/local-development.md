@@ -109,7 +109,7 @@ Phase 2 adds the preferred persistent local API without removing the safe PR-pre
 node scripts/start-registration-phase2.mjs
 ```
 
-The runner, organiser area, captured-email adapter, mock-payment adapter and ignored persistent store are served together at <http://127.0.0.1:4173/registration/>. Stop and restart the process to verify persistence. Reset explicitly with `node scripts/reset-registration-phase2.mjs`; backup and restore commands are documented in `registration-phase2.md`.
+The runner, organiser area, captured-email adapter, disabled Phase 3 payment integration and ignored persistent store are served together at <http://127.0.0.1:4173/registration/>. The payment-return page reads the authoritative server state and cannot mark an entry paid. Stop and restart the process to verify persistence. Reset explicitly with `node scripts/reset-registration-phase2.mjs`; backup and restore commands are documented in `registration-phase2.md`.
 
 To validate the managed development API package without using any Azure credential:
 

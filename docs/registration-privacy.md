@@ -8,21 +8,31 @@ The registration development system must use invented test entrants only. The Az
 |---|---|---|
 | First and last name | Identify the entrant and prepare race/result records | Private during registration; may later appear in approved public results |
 | Email and phone | Registration contact | Private |
+| Postal address | Entry administration and any confirmed eligibility/operational need | Private; final necessity and retention require organiser approval |
 | Date of birth | Verify minimum age and calculate the appropriate results category | Private; derived category may be public |
 | Gender/category | Produce result categories | Private during registration; approved category may be public |
 | Running club | Race administration and results | May be public in results |
-| Affiliation and membership number | Future eligibility/fee checks, subject to organiser confirmation | Private |
+| Self-declared WFRA membership, membership number and discount evidence | Apply and audit an approved member price without claiming verification | Private; excluded from public APIs, results and public exports; retention requires organiser approval |
 | Emergency-contact name and phone | Race-day incident contact | Private; race-day use only |
-| Travel method | Event travel planning | Private/aggregate use only |
 | Terms and privacy versions/timestamp | Evidence of the agreed versions | Private |
+| WFRA declaration identifier, version, typed name and timestamp | Evidence of the exact declaration accepted | Private; retention requires organiser approval |
 | Entry, mock-payment and waiting-list status | Administer the test workflow | Private |
+| Waiting-list name and email | Operate the queue while minimizing data before a place is offered | Private; remove promptly when no longer needed |
+| Private-invitation and management-token hashes | Authorize purpose-bound private and self-service access | Private security data; revoke/expire promptly |
+| Refund request/decision and payment references | Administer refunds and reconcile finance | Private; accounting retention must be decided separately |
+| Stripe test Checkout/payment/refund identifiers and reconciliation state | Reconcile a sandbox payment without storing card data | Private; excluded from public APIs and logs |
+| Intended email address and safe-recipient delivery evidence | Prove communication routing without emailing arbitrary development addresses | Private; actual safe addresses remain runtime configuration |
 | Race number | Race administration and results | May be public in results |
 
-A full postal address is excluded because no operational need has been established. Medical information is excluded; collecting it would require a specific race-day need, lawful basis, restricted access and retention decision.
+Medical information remains excluded; collecting it would require a specific race-day need, lawful basis, restricted access and retention decision.
+
+UK Athletics affiliation, UK Athletics membership number and travel method are not collected by the active Phase 3 journey: **not required for current race registration or operations.** Older synthetic Phase 2 records may retain deprecated fields until reset or expiry, but those fields are not shown, accepted into new records or used by the current product model.
 
 ## Retention and rights
 
-Prototype data should be reset after each review session and is not backed up. A future retention schedule for production registration, finance/audit records, emergency contacts and result records requires organiser approval before collection starts.
+WFRA membership and discount evidence needs an approved retention period before real registration opens; it must not be retained indefinitely by default.
+
+Prototype data should be reset after each review session and is not backed up. Final periods are deliberately not invented. The organiser must approve a production schedule covering incomplete attempts, waiting-list records, private invitations, active/cancelled entries, addresses and contact details, declarations/consent, audit records, payment/accounting metadata and public results before real collection starts. Emergency-contact data is short-lived operational information and should be deleted or anonymised soon after the event once incident needs have ended. Durable financial/accounting evidence must be separated from race-operation data and retained only for its approved purpose.
 
 The production design must provide documented processes to:
 

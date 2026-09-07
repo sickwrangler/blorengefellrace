@@ -1,4 +1,4 @@
-import { prototype, canTest } from "./prototype-client.mjs";
+import { prototype, canTest, supportsManagedApi } from "./prototype-client.mjs";
 import { queryRegistrations } from "./preview-repository.mjs";
 import { availableOrganiserActions } from "./organiser-view.mjs";
 
@@ -6,6 +6,7 @@ let currentState;
 let selectedReference = new URLSearchParams(window.location.search).get("ref");
 let markingViewed = false;
 let pendingCancellation = null;
+let currentIntegrations = { paymentsAvailable: false, email: "captured-only" };
 if (canTest) await render();
 
 function showNotice(message, error = false) {
@@ -13,20 +14,25 @@ function showNotice(message, error = false) {
   notice.classList.toggle("form-alert--success", !error); notice.focus();
 }
 async function render() {
-  const snapshot = await prototype.all(); currentState = snapshot.state;
+  const [snapshot, integrations] = await Promise.all([prototype.all(), prototype.integrationStatus()]); currentState = snapshot.state; currentIntegrations = integrations;
   const active = currentState.registrations.filter((item) => item.entryStatus !== "cancelled");
   const accepted = active.filter((item) => item.entryStatus === "accepted").length;
   const waiting = active.filter((item) => item.entryStatus === "waiting_list").length;
-  const attention = active.filter((item) => ["not_started", "declined", "abandoned"].includes(item.paymentStatus)).length;
+  const attention = active.filter((item) => ["created", "not_configured", "declined", "abandoned", "failed", "expired"].includes(item.paymentStatus)).length;
   document.querySelector("#summary-accepted").textContent = accepted;
   document.querySelector("#summary-waiting").textContent = waiting;
   document.querySelector("#summary-payments").textContent = attention;
   document.querySelector("#summary-remaining").textContent = Math.max(0, currentState.event.capacity - accepted);
+  const environment = currentState.environment === "production" ? "Production" : "Development";
+  const currentOperationalState = currentState.phase3RegistrationState ?? "CLOSED";
+  const stateLabel = currentOperationalState === "PRIVATE_LIVE" ? "Private" : currentOperationalState === "CLOSED_FINAL" ? "Closed" : `${currentOperationalState[0]}${currentOperationalState.slice(1).toLowerCase()}`;
+  document.querySelector("#environment-status").textContent = `${environment} · ${stateLabel} · ${integrations.paymentsAvailable ? "Stripe sandbox" : "Payments unavailable"}`;
+  document.querySelector("#integration-status").textContent = `${integrations.paymentsAvailable ? "Stripe sandbox" : "Payments unavailable"} · ${integrations.externalEmailAvailable ? "Controlled email" : "Email captured only"}`;
   document.querySelector("#technical-environment").textContent = snapshot.diagnostics.environment;
   document.querySelector("#technical-storage").textContent = snapshot.diagnostics.storageType;
   document.querySelector("#technical-schema").textContent = snapshot.diagnostics.schemaVersion;
   if (snapshot.recovery) showNotice(snapshot.recovery.message, true);
-  renderList(); renderProgress();
+  renderList(); renderProgress(); await renderPrivateInvitations();
   const selected = currentState.registrations.find((item) => item.testReference === selectedReference);
   if (selected) {
     renderDetail(selected);
@@ -38,6 +44,25 @@ async function render() {
   } else {
     document.querySelector("#entry-detail").hidden = true;
     if (selectedReference) { selectedReference = null; history.replaceState(null, "", "dashboard.html"); }
+  }
+}
+async function renderPrivateInvitations() {
+  const section = document.querySelector("#private-access");
+  section.hidden = !supportsManagedApi;
+  if (!supportsManagedApi) return;
+  const result = await prototype.privateInvitations();
+  const list = document.querySelector("#private-invitation-list"); list.replaceChildren();
+  if (!result.ok || !result.invitations.length) { const li = document.createElement("li"); li.textContent = result.ok ? "No private links created." : "Private links are unavailable."; list.append(li); return; }
+  for (const invitation of result.invitations) {
+    const li = document.createElement("li");
+    const status = invitation.status ?? (invitation.revokedAt ? "Revoked" : "Active");
+    const text = document.createElement("span"); text.textContent = `${invitation.kind.replaceAll("_", " ")} · ${status} · expires ${new Date(invitation.expiresAt).toLocaleString()}`;
+    li.append(text);
+    if (status === "Active") {
+      li.append(actionButton("Expire now", async () => { const expired = await prototype.expirePrivateInvitation(invitation.id); showNotice(expired.ok ? "Private link expired." : `Link could not be expired: ${expired.code}`, !expired.ok); await renderPrivateInvitations(); }, "text-button"));
+      li.append(actionButton("Revoke", async () => { const revoked = await prototype.revokePrivateInvitation(invitation.id); showNotice(revoked.ok ? "Private link revoked." : `Link could not be revoked: ${revoked.code}`, !revoked.ok); await renderPrivateInvitations(); }, "text-button danger-link"));
+    }
+    list.append(li);
   }
 }
 async function renderAudit(item) {
@@ -64,7 +89,7 @@ function renderList() {
     const heading = document.createElement("h3"); heading.textContent = `${item.runner.firstName} ${item.runner.lastName}`;
     const reference = document.createElement("p"); reference.className = "entrant-reference"; reference.textContent = item.testReference;
     const facts = document.createElement("dl"); facts.className = "entrant-facts";
-    for (const [label, value] of [["Club", item.runner.club], ["Entry", item.entryStatus.replace("_", " ")], ["Mock payment", item.paymentStatus.replace("_", " ")], ["Race number", item.raceNumber ?? "Not assigned"]]) {
+    for (const [label, value] of [["Club", item.runner.club], ["Entry", item.entryStatus.replace("_", " ")], ["Payment", item.paymentStatus.replaceAll("_", " ")], ["Race number", item.raceNumber ?? "Not assigned"]]) {
       const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; facts.append(dt, dd);
     }
     const button = document.createElement("button"); button.className = "button button--quiet"; button.type = "button"; button.textContent = "View entry";
@@ -81,7 +106,7 @@ function renderDetail(item) {
   const panel = document.querySelector("#entry-detail"); panel.hidden = false;
   document.querySelector("#detail-title").textContent = `${item.runner.firstName} ${item.runner.lastName}`;
   document.querySelector("#detail-reference").textContent = item.testReference;
-  const fields = { "Synthetic email": item.runner.email, "Synthetic phone": item.runner.phone, Club: item.runner.club, Category: item.runner.genderCategory, "Entry status": item.entryStatus.replace("_", " "), "Mock-payment status": item.paymentStatus.replace("_", " "), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact": `${item.runner.emergencyName} — ${item.runner.emergencyPhone}`, Travel: item.runner.travelMethod };
+  const fields = { "Email address": item.runner.email, "Phone number": item.runner.phone, "Club": item.runner.club, "Race category": item.runner.genderCategory, "WFRA member?": item.runner.wfraMember ? "Yes (self-declared, not verified)" : "No", "WFRA membership number": item.runner.wfraMembershipNumber ?? "Not supplied", "Entry status": item.entryStatus.replace("_", " "), "Payment status": item.paymentStatus.replaceAll("_", " "), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact name": item.runner.emergencyName, "Emergency contact phone number": item.runner.emergencyPhone, "Price calculated by server": item.pricing?.priceActuallyChargedPence == null ? "Not recorded" : `£${(item.pricing.priceActuallyChargedPence / 100).toFixed(2)} · ${item.pricing.adjustmentReason}` };
   document.querySelector("#entry-details").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
   renderActions(item); renderMessages(item);
 }
@@ -102,7 +127,7 @@ function renderActions(item) {
     await render();
   }));
   if (available.includes("promote")) actions.append(actionButton("Promote from waiting list", async () => { const result = await prototype.promote(item.id); showNotice(result.ok ? `${item.testReference} promoted.` : `Promotion unavailable: ${result.code}`, !result.ok); await render(); }));
-  if (available.includes("refund")) actions.append(actionButton("Refund mock payment", async () => { if (!window.confirm(`Refund the mock payment for ${item.testReference}?`)) return; const result = await prototype.refund(item.id); showNotice(result.ok ? "Mock payment marked refunded." : `Refund unavailable: ${result.code}`, !result.ok); await render(); }));
+  if (available.includes("refund") && currentIntegrations.paymentsAvailable) actions.append(actionButton("Process approved test refund", async () => { if (!window.confirm(`Process the approved test refund for ${item.testReference}?`)) return; const result = await prototype.refund(item.id); showNotice(result.ok ? "Test refund recorded." : "The refund could not be processed.", !result.ok); await render(); }));
   if (available.includes("cancel")) actions.append(actionButton("Cancel entry", async () => {
     if (item.raceNumber) {
       pendingCancellation = item.id;
@@ -143,6 +168,16 @@ for (const selector of ["#search", "#entry-filter", "#payment-filter"]) document
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
 document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });
+document.querySelector("#create-invitation")?.addEventListener("click", async () => {
+  const expires = document.querySelector("#invitation-expiry");
+  if (!expires.value) expires.value = new Date(Date.now() + 48 * 3_600_000).toISOString().slice(0, 16);
+  const result = await prototype.createPrivateInvitation({ kind: document.querySelector("#invitation-kind").value, expiresAt: new Date(expires.value).toISOString(), maximumUses: 1 });
+  if (!result.ok) { showNotice(`Private link could not be created: ${result.code}`, true); return; }
+  const url = new URL("./", window.location.href); url.searchParams.set("invite", result.token);
+  document.querySelector("#created-invitation-url").textContent = url.href;
+  document.querySelector("#created-invitation").hidden = false;
+  await renderPrivateInvitations();
+});
 document.querySelector("#keep-entry")?.addEventListener("click", () => { pendingCancellation = null; document.querySelector("#cancel-entry-dialog").close(); });
 document.querySelector("#confirm-cancel-entry")?.addEventListener("click", async () => {
   if (!pendingCancellation) return;

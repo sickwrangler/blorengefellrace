@@ -2,10 +2,12 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createDatabase, RegistrationService } from "../registration/server/service.mjs";
+import { createDatabase, migrateDevelopmentDatabase, RegistrationService } from "../registration/server/service.mjs";
 import { createJsonFileRepository } from "../registration/server/repositories.mjs";
 import { createMockPaymentAdapter, createCapturedEmailAdapter, assertSafeAdapters } from "../registration/server/adapters.mjs";
 import { createApi } from "../registration/server/api.mjs";
+import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
+import { createControlledDevelopmentEmail } from "../registration/server/development-email.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.env.REGISTRATION_PHASE2_PORT || 4173);
@@ -14,8 +16,15 @@ const environment = "local";
 const adapters = { payment: createMockPaymentAdapter(), email: createCapturedEmailAdapter() };
 assertSafeAdapters(adapters, environment);
 const repository = createJsonFileRepository(dataFile, createDatabase({ environment, registrationState: "test" }));
+await repository.transaction((stored) => {
+  const migrated = migrateDevelopmentDatabase(stored);
+  for (const key of Object.keys(stored)) delete stored[key];
+  Object.assign(stored, migrated);
+  return { ok: true };
+});
 const service = new RegistrationService({ repository, paymentAdapter: adapters.payment, emailAdapter: adapters.email });
-const api = createApi({ service, environment });
+const phase3Integrations = new Phase3IntegrationService({ repository, emailAdapter: createControlledDevelopmentEmail() });
+const api = createApi({ service, phase3Integrations, environment });
 const mime = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gpx": "application/gpx+xml" };
 
 async function requestBody(request) {
@@ -26,7 +35,7 @@ async function requestBody(request) {
 const server = http.createServer(async (request, res) => {
   try {
     const url = new URL(request.url, `http://127.0.0.1:${port}`);
-    if (url.pathname.startsWith("/api/v2/")) {
+    if (url.pathname.startsWith("/api/v2/") || url.pathname.startsWith("/api/v3/")) {
       const headers = Object.fromEntries(Object.entries(request.headers).map(([key, value]) => [key.toLowerCase(), value]));
       const result = await api({ method: request.method, pathname: url.pathname, headers, body: await requestBody(request), hostname: "127.0.0.1", query: Object.fromEntries(url.searchParams) });
       res.writeHead(result.status, result.headers); res.end(JSON.stringify(result.body)); return;

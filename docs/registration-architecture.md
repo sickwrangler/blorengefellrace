@@ -75,3 +75,9 @@ The prototype uses one authoritative state mutation path, so only one of two fin
 - separate development and production configuration and data boundaries.
 
 The Phase 2 cloud resources are development-only and synthetic-only. Detailed operational and security review information is maintained separately from the public website.
+
+## Phase 3A production-readiness foundation
+
+Phase 3A adds a separate server domain for production operational states, purpose-bound private invitations revalidated on every protected operation, capacity reservations, waiting-list offers, versioned WFRA declaration evidence, private self-declared WFRA membership evidence, server-calculated pricing, secure management links, cutoff-aware amendments, refund decisions and optional race numbers. UK Athletics affiliation and membership number are not part of the active model because they are not required for current race registration or operations. Production initialization is always `CLOSED`, and the existing deployment allowlist still excludes all registration pages and APIs. The development service remains synthetic with mock payment and captured-only email adapters. See `registration-phase3-plan.md` for implemented boundaries and the provider work still requiring approval.
+
+Phase 3B adds a disabled-by-default integration layer for Stripe-hosted test Checkout, raw-body signed webhooks, idempotent reconciliation, full sandbox refunds, controlled ACS Email delivery and a server-authoritative runner payment-status page. Stripe and external email are independently enabled and otherwise fail closed. It does not alter the production artifact. See `registration-phase3b.md` for the payment/email state machines, scheduled-work boundary and remaining provider proof gates.

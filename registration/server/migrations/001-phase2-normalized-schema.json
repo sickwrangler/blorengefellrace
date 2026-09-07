@@ -13,9 +13,10 @@
     "idempotency",
     "amendmentRequests"
   ],
-  "privateFields": ["runner.email", "runner.phone", "runner.dateOfBirth", "runner.membershipNumber", "emergencyContact.name", "emergencyContact.phone"],
+  "privateFields": ["runner.email", "runner.phone", "runner.dateOfBirth", "runner.wfraMembershipNumber", "emergencyContact.name", "emergencyContact.phone"],
+  "deprecatedLegacyFields": ["runner.affiliated", "runner.membershipNumber", "runner.travelMethod"],
   "highlyRestrictedFields": ["emergencyContact.name", "emergencyContact.phone"],
   "publicResultAllowlist": ["firstName", "lastName", "club", "genderCategory", "raceNumber"],
-  "deleteAfterEventCandidates": ["emergencyContact", "runner.phone", "runner.dateOfBirth", "runner.membershipNumber"],
+  "deleteAfterEventCandidates": ["emergencyContact", "runner.phone", "runner.dateOfBirth", "runner.wfraMembershipNumber"],
   "limitedFinancialRetention": ["payment.status", "payment.providerReference", "payment.updatedAt"]
 }

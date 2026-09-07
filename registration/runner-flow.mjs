@@ -2,7 +2,7 @@ export const RUNNER_STAGE_ACTIONS = Object.freeze({
   1: Object.freeze(["details-continue"]),
   2: Object.freeze(["race-back", "race-continue"]),
   3: Object.freeze(["review-back", "submit-test"]),
-  4: Object.freeze(["payment-successful", "payment-declined", "payment-abandoned"])
+  4: Object.freeze(["continue-payment"])
 });
 
 export function isRunnerActionAvailable(stage, actionId, hasRegistration = false) {

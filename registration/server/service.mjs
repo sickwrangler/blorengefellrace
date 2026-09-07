@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { EVENT, safeRegistrationState, validateRunner } from "../registration-core.mjs";
 import { authorize } from "./auth.mjs";
+import { PRIVATE_INVITATION_KINDS, issuePrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, authorizePrivateInvitation, calculateEntryPrice } from "./phase3-domain.mjs";
 
 const now = () => new Date().toISOString();
 const id = (prefix) => `${prefix}_${crypto.randomUUID()}`;
@@ -12,14 +13,50 @@ export const PHASE2_PAYMENT_STATES = Object.freeze(["created", "pending", "paid"
 
 export function createDatabase({ environment = "local", registrationState = "test", capacity = EVENT.capacity } = {}) {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     environment,
-    event: { ...EVENT, capacity, intendedOpeningDate: null },
+    event: { ...EVENT, capacity, raceDate: EVENT.date, transferRefundCutoffUtc: EVENT.transferRefundCutoff, intendedOpeningDate: null },
     registrationState: safeRegistrationState(registrationState, environment),
+    phase3RegistrationState: "CLOSED",
     counters: { waitingSequence: 0 },
     runners: [], emergencyContacts: [], registrations: [], payments: [], consents: [], communications: [], auditEvents: [],
-    idempotency: [], amendmentRequests: [], testProgress: { submittedReference: null, organiserViewed: false, resetCompleted: false }
+    idempotency: [], amendmentRequests: [], privateInvitations: [], waitingList: [], waitingListOffers: [], refundRequests: [], managementTokens: [], processedPaymentEvents: [],
+    testProgress: { submittedReference: null, organiserViewed: false, resetCompleted: false }
   };
+}
+
+export function migrateDevelopmentDatabase(input) {
+  const db = structuredClone(input);
+  db.schemaVersion = 3;
+  db.event = {
+    ...EVENT,
+    ...(db.event ?? {}),
+    capacity: EVENT.capacity,
+    raceDate: db.event?.raceDate ?? db.event?.date ?? EVENT.date,
+    transferRefundCutoffUtc: db.event?.transferRefundCutoffUtc ?? db.event?.transferRefundCutoff ?? EVENT.transferRefundCutoff
+  };
+  for (const name of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests", "privateInvitations", "waitingList", "waitingListOffers", "refundRequests", "managementTokens", "processedPaymentEvents"]) db[name] ??= [];
+  db.phase3RegistrationState ??= "CLOSED";
+  db.testProgress ??= { submittedReference: null, organiserViewed: false, resetCompleted: false };
+  for (const registration of db.registrations) {
+    const payment = db.payments.find((item) => item.registrationId === registration.id);
+    registration.placeStatus ??= registration.entryStatus === "accepted" ? (payment?.status === "paid" ? "confirmed" : "payment_reserved") : "none";
+  }
+  for (const payment of db.payments) {
+    payment.provider ??= null;
+    payment.providerMode ??= null;
+    payment.expectedAmountPence ??= payment.priceActuallyChargedPence ?? EVENT.entryFeePence;
+    payment.actualPaidAmountPence ??= payment.status === "paid" ? payment.expectedAmountPence : null;
+    payment.currency ??= "gbp";
+    payment.checkoutSessionId ??= null;
+    payment.checkoutExpiresAt ??= null;
+    payment.checkoutUrl ??= null;
+    payment.paymentIntentId ??= null;
+    payment.refundState ??= payment.status === "refunded" ? "refunded" : "not_requested";
+    payment.webhookReconciliationState ??= payment.status === "paid" ? "legacy_test_payment" : "not_started";
+    payment.externalCall ??= false;
+  }
+  return db;
 }
 
 function audit(db, actor, action, registrationId, before = null, after = null) {
@@ -39,14 +76,22 @@ function view(db, registration, { runnerSafe = false } = {}) {
   const { runner, emergency, payment, consent } = entities(db, registration);
   const result = {
     ...registration,
-    paymentStatus: payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status ?? "created",
+    paymentStatus: payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status === "expired" ? "abandoned" : payment?.status ?? "created",
+    pricing: payment ? { standardPricePence: payment.standardPricePence, wfraMemberPricePence: payment.wfraMemberPricePence, priceActuallyChargedPence: payment.priceActuallyChargedPence, adjustmentReason: payment.adjustmentReason, wfraDiscountApplied: payment.wfraDiscountApplied } : null,
     runner: { ...runner, emergencyName: emergency?.name, emergencyPhone: emergency?.phone },
-    termsVersion: consent?.termsVersion, privacyVersion: consent?.privacyVersion, consentRecordedAt: consent?.recordedAt
+    termsVersion: consent?.termsVersion, privacyVersion: consent?.privacyVersion, consentRecordedAt: consent?.recordedAt,
+    declaration: consent?.declaration
   };
   delete result.confirmationTokenHash;
+  // Legacy Phase 2 fields can remain in old synthetic storage, but are retired
+  // from every active API response and are never written for new entries.
+  delete result.runner.affiliated;
+  delete result.runner.membershipNumber;
+  delete result.runner.travelMethod;
   if (runnerSafe) {
-    delete result.runner.email; delete result.runner.phone; delete result.runner.dateOfBirth; delete result.runner.membershipNumber; delete result.runner.travelMethod;
+    delete result.runner.email; delete result.runner.phone; delete result.runner.addressLine1; delete result.runner.addressLine2; delete result.runner.city; delete result.runner.postcode; delete result.runner.dateOfBirth; delete result.runner.wfraMembershipNumber;
     delete result.runner.emergencyName; delete result.runner.emergencyPhone;
+    delete result.declaration;
   }
   return result;
 }
@@ -62,7 +107,17 @@ function refreshWaiting(db, actor = null) {
 
 function status(db) {
   const accepted = db.registrations.filter((item) => item.entryStatus === "accepted" && active(item)).length;
-  return { state: db.registrationState, environment: db.environment, capacity: db.event.capacity, accepted, remaining: Math.max(0, db.event.capacity - accepted), waiting: db.registrations.filter((item) => item.entryStatus === "waiting_list" && active(item)).length, intendedOpeningDate: db.event.intendedOpeningDate };
+  return { state: db.registrationState, operationalState: db.phase3RegistrationState ?? "CLOSED", environment: db.environment, capacity: db.event.capacity, accepted, remaining: Math.max(0, db.event.capacity - accepted), waiting: db.registrations.filter((item) => item.entryStatus === "waiting_list" && active(item)).length, intendedOpeningDate: db.event.intendedOpeningDate, pricing: calculateEntryPrice(db.event) };
+}
+
+function privateAccessState(db) {
+  return { ...db, registrationState: db.environment !== "production" && db.registrationState === "test" ? "test" : (db.phase3RegistrationState ?? "CLOSED") };
+}
+
+function privateAccessResult(db, token, purpose, { at = new Date(), consume = false } = {}) {
+  if (!PRIVATE_INVITATION_KINDS.includes(purpose)) return { ok: false, code: "LINK_UNAVAILABLE" };
+  const checked = authorizePrivateInvitation(privateAccessState(db), token, { kind: purpose, at, consume, allowDevelopmentTest: true });
+  return checked.ok ? { ok: true, purpose, invitation: checked.invitation } : { ok: false, code: "LINK_UNAVAILABLE" };
 }
 
 function formulaSafe(value) {
@@ -77,45 +132,55 @@ export function parseSyntheticCsv(text) {
   for (let index = 0; index < String(text).length; index += 1) { const character = text[index]; const next = text[index + 1]; if (character === '"' && quoted && next === '"') { cell += '"'; index += 1; } else if (character === '"') quoted = !quoted; else if (character === "," && !quoted) { row.push(cell); cell = ""; } else if ((character === "\n" || character === "\r") && !quoted) { if (character === "\r" && next === "\n") index += 1; row.push(cell); if (row.some((value) => value !== "")) records.push(row); row = []; cell = ""; } else cell += character; }
   row.push(cell); if (row.some((value) => value !== "")) records.push(row); if (records.length < 2) return [];
   const headers = records[0].map((value) => value.trim());
-  return records.slice(1).map((values) => Object.fromEntries(headers.map((header, index) => [header, ["affiliated", "acceptTerms", "acceptPrivacy"].includes(header) ? /^(true|yes|1)$/i.test(values[index] ?? "") : values[index] ?? ""])));
+  return records.slice(1).map((values) => Object.fromEntries(headers.map((header, index) => [header, ["wfraMember", "acceptDeclaration", "acceptTerms", "acceptPrivacy"].includes(header) ? /^(true|yes|1)$/i.test(values[index] ?? "") : values[index] ?? ""])));
 }
 
 export class RegistrationService {
   constructor({ repository, paymentAdapter, emailAdapter }) { this.repository = repository; this.paymentAdapter = paymentAdapter; this.emailAdapter = emailAdapter; }
   async status() { return status(await this.repository.read()); }
 
-  create(input, { idempotencyKey, actor = { actorType: "runner" } } = {}) {
+  create(input, { idempotencyKey, actor = { actorType: "runner" }, privateInvitationToken = null } = {}) {
     if (!idempotencyKey || idempotencyKey.length < 12) return Promise.resolve({ ok: false, code: "IDEMPOTENCY_KEY_REQUIRED" });
     return this.repository.transaction(async (db) => {
+      if (privateInvitationToken && !privateAccessResult(db, privateInvitationToken, "registration").ok) return { ok: false, code: "LINK_UNAVAILABLE" };
       const prior = db.idempotency.find((item) => item.operation === "create" && item.key === idempotencyKey);
       if (prior) {
         const registration = db.registrations.find((item) => item.id === prior.registrationId);
-        return { ok: true, idempotentReplay: true, registration: view(db, registration, { runnerSafe: true }), confirmationToken: replayableToken(idempotencyKey, registration.id) };
+        return { ok: true, idempotentReplay: true, registration: view(db, registration, { runnerSafe: true }), confirmationToken: replayableToken(idempotencyKey, registration.id), managementToken: replayableToken(`management:${idempotencyKey}`, registration.id) };
       }
       if (db.environment === "development" && db.registrationState !== "test") return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
       if (!["test", "open"].includes(db.registrationState)) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
       if (db.environment === "production") return { ok: false, code: "PRODUCTION_CLOSED" };
-      const normalized = { ...input, firstName: normalizeName(input.firstName), lastName: normalizeName(input.lastName), email: String(input.email ?? "").trim().toLowerCase(), phone: String(input.phone ?? "").trim(), emergencyName: normalizeName(input.emergencyName), emergencyPhone: String(input.emergencyPhone ?? "").trim() };
+      const normalized = { ...input, wfraMember: input.wfraMember === true, firstName: normalizeName(input.firstName), lastName: normalizeName(input.lastName), email: String(input.email ?? "").trim().toLowerCase(), phone: String(input.phone ?? "").trim(), addressLine1: normalizeName(input.addressLine1), addressLine2: normalizeName(input.addressLine2), city: normalizeName(input.city), postcode: normalizeName(input.postcode).toUpperCase(), wfraMembershipNumber: normalizeName(input.wfraMembershipNumber), declarationName: normalizeName(input.declarationName), emergencyName: normalizeName(input.emergencyName), emergencyPhone: String(input.emergencyPhone ?? "").trim() };
       const errors = validateRunner(normalized, { requireSynthetic: true });
       if (normalized.termsVersion && normalized.termsVersion !== db.event.termsVersion) errors.acceptTerms = "The terms version is no longer current.";
       if (normalized.privacyVersion && normalized.privacyVersion !== db.event.privacyVersion) errors.acceptPrivacy = "The privacy version is no longer current.";
       if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
       const duplicate = db.registrations.find((item) => active(item) && db.runners.find((runner) => runner.id === item.runnerId)?.email === normalized.email);
       if (duplicate) return { ok: false, code: "DUPLICATE" };
+      if (privateInvitationToken && !privateAccessResult(db, privateInvitationToken, "registration", { consume: true }).ok) return { ok: false, code: "LINK_UNAVAILABLE" };
       const accepted = status(db).accepted < db.event.capacity;
       const createdAt = now(); const registrationId = id("reg"); const runnerId = id("runner"); const confirmationToken = replayableToken(idempotencyKey, registrationId);
-      db.runners.push({ id: runnerId, firstName: normalized.firstName, lastName: normalized.lastName, email: normalized.email, phone: normalized.phone, dateOfBirth: normalized.dateOfBirth, genderCategory: normalized.genderCategory, club: normalizeName(normalized.club) || "Unattached", affiliated: Boolean(normalized.affiliated), membershipNumber: normalizeName(normalized.membershipNumber) || null, travelMethod: normalized.travelMethod, anonymisedAt: null });
+      const pricing = calculateEntryPrice(db.event, normalized);
+      db.runners.push({ id: runnerId, firstName: normalized.firstName, lastName: normalized.lastName, email: normalized.email, phone: normalized.phone, addressLine1: normalized.addressLine1, addressLine2: normalized.addressLine2 || null, city: normalized.city, postcode: normalized.postcode, dateOfBirth: normalized.dateOfBirth, genderCategory: normalized.genderCategory, club: normalizeName(normalized.club) || "Unattached", wfraMember: normalized.wfraMember, wfraMembershipNumber: normalized.wfraMember ? normalized.wfraMembershipNumber || null : null, wfraMembershipVerified: false, wfraDiscountApplied: pricing.wfraDiscountApplied, anonymisedAt: null });
       db.emergencyContacts.push({ id: id("emergency"), registrationId, name: normalized.emergencyName, phone: normalized.emergencyPhone, deleteAfterEvent: true });
-      db.consents.push({ id: id("consent"), registrationId, termsVersion: db.event.termsVersion, privacyVersion: db.event.privacyVersion, recordedAt: createdAt });
-      db.payments.push({ id: id("payment"), registrationId, status: "created", providerReference: null, updatedAt: createdAt });
-      const registration = { id: registrationId, testReference: `TEST-${crypto.randomBytes(4).toString("hex").toUpperCase()}`, eventId: db.event.id, runnerId, environment: db.environment, entryStatus: accepted ? "accepted" : "waiting_list", waitingSequence: accepted ? null : ++db.counters.waitingSequence, waitingListPosition: null, raceNumber: null, confirmationTokenHash: tokenHash(confirmationToken), createdAt, updatedAt: createdAt, deletedAt: null };
+      db.consents.push({ id: id("consent"), registrationId, termsVersion: db.event.termsVersion, privacyVersion: db.event.privacyVersion, recordedAt: createdAt, declaration: { identifier: db.event.declarationIdentifier, version: db.event.declarationVersion, accepted: true, typedFullName: normalized.declarationName, signatoryRole: normalized.declarationSignatoryRole, acceptedAt: createdAt, contentStatus: db.event.declarationContentStatus } });
+      db.payments.push({ id: id("payment"), registrationId, status: "not_configured", provider: null, providerMode: null, providerReference: null, checkoutSessionId: null, checkoutUrl: null, checkoutExpiresAt: null, paymentIntentId: null, expectedAmountPence: pricing.priceActuallyChargedPence, actualPaidAmountPence: null, currency: "gbp", refundState: "not_requested", webhookReconciliationState: "not_started", externalCall: false, ...pricing, createdAt, updatedAt: createdAt });
+      const registration = { id: registrationId, testReference: `TEST-${crypto.randomBytes(4).toString("hex").toUpperCase()}`, eventId: db.event.id, runnerId, environment: db.environment, entryStatus: accepted ? "accepted" : "waiting_list", placeStatus: accepted ? "payment_reserved" : "none", waitingSequence: accepted ? null : ++db.counters.waitingSequence, waitingListPosition: null, raceNumber: null, confirmationTokenHash: tokenHash(confirmationToken), createdAt, updatedAt: createdAt, deletedAt: null };
       db.registrations.push(registration); refreshWaiting(db, actor);
+      const managementToken = replayableToken(`management:${idempotencyKey}`, registrationId);
+      db.managementTokens.push({ id: id("management"), registrationId, tokenHash: tokenHash(managementToken), issuedAt: createdAt, invalidatedAt: null });
       db.idempotency.push({ operation: "create", key: idempotencyKey, registrationId, createdAt });
       db.testProgress.submittedReference = registration.testReference;
       audit(db, actor, "registration_created", registrationId, null, { entryStatus: registration.entryStatus });
+      audit(db, { actorType: "system" }, "entry_price_calculated", registrationId, null, { priceActuallyChargedPence: pricing.priceActuallyChargedPence, adjustmentReason: pricing.adjustmentReason, wfraDiscountApplied: pricing.wfraDiscountApplied });
       const captured = await this.emailAdapter.capture({ id: id("message"), registrationId, template: "registration_received", intendedRecipientAddress: normalized.email, intendedRecipientReference: runnerId, createdAt }); db.communications.push(captured);
-      return { ok: true, registration: view(db, registration, { runnerSafe: true }), confirmationToken };
+      return { ok: true, registration: view(db, registration, { runnerSafe: true }), confirmationToken, managementToken };
     });
+  }
+
+  async inspectPrivateAccess(token, purpose, { at = new Date() } = {}) {
+    return privateAccessResult(await this.repository.read(), token, purpose, { at });
   }
 
   async confirmation(confirmationToken) {
@@ -155,7 +220,7 @@ export class RegistrationService {
     const search = String(filters.search ?? "").toLowerCase(); if (search) registrations = registrations.filter((item) => [item.testReference, item.runner.firstName, item.runner.lastName, item.runner.email].some((value) => String(value).toLowerCase().includes(search)));
     if (filters.entry) registrations = registrations.filter((item) => item.entryStatus === filters.entry);
     if (filters.payment) registrations = registrations.filter((item) => item.paymentStatus === filters.payment);
-    return { ok: true, state: { version: 2, event: db.event, environment: db.environment, registrationState: db.registrationState, registrations, communications: db.communications, auditEvents: [], testProgress: db.testProgress }, totals: status(db) };
+    return { ok: true, state: { version: db.schemaVersion ?? 2, event: db.event, environment: db.environment, registrationState: db.registrationState, phase3RegistrationState: db.phase3RegistrationState ?? "CLOSED", registrations, communications: db.communications, auditEvents: [], testProgress: db.testProgress }, totals: status(db) };
   }
 
   async entry(actor, registrationId) { if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" }; const db = await this.repository.read(); const registration = db.registrations.find((item) => item.id === registrationId && !item.deletedAt); return registration ? { ok: true, registration: view(db, registration) } : { ok: false, code: "NOT_FOUND" }; }
@@ -206,16 +271,40 @@ export class RegistrationService {
         else if (requested === "waiting_list" && registration.entryStatus === "accepted") { registration.entryStatus = "waiting_list"; registration.waitingSequence = ++db.counters.waitingSequence; refreshWaiting(db, actor); audit(db, actor, "entry_status_changed", registration.id, { entryStatus: before.entryStatus }, { entryStatus: "waiting_list" }); }
         else return { ok: false, code: "INVALID_ENTRY_TRANSITION" };
       } else if (action === "correct") {
-        const runner = entities(db, registration).runner; const allowed = ["firstName", "lastName", "phone", "club", "travelMethod"]; const changed = {}; for (const field of allowed) if (payload[field] !== undefined) { changed[field] = { before: field === "phone" ? "redacted" : runner[field], after: field === "phone" ? "redacted" : normalizeName(payload[field]) }; runner[field] = normalizeName(payload[field]); } audit(db, actor, "data_corrected", registration.id, null, { fields: Object.keys(changed) });
+        const runner = entities(db, registration).runner; const allowed = ["firstName", "lastName", "phone", "club"]; const changed = {}; for (const field of allowed) if (payload[field] !== undefined) { changed[field] = { before: field === "phone" ? "redacted" : runner[field], after: field === "phone" ? "redacted" : normalizeName(payload[field]) }; runner[field] = normalizeName(payload[field]); } audit(db, actor, "data_corrected", registration.id, null, { fields: Object.keys(changed) });
       } else return { ok: false, code: "INVALID_ACTION" };
       registration.updatedAt = now(); return { ok: true, registration: view(db, registration), ...metadata };
     });
   }
 
+  async privateInvitations(actor) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    const db = await this.repository.read();
+    return { ok: true, invitations: (db.privateInvitations ?? []).map(({ tokenHash: _tokenHash, ...item }) => ({ ...item, status: item.revokedAt ? "Revoked" : new Date(item.expiresAt) <= new Date() ? "Expired" : item.uses >= item.maximumUses ? "Used" : "Active" })) };
+  }
+
+  createPrivateInvitation(actor, input) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.repository.transaction((db) => {
+      db.privateInvitations ??= [];
+      return issuePrivateInvitation(db, input, actor);
+    });
+  }
+
+  revokePrivateInvitation(actor, invitationId) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.repository.transaction((db) => revokePrivateInvitation(db, invitationId, actor));
+  }
+
+  expirePrivateInvitation(actor, invitationId) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.repository.transaction((db) => expirePrivateInvitation(db, invitationId, actor));
+  }
+
   async auditHistory(actor, registrationId) { if (!authorize(actor, "audit")) return { ok: false, code: "FORBIDDEN" }; const db = await this.repository.read(); return { ok: true, events: db.auditEvents.filter((item) => item.registrationId === registrationId) }; }
   async exportPublic(actor) { if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" }; const db = await this.repository.read(); const rows = db.registrations.filter((item) => !item.deletedAt).map((item) => { const entry = view(db, item); return [entry.testReference, entry.raceNumber, entry.runner.firstName, entry.runner.lastName, entry.runner.club, entry.runner.genderCategory, entry.entryStatus, entry.paymentStatus]; }); return { ok: true, filename: "synthetic-public-results.csv", csv: csv(["test_reference", "race_number", "first_name", "last_name", "club", "category", "entry_status", "mock_payment_status"], rows) }; }
   async exportPrivate(actor) { if (!authorize(actor, "export_private")) return { ok: false, code: "FORBIDDEN" }; const db = await this.repository.read(); const rows = db.registrations.filter((item) => !item.deletedAt).map((item) => { const entry = view(db, item); return [entry.id, entry.runner.firstName, entry.runner.lastName, entry.runner.email, entry.runner.phone, entry.entryStatus, entry.paymentStatus]; }); return { ok: true, warning: "PRIVATE SYNTHETIC OPERATIONAL EXPORT — store outside the public website", filename: `private-exports/synthetic-registration-${new Date().toISOString().slice(0, 10)}.csv`, csv: csv(["registration_id", "first_name", "last_name", "email", "phone", "entry_status", "mock_payment_status"], rows) }; }
-  erase(actor, registrationId, mode = "anonymise") { if (!authorize(actor, "erase")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); return this.repository.transaction((db) => { const registration = db.registrations.find((item) => item.id === registrationId && !item.deletedAt); if (!registration) return { ok: false, code: "NOT_FOUND" }; const runner = entities(db, registration).runner; if (mode === "delete" && db.environment !== "local") return { ok: false, code: "DELETE_TEST_ONLY" }; if (mode === "delete") { registration.deletedAt = now(); db.emergencyContacts = db.emergencyContacts.filter((item) => item.registrationId !== registration.id); audit(db, actor, "record_deleted", registration.id); } else { Object.assign(runner, { firstName: "Anonymised", lastName: "Runner", email: `${registration.id}@deleted.invalid`, phone: "deleted", dateOfBirth: null, membershipNumber: null, anonymisedAt: now() }); db.emergencyContacts = db.emergencyContacts.filter((item) => item.registrationId !== registration.id); audit(db, actor, "record_anonymised", registration.id); } return { ok: true }; }); }
+  erase(actor, registrationId, mode = "anonymise") { if (!authorize(actor, "erase")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); return this.repository.transaction((db) => { const registration = db.registrations.find((item) => item.id === registrationId && !item.deletedAt); if (!registration) return { ok: false, code: "NOT_FOUND" }; const runner = entities(db, registration).runner; if (mode === "delete" && db.environment !== "local") return { ok: false, code: "DELETE_TEST_ONLY" }; if (mode === "delete") { registration.deletedAt = now(); db.emergencyContacts = db.emergencyContacts.filter((item) => item.registrationId !== registration.id); audit(db, actor, "record_deleted", registration.id); } else { Object.assign(runner, { firstName: "Anonymised", lastName: "Runner", email: `${registration.id}@deleted.invalid`, phone: "deleted", addressLine1: null, addressLine2: null, city: null, postcode: null, dateOfBirth: null, membershipNumber: null, wfraMembershipNumber: null, anonymisedAt: now() }); db.emergencyContacts = db.emergencyContacts.filter((item) => item.registrationId !== registration.id); audit(db, actor, "record_anonymised", registration.id); } return { ok: true }; }); }
   async resetDevelopment(actor) { if (!authorize(actor, "erase")) return { ok: false, code: "FORBIDDEN" }; const existing = await this.repository.read(); if (!['local', 'development'].includes(existing.environment)) return { ok: false, code: "DEVELOPMENT_ONLY" }; const next = createDatabase({ environment: existing.environment, registrationState: "test", capacity: existing.event.capacity }); next.testProgress.resetCompleted = true; await this.repository.reset(next); return { ok: true, state: next }; }
 }
 

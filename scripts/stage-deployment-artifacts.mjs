@@ -38,15 +38,20 @@ export const PRODUCTION_FILES = Object.freeze([
 ]);
 
 export const DEVELOPMENT_REGISTRATION_FILES = Object.freeze([
+  "registration/declarations.mjs",
   "registration/dashboard.html",
   "registration/dashboard.mjs",
   "registration/index.html",
   "registration/organiser-view.mjs",
+  "registration/payment-return.html",
+  "registration/payment-return.mjs",
+  "registration/payment-state.mjs",
   "registration/preview-repository.mjs",
   "registration/prototype-client.mjs",
   "registration/prototype.css",
   "registration/registration-core.mjs",
   "registration/runner-flow.mjs",
+  "registration/runner-errors.mjs",
   "registration/runner.mjs"
 ]);
 
@@ -55,10 +60,17 @@ const DEVELOPMENT_API_COPIES = Object.freeze([
   ["api/package-lock.json", "package-lock.json"],
   ["api/src/functions/registration.mjs", "src/functions/registration.mjs"],
   ["api/src/storage.mjs", "src/storage.mjs"],
+  ["api/src/providers.mjs", "src/providers.mjs"],
   ["registration/registration-core.mjs", "src/shared/registration-core.mjs"],
+  ["registration/declarations.mjs", "src/shared/declarations.mjs"],
   ["registration/server/adapters.mjs", "src/shared/server/adapters.mjs"],
   ["registration/server/api.mjs", "src/shared/server/api.mjs"],
   ["registration/server/auth.mjs", "src/shared/server/auth.mjs"],
+  ["registration/server/phase3-domain.mjs", "src/shared/server/phase3-domain.mjs"],
+  ["registration/server/phase3-integrations.mjs", "src/shared/server/phase3-integrations.mjs"],
+  ["registration/server/phase3-service.mjs", "src/shared/server/phase3-service.mjs"],
+  ["registration/server/development-email.mjs", "src/shared/server/development-email.mjs"],
+  ["registration/server/email-templates.mjs", "src/shared/server/email-templates.mjs"],
   ["registration/server/repositories.mjs", "src/shared/server/repositories.mjs"],
   ["registration/server/service.mjs", "src/shared/server/service.mjs"]
 ]);
@@ -130,7 +142,8 @@ function developmentConfiguration() {
   return {
     routes: [
       { route: "/registration/dashboard.html", allowedRoles: ["Organiser"] },
-      { route: "/api/v2/organiser/*", allowedRoles: ["Organiser"] }
+      { route: "/api/v2/organiser/*", allowedRoles: ["Organiser"] },
+      { route: "/api/v3/organiser/*", allowedRoles: ["Organiser"] }
     ],
     responseOverrides: {
       "401": { redirect: "/.auth/login/aad?post_login_redirect_uri=.referrer", statusCode: 302 },

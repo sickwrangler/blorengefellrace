@@ -1,11 +1,23 @@
+import { WFRA_SENIOR_ENTRY_DECLARATION } from "./declarations.mjs";
+
 export const EVENT = Object.freeze({
   id: "blorenge-2026",
   name: "Blorenge Fell Race 2026",
   date: "2026-11-28",
-  capacity: 110,
+  capacity: 120,
+  entryFeePence: 600,
+  wfraMemberPricePence: null,
+  timezone: "Europe/London",
+  transferRefundCutoff: "2026-10-28T23:59:00.000Z",
+  waitingListOfferHours: 48,
+  waitingListReminderHours: 24,
+  raceCategories: Object.freeze(["Female", "Male / Open"]),
   minimumAge: 16,
   termsVersion: "prototype-2026-09",
-  privacyVersion: "prototype-2026-09"
+  privacyVersion: "prototype-2026-09",
+  declarationIdentifier: WFRA_SENIOR_ENTRY_DECLARATION.identifier,
+  declarationVersion: WFRA_SENIOR_ENTRY_DECLARATION.version,
+  declarationContentStatus: "organiser-supplied-versioned-content"
 });
 
 export const REGISTRATION_STATES = Object.freeze(["closed", "test", "open", "paused", "full"]);
@@ -31,11 +43,11 @@ export function ageOnDate(dateOfBirth, eventDate = EVENT.date) {
 
 export function validateRunner(input, { requireSynthetic = true } = {}) {
   const errors = {};
-  const required = ["firstName", "lastName", "email", "phone", "dateOfBirth", "genderCategory", "emergencyName", "emergencyPhone", "travelMethod"];
+  const required = ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "emergencyName", "emergencyPhone", "declarationName"];
   for (const field of required) if (!String(input[field] ?? "").trim()) errors[field] = "This field is required.";
   const email = String(input.email ?? "").trim().toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address.";
-  else if (requireSynthetic && email && !SYNTHETIC_EMAIL.test(email)) errors.email = "Use an obviously synthetic example.com, example.org, example.net or .invalid address.";
+  else if (requireSynthetic && email && !SYNTHETIC_EMAIL.test(email)) errors.email = "Use a synthetic example.com, example.org, example.net or .invalid address.";
   for (const field of ["phone", "emergencyPhone"]) {
     const value = String(input[field] ?? "").trim();
     if (value && !/^[+()\d\s-]{7,24}$/.test(value)) errors[field] = "Enter a valid test phone number.";
@@ -43,7 +55,13 @@ export function validateRunner(input, { requireSynthetic = true } = {}) {
   const age = ageOnDate(String(input.dateOfBirth ?? ""));
   if (!Number.isFinite(age)) errors.dateOfBirth = "Enter a valid date of birth.";
   else if (age < EVENT.minimumAge) errors.dateOfBirth = `Entrants must be at least ${EVENT.minimumAge} on ${EVENT.date}.`;
-  if (input.affiliated && !String(input.membershipNumber ?? "").trim()) errors.membershipNumber = "Enter a test membership number or select not affiliated.";
+  else if (age < 18) errors.declarationSignatoryRole = "Registration for runners aged 16 or 17 is paused until the organiser confirms the WFRA parental-consent process.";
+  if (input.wfraMember && !String(input.wfraMembershipNumber ?? "").trim()) errors.wfraMembershipNumber = "Enter a WFRA membership number or select No.";
+  if (String(input.wfraMembershipNumber ?? "").length > 80 || /[\u0000-\u001f\u007f]/.test(String(input.wfraMembershipNumber ?? ""))) errors.wfraMembershipNumber = "Use no more than 80 ordinary text characters.";
+  if (input.genderCategory && !EVENT.raceCategories.includes(input.genderCategory)) errors.genderCategory = "Select Female or Male / Open.";
+  if (!input.declarationSignatoryRole) errors.declarationSignatoryRole = "Select who is signing.";
+  else if (age >= 18 && input.declarationSignatoryRole !== "Competitor") errors.declarationSignatoryRole = "An adult entrant must sign as the competitor.";
+  if (!input.acceptDeclaration) errors.acceptDeclaration = "Accept the declaration to continue.";
   if (!input.acceptTerms) errors.acceptTerms = "You must accept the prototype race terms.";
   if (!input.acceptPrivacy) errors.acceptPrivacy = "You must acknowledge the prototype privacy notice.";
   return errors;
@@ -125,13 +143,17 @@ export function submitRegistration(state, input, { source = "runner" } = {}) {
     runner: {
       id: identifier("runner"), firstName: String(input.firstName).trim(), lastName: String(input.lastName).trim(),
       email, phone: String(input.phone).trim(), dateOfBirth: input.dateOfBirth,
+      addressLine1: String(input.addressLine1).trim(), addressLine2: String(input.addressLine2 ?? "").trim() || null,
+      city: String(input.city).trim(), postcode: String(input.postcode).trim(),
       genderCategory: input.genderCategory, club: String(input.club ?? "").trim() || "Unattached",
-      affiliated: Boolean(input.affiliated), membershipNumber: String(input.membershipNumber ?? "").trim() || null,
+      wfraMember: Boolean(input.wfraMember), wfraMembershipNumber: input.wfraMember ? String(input.wfraMembershipNumber ?? "").trim() || null : null,
+      wfraMembershipVerified: false, wfraDiscountApplied: false,
       emergencyName: String(input.emergencyName).trim(), emergencyPhone: String(input.emergencyPhone).trim(),
-      travelMethod: input.travelMethod
     },
     entryStatus, waitingListPosition: null, raceNumber: null,
     paymentStatus: "not_started", termsVersion: EVENT.termsVersion, privacyVersion: EVENT.privacyVersion,
+    pricing: { standardPricePence: EVENT.entryFeePence, wfraMemberPricePence: EVENT.wfraMemberPricePence, priceActuallyChargedPence: EVENT.entryFeePence, adjustmentReason: input.wfraMember ? "WFRA_MEMBER_PRICE_NOT_CONFIGURED" : "STANDARD_ENTRY", wfraDiscountApplied: false },
+    declaration: { identifier: EVENT.declarationIdentifier, version: EVENT.declarationVersion, accepted: true, typedFullName: String(input.declarationName).trim(), signatoryRole: input.declarationSignatoryRole, acceptedAt: new Date().toISOString() },
     consentRecordedAt: new Date().toISOString()
   };
   state.registrations.push(registration);
