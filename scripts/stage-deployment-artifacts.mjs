@@ -43,11 +43,15 @@ export const DEVELOPMENT_REGISTRATION_FILES = Object.freeze([
   "registration/dashboard.mjs",
   "registration/index.html",
   "registration/organiser-view.mjs",
+  "registration/payment-return.html",
+  "registration/payment-return.mjs",
+  "registration/payment-state.mjs",
   "registration/preview-repository.mjs",
   "registration/prototype-client.mjs",
   "registration/prototype.css",
   "registration/registration-core.mjs",
   "registration/runner-flow.mjs",
+  "registration/runner-errors.mjs",
   "registration/runner.mjs"
 ]);
 

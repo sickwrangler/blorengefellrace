@@ -149,7 +149,7 @@ export function reconcileStripeEvent(state, event, { at = new Date() } = {}) {
 export function runnerPaymentState(state, registrationId) {
   const payment = paymentFor(state, registrationId);
   if (!payment) return { ok: false, code: "NOT_FOUND" };
-  const labels = { not_configured: "Continue to payment", checkout_pending: "Awaiting payment", processing: "Payment processing", paid: "Entry confirmed", failed: "Payment unsuccessful", expired: "Payment session expired", refunded: "Refund completed" };
+  const labels = { created: "Continue to payment", not_configured: "Continue to payment", checkout_pending: "Awaiting payment", processing: "Payment processing", paid: "Entry confirmed", failed: "Payment unsuccessful", abandoned: "Payment session expired", expired: "Payment session expired", refunded: "Refund completed" };
   return { ok: true, state: payment.status, label: labels[payment.status] ?? "Payment processing", canRetry: ["failed", "expired"].includes(payment.status) };
 }
 

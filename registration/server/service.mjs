@@ -15,14 +15,48 @@ export function createDatabase({ environment = "local", registrationState = "tes
   return {
     schemaVersion: 3,
     environment,
-    event: { ...EVENT, capacity, intendedOpeningDate: null },
+    event: { ...EVENT, capacity, raceDate: EVENT.date, transferRefundCutoffUtc: EVENT.transferRefundCutoff, intendedOpeningDate: null },
     registrationState: safeRegistrationState(registrationState, environment),
     phase3RegistrationState: "CLOSED",
     counters: { waitingSequence: 0 },
     runners: [], emergencyContacts: [], registrations: [], payments: [], consents: [], communications: [], auditEvents: [],
-    idempotency: [], amendmentRequests: [], privateInvitations: [], waitingList: [], waitingListOffers: [], refundRequests: [], managementTokens: [],
+    idempotency: [], amendmentRequests: [], privateInvitations: [], waitingList: [], waitingListOffers: [], refundRequests: [], managementTokens: [], processedPaymentEvents: [],
     testProgress: { submittedReference: null, organiserViewed: false, resetCompleted: false }
   };
+}
+
+export function migrateDevelopmentDatabase(input) {
+  const db = structuredClone(input);
+  db.schemaVersion = 3;
+  db.event = {
+    ...EVENT,
+    ...(db.event ?? {}),
+    capacity: EVENT.capacity,
+    raceDate: db.event?.raceDate ?? db.event?.date ?? EVENT.date,
+    transferRefundCutoffUtc: db.event?.transferRefundCutoffUtc ?? db.event?.transferRefundCutoff ?? EVENT.transferRefundCutoff
+  };
+  for (const name of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests", "privateInvitations", "waitingList", "waitingListOffers", "refundRequests", "managementTokens", "processedPaymentEvents"]) db[name] ??= [];
+  db.phase3RegistrationState ??= "CLOSED";
+  db.testProgress ??= { submittedReference: null, organiserViewed: false, resetCompleted: false };
+  for (const registration of db.registrations) {
+    const payment = db.payments.find((item) => item.registrationId === registration.id);
+    registration.placeStatus ??= registration.entryStatus === "accepted" ? (payment?.status === "paid" ? "confirmed" : "payment_reserved") : "none";
+  }
+  for (const payment of db.payments) {
+    payment.provider ??= null;
+    payment.providerMode ??= null;
+    payment.expectedAmountPence ??= payment.priceActuallyChargedPence ?? EVENT.entryFeePence;
+    payment.actualPaidAmountPence ??= payment.status === "paid" ? payment.expectedAmountPence : null;
+    payment.currency ??= "gbp";
+    payment.checkoutSessionId ??= null;
+    payment.checkoutExpiresAt ??= null;
+    payment.checkoutUrl ??= null;
+    payment.paymentIntentId ??= null;
+    payment.refundState ??= payment.status === "refunded" ? "refunded" : "not_requested";
+    payment.webhookReconciliationState ??= payment.status === "paid" ? "legacy_test_payment" : "not_started";
+    payment.externalCall ??= false;
+  }
+  return db;
 }
 
 function audit(db, actor, action, registrationId, before = null, after = null) {
@@ -42,7 +76,7 @@ function view(db, registration, { runnerSafe = false } = {}) {
   const { runner, emergency, payment, consent } = entities(db, registration);
   const result = {
     ...registration,
-    paymentStatus: payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status ?? "created",
+    paymentStatus: payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status === "expired" ? "abandoned" : payment?.status ?? "created",
     pricing: payment ? { standardPricePence: payment.standardPricePence, wfraMemberPricePence: payment.wfraMemberPricePence, priceActuallyChargedPence: payment.priceActuallyChargedPence, adjustmentReason: payment.adjustmentReason, wfraDiscountApplied: payment.wfraDiscountApplied } : null,
     runner: { ...runner, emergencyName: emergency?.name, emergencyPhone: emergency?.phone },
     termsVersion: consent?.termsVersion, privacyVersion: consent?.privacyVersion, consentRecordedAt: consent?.recordedAt,
@@ -112,7 +146,7 @@ export class RegistrationService {
       const prior = db.idempotency.find((item) => item.operation === "create" && item.key === idempotencyKey);
       if (prior) {
         const registration = db.registrations.find((item) => item.id === prior.registrationId);
-        return { ok: true, idempotentReplay: true, registration: view(db, registration, { runnerSafe: true }), confirmationToken: replayableToken(idempotencyKey, registration.id) };
+        return { ok: true, idempotentReplay: true, registration: view(db, registration, { runnerSafe: true }), confirmationToken: replayableToken(idempotencyKey, registration.id), managementToken: replayableToken(`management:${idempotencyKey}`, registration.id) };
       }
       if (db.environment === "development" && db.registrationState !== "test") return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
       if (!["test", "open"].includes(db.registrationState)) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
@@ -131,15 +165,17 @@ export class RegistrationService {
       db.runners.push({ id: runnerId, firstName: normalized.firstName, lastName: normalized.lastName, email: normalized.email, phone: normalized.phone, addressLine1: normalized.addressLine1, addressLine2: normalized.addressLine2 || null, city: normalized.city, postcode: normalized.postcode, dateOfBirth: normalized.dateOfBirth, genderCategory: normalized.genderCategory, club: normalizeName(normalized.club) || "Unattached", wfraMember: normalized.wfraMember, wfraMembershipNumber: normalized.wfraMember ? normalized.wfraMembershipNumber || null : null, wfraMembershipVerified: false, wfraDiscountApplied: pricing.wfraDiscountApplied, anonymisedAt: null });
       db.emergencyContacts.push({ id: id("emergency"), registrationId, name: normalized.emergencyName, phone: normalized.emergencyPhone, deleteAfterEvent: true });
       db.consents.push({ id: id("consent"), registrationId, termsVersion: db.event.termsVersion, privacyVersion: db.event.privacyVersion, recordedAt: createdAt, declaration: { identifier: db.event.declarationIdentifier, version: db.event.declarationVersion, accepted: true, typedFullName: normalized.declarationName, signatoryRole: normalized.declarationSignatoryRole, acceptedAt: createdAt, contentStatus: db.event.declarationContentStatus } });
-      db.payments.push({ id: id("payment"), registrationId, status: "created", providerReference: null, ...pricing, updatedAt: createdAt });
-      const registration = { id: registrationId, testReference: `TEST-${crypto.randomBytes(4).toString("hex").toUpperCase()}`, eventId: db.event.id, runnerId, environment: db.environment, entryStatus: accepted ? "accepted" : "waiting_list", waitingSequence: accepted ? null : ++db.counters.waitingSequence, waitingListPosition: null, raceNumber: null, confirmationTokenHash: tokenHash(confirmationToken), createdAt, updatedAt: createdAt, deletedAt: null };
+      db.payments.push({ id: id("payment"), registrationId, status: "not_configured", provider: null, providerMode: null, providerReference: null, checkoutSessionId: null, checkoutUrl: null, checkoutExpiresAt: null, paymentIntentId: null, expectedAmountPence: pricing.priceActuallyChargedPence, actualPaidAmountPence: null, currency: "gbp", refundState: "not_requested", webhookReconciliationState: "not_started", externalCall: false, ...pricing, createdAt, updatedAt: createdAt });
+      const registration = { id: registrationId, testReference: `TEST-${crypto.randomBytes(4).toString("hex").toUpperCase()}`, eventId: db.event.id, runnerId, environment: db.environment, entryStatus: accepted ? "accepted" : "waiting_list", placeStatus: accepted ? "payment_reserved" : "none", waitingSequence: accepted ? null : ++db.counters.waitingSequence, waitingListPosition: null, raceNumber: null, confirmationTokenHash: tokenHash(confirmationToken), createdAt, updatedAt: createdAt, deletedAt: null };
       db.registrations.push(registration); refreshWaiting(db, actor);
+      const managementToken = replayableToken(`management:${idempotencyKey}`, registrationId);
+      db.managementTokens.push({ id: id("management"), registrationId, tokenHash: tokenHash(managementToken), issuedAt: createdAt, invalidatedAt: null });
       db.idempotency.push({ operation: "create", key: idempotencyKey, registrationId, createdAt });
       db.testProgress.submittedReference = registration.testReference;
       audit(db, actor, "registration_created", registrationId, null, { entryStatus: registration.entryStatus });
       audit(db, { actorType: "system" }, "entry_price_calculated", registrationId, null, { priceActuallyChargedPence: pricing.priceActuallyChargedPence, adjustmentReason: pricing.adjustmentReason, wfraDiscountApplied: pricing.wfraDiscountApplied });
       const captured = await this.emailAdapter.capture({ id: id("message"), registrationId, template: "registration_received", intendedRecipientAddress: normalized.email, intendedRecipientReference: runnerId, createdAt }); db.communications.push(captured);
-      return { ok: true, registration: view(db, registration, { runnerSafe: true }), confirmationToken };
+      return { ok: true, registration: view(db, registration, { runnerSafe: true }), confirmationToken, managementToken };
     });
   }
 

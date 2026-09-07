@@ -2,7 +2,7 @@
 
 ## Status
 
-The provider-neutral implementation is complete on the Phase 3 feature branch. It remains disabled unless the isolated development runtime is explicitly configured. Live provider proof and stable-development deployment are pending organiser-controlled Stripe and Azure setup; production is unchanged.
+The provider-neutral implementation is complete on the Phase 3 feature branch. The runner journey includes a server-authoritative payment-status return page, but external payment and email remain disabled unless each isolated development integration is explicitly enabled and fully configured. Live provider proof remains pending organiser-controlled Stripe and Azure setup; production is unchanged.
 
 No Stripe live key is accepted in development. No email is delivered to a runner-supplied address. Missing provider configuration fails closed.
 
@@ -64,7 +64,8 @@ The domain exposes one idempotent scheduled-work operation for reminder detectio
 
 Values belong only in isolated development runtime settings:
 
-- `REGISTRATION_PHASE3B_ENABLED`
+- `STRIPE_ENABLED` — must be exactly `true` to enable Stripe; absent or `false` is disabled
+- `ACS_EMAIL_ENABLED` — must be exactly `true` to enable external email; absent or `false` uses captured-only delivery
 - `REGISTRATION_PUBLIC_BASE_URL`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SIGNING_SECRET`
@@ -72,11 +73,11 @@ Values belong only in isolated development runtime settings:
 - `REGISTRATION_EMAIL_SENDER`
 - `ACS_EMAIL_ENDPOINT` or `ACS_EMAIL_CONNECTION_STRING`
 
-The existing storage settings remain required. The browser has no live/test selector.
+The existing storage settings remain required. Stripe and ACS Email have independent controls, so configuring a credential alone cannot enable either provider. Development rejects Stripe live-mode server credentials without logging or returning their values. The browser has no live/test selector.
 
 ## Release gates and progression
 
-Phase 3B cannot be called complete until a real Stripe test Checkout/webhook/refund and one redirected ACS delivery have been observed in the isolated stable development environment. The stable environment must then be manually checked at capacity 120 with Entra-protected organiser operations. Until then, the integration flag remains disabled and `codex/development` remains unchanged.
+Phase 3B cannot be called complete until a real Stripe test Checkout/webhook/refund and one redirected ACS delivery have been observed in the isolated stable development environment. The stable environment must be manually checked at capacity 120 with Entra-protected organiser operations before provider enablement. Until those provider proofs are approved, both integration controls remain disabled.
 
 The planned progression is:
 

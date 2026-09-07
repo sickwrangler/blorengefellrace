@@ -23,11 +23,22 @@ const repository = createPreviewRepository({
 let submissionKey = crypto.randomUUID();
 const confirmationTokens = new Map();
 const paymentKeys = new Map();
+const MANAGEMENT_TOKEN_SESSION_KEY = "blorenge-development-management-token";
 
 async function api(path, options = {}, organiser = false) {
   const response = await fetch(`/api/v2${path}`, {
     ...options,
     headers: { "content-type": "application/json", ...(organiser && isLocal ? { "x-development-organiser": "enabled" } : {}), ...(options.headers ?? {}) }
+  });
+  const type = response.headers.get("content-type") || "";
+  if (!type.includes("application/json")) throw new Error(`API ${response.status}`);
+  return response.json();
+}
+
+async function phase3Api(path, options = {}) {
+  const response = await fetch(`/api/v3${path}`, {
+    ...options,
+    headers: { "content-type": "application/json", ...(options.headers ?? {}) }
   });
   const type = response.headers.get("content-type") || "";
   if (!type.includes("application/json")) throw new Error(`API ${response.status}`);
@@ -73,8 +84,25 @@ export const prototype = {
     return { ...statusSummary(snapshot.state), recovery: snapshot.recovery };
   },
   submit(payload) {
-    if (usesApi) return api("/registrations", { method: "POST", body: JSON.stringify(payload), headers: { "idempotency-key": submissionKey, ...(privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {}) } }).then((result) => { if (result.ok) { confirmationTokens.set(result.registration.id, result.confirmationToken); submissionKey = crypto.randomUUID(); } return result; }).catch(() => ({ ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable." }));
+    if (usesApi) return api("/registrations", { method: "POST", body: JSON.stringify(payload), headers: { "idempotency-key": submissionKey, ...(privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {}) } }).then((result) => { if (result.ok) { confirmationTokens.set(result.registration.id, result.confirmationToken); this.rememberManagementToken(result.managementToken); submissionKey = crypto.randomUUID(); } return result; }).catch(() => ({ ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable." }));
     return localApiOrRepository("/registrations", { method: "POST", body: JSON.stringify(payload) }, (state) => submitRegistration(state, payload, { source: "runner" }));
+  },
+  rememberManagementToken(token) { if (token) window.sessionStorage.setItem(MANAGEMENT_TOKEN_SESSION_KEY, token); },
+  managementToken() { return window.sessionStorage.getItem(MANAGEMENT_TOKEN_SESSION_KEY); },
+  async integrationStatus() {
+    if (!usesApi) return { ok: true, stripe: "disabled", paymentsAvailable: false, email: "captured-only", externalEmailAvailable: false };
+    try { return await phase3Api("/registration/status"); }
+    catch { return { ok: false, stripe: "disabled", paymentsAvailable: false, email: "captured-only", externalEmailAvailable: false }; }
+  },
+  async paymentStatus(token = this.managementToken()) {
+    if (!usesApi || !token) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
+    try { return await phase3Api("/payments/status", { headers: { "x-management-token": token } }); }
+    catch { return { ok: false, code: "PAYMENTS_UNAVAILABLE" }; }
+  },
+  async checkout(token = this.managementToken()) {
+    if (!usesApi || !token) return { ok: false, code: "PAYMENTS_UNAVAILABLE" };
+    try { return await phase3Api("/payments/checkout", { method: "POST", headers: { "x-management-token": token } }); }
+    catch { return { ok: false, code: "PAYMENTS_UNAVAILABLE" }; }
   },
   payment(id, outcome) {
     if (usesApi) { const confirmationToken = confirmationTokens.get(id); const key = paymentKeys.get(id) ?? crypto.randomUUID(); paymentKeys.set(id, key); return api(`/registrations/${encodeURIComponent(confirmationToken)}/mock-payment`, { method: "POST", body: JSON.stringify({ outcome }), headers: { "idempotency-key": key } }).then((result) => { if (result.ok) paymentKeys.delete(id); return result; }); }

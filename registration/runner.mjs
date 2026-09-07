@@ -1,12 +1,13 @@
 import { prototype, canTest } from "./prototype-client.mjs";
 import { validateRunner } from "./registration-core.mjs";
-import { isRunnerActionAvailable, organiserHandoverUrl } from "./runner-flow.mjs";
+import { isRunnerActionAvailable } from "./runner-flow.mjs";
 import { WFRA_SENIOR_ENTRY_DECLARATION } from "./declarations.mjs";
+import { normalizeRunnerErrors, RUNNER_FIELD_STAGES, runnerMessageForCode } from "./runner-errors.mjs";
 
 const form = document.querySelector("#registration-form");
 const alert = document.querySelector("#form-alert");
 const stages = [...document.querySelectorAll("[data-stage]")];
-const stageNames = ["Your details", "Race details and consent", "Review and submit", "Test payment and confirmation"];
+const stageNames = ["Your details", "Race details and consent", "Review and submit", "Payment and confirmation"];
 let stage = 1;
 let currentRegistration = null;
 let submitting = false;
@@ -34,13 +35,19 @@ function clearErrors() {
 }
 function showErrors(errors) {
   clearErrors();
-  for (const [name, message] of Object.entries(errors)) {
+  const normalized = normalizeRunnerErrors(errors);
+  const firstName = Object.keys(normalized.mapped).sort((left, right) => RUNNER_FIELD_STAGES[left] - RUNNER_FIELD_STAGES[right])[0];
+  const targetStage = firstName ? RUNNER_FIELD_STAGES[firstName] : stage;
+  if (targetStage < stage) showStage(targetStage);
+  for (const [name, message] of Object.entries(normalized.mapped)) {
     const control = form.elements[name]; if (!control) continue;
     control.setAttribute("aria-invalid", "true");
     const error = document.createElement("p"); error.className = "field-error"; error.textContent = message;
     control.closest("label")?.append(error);
   }
-  alert.textContent = "Please correct the highlighted test details."; alert.hidden = false; alert.focus();
+  alert.textContent = normalized.unmapped[0] ?? "Please correct the highlighted details."; alert.hidden = false;
+  const firstControl = firstName ? form.elements[firstName] : null;
+  if (firstControl) firstControl.focus(); else alert.focus();
 }
 function validateStage(target) {
   const errors = validateRunner(payload());
@@ -111,31 +118,28 @@ form?.addEventListener("submit", async (event) => {
   submitting = false;
   if (!result.ok) {
     button.disabled = false;
-    if (result.errors) showErrors(result.errors); else { alert.textContent = result.code === "LINK_UNAVAILABLE" ? "This link is no longer available." : result.message || "The test entry could not be submitted."; alert.hidden = false; alert.focus(); }
+    if (result.errors) showErrors(result.errors); else { alert.textContent = runnerMessageForCode(result.code); alert.hidden = false; alert.focus(); }
     return;
   }
   currentRegistration = result.registration;
   document.querySelector("#payment-reference").textContent = currentRegistration.testReference;
-  showStage(4); await refreshStatus();
+  showStage(4); await refreshStatus(); await renderPaymentAvailability();
 });
 
-for (const button of document.querySelectorAll("[data-payment]")) button.addEventListener("click", async () => {
-  if (!currentRegistration) return;
-  if (!isRunnerActionAvailable(stage, button.id, true)) return;
-  const outcome = button.dataset.payment;
-  for (const choice of document.querySelectorAll("[data-payment]")) choice.disabled = true;
-  const result = await prototype.payment(currentRegistration.id, outcome);
-  for (const choice of document.querySelectorAll("[data-payment]")) choice.disabled = false;
-  if (!result.ok) { alert.textContent = result.message || "Mock payment could not be saved."; alert.hidden = false; alert.focus(); return; }
-  currentRegistration = result.registration;
-  const successful = outcome === "successful";
-  document.querySelector("#result-title").textContent = successful ? "Test entry confirmed" : outcome === "declined" ? "Mock payment declined" : "Mock payment abandoned";
-  document.querySelector("#result-copy").textContent = successful ? "The same synthetic registration has been updated. No money was taken and no email was sent." : "The synthetic registration remains available to the organiser. Retry mock payment when ready.";
-  document.querySelector("#result-reference").textContent = currentRegistration.testReference;
-  document.querySelector("#result-entry").textContent = currentRegistration.entryStatus.replace("_", " ");
-  document.querySelector("#result-payment").textContent = currentRegistration.paymentStatus;
-  document.querySelector("#organiser-handover").href = organiserHandoverUrl(currentRegistration.testReference);
-  document.querySelector("#success-action").hidden = !successful; document.querySelector("#retry-action").hidden = successful;
-  document.querySelector("#payment-choice").hidden = true; document.querySelector("#payment-result").hidden = false; document.querySelector("#payment-result").focus();
+async function renderPaymentAvailability() {
+  const integrations = await prototype.integrationStatus();
+  const button = document.querySelector("#continue-payment");
+  button.disabled = integrations.paymentsAvailable !== true;
+  document.querySelector("#payment-availability").textContent = integrations.paymentsAvailable
+    ? "You will continue to Stripe's secure test checkout. No real payment will be taken."
+    : "Online payment is not available yet in this development environment. Your synthetic entry details have been retained.";
+  document.querySelector("#environment-status").textContent = integrations.paymentsAvailable ? "Development · Private · Stripe sandbox" : "Development · Closed · Payments unavailable";
+}
+
+document.querySelector("#continue-payment")?.addEventListener("click", async () => {
+  const button = document.querySelector("#continue-payment"); button.disabled = true;
+  const result = await prototype.checkout();
+  if (result.ok && result.checkoutUrl) { location.assign(result.checkoutUrl); return; }
+  alert.textContent = runnerMessageForCode(result.code); alert.hidden = false; alert.focus();
+  await renderPaymentAvailability();
 });
-document.querySelector("#retry-payment")?.addEventListener("click", () => { document.querySelector("#payment-result").hidden = true; document.querySelector("#payment-choice").hidden = false; document.querySelector("#payment-heading").focus(); });

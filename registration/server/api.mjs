@@ -1,7 +1,7 @@
 import { actorForRequest } from "./auth.mjs";
 
 const response = (status, body, headers = {}) => ({ status, body, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
-const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "NOT_FOUND" ? 404 : result.code === "LINK_UNAVAILABLE" ? 410 : result.code === "INVALID_WEBHOOK_SIGNATURE" ? 400 : 409, result);
+const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "NOT_FOUND" ? 404 : result.code === "LINK_UNAVAILABLE" ? 410 : result.code === "INVALID_WEBHOOK_SIGNATURE" ? 400 : ["PAYMENTS_UNAVAILABLE", "INTEGRATION_NOT_CONFIGURED"].includes(result.code) ? 503 : 409, result);
 
 export function createApi({ service, phase3Integrations = null, environment = "local" }) {
   const attempts = new Map();
@@ -12,6 +12,10 @@ export function createApi({ service, phase3Integrations = null, environment = "l
     if (method === "POST" && pathname === "/api/v3/stripe/webhook") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.webhook(body.rawBody, headers["stripe-signature"]));
+    }
+    if (method === "GET" && pathname === "/api/v3/registration/status") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return response(200, phase3Integrations.integrationStatus());
     }
     if (method === "POST" && pathname === "/api/v3/payments/checkout") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });

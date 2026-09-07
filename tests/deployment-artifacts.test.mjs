@@ -85,6 +85,10 @@ test("development staging separates browser files from managed API source", () =
     const { appFiles, apiFiles } = stageDevelopment({ outputRoot });
     assert.ok(appFiles.includes("registration/index.html"));
     assert.ok(appFiles.includes("registration/dashboard.html"));
+    assert.ok(appFiles.includes("registration/payment-return.html"));
+    assert.ok(appFiles.includes("registration/payment-return.mjs"));
+    assert.ok(appFiles.includes("registration/payment-state.mjs"));
+    assert.ok(appFiles.includes("registration/runner-errors.mjs"));
     assert.equal(appFiles.some((file) => file.startsWith("registration/server/")), false);
     assert.equal(appFiles.includes("registration/fixtures.json"), false);
     assert.ok(apiFiles.includes("src/functions/registration.mjs"));

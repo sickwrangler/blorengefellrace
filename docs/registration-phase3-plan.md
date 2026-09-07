@@ -23,7 +23,7 @@ Phase 3A implements provider-neutral domain and interface foundations only. It d
 - Capacity distinguishes confirmed places, payment reservations and active waiting-list-offer reservations. Waiting-list joins store only name and email; offers include reminder/expiry times and progress in order after decline or expiry.
 - Refund requests, organiser approval/rejection, recorded refund and separate place release are distinct audited actions. No runner self-cancellation or live refund is implemented.
 - Race numbers remain nullable, unique while assigned, removable and reusable.
-- Runner and organiser pages use a small environment/state badge. Development-only explanations are integrated into normal copy; payment remains mock and messages remain captured-only.
+- Runner and organiser pages use a small environment/state badge. Development-only explanations are integrated into normal copy; Stripe is disabled by default, payment status is server-authoritative and messages remain captured-only until separately enabled.
 
 ### Runner-language direction
 
@@ -84,7 +84,7 @@ Phase 3 should proceed through explicit reviews: decisions agreed; architecture 
 
 ## Phase 3B provider work
 
-Phase 3B implements controlled Stripe Checkout and Azure Communication Services boundaries with fail-closed configuration, signed webhooks, idempotent payment reconciliation, approved full-refund handling, safe-recipient email redirection, templates and scheduled-work domain logic. Provider-neutral tests are complete; real test-mode provider proof and stable-development deployment remain gated on organiser-controlled configuration. See `registration-phase3b.md`.
+Phase 3B implements controlled Stripe Checkout and Azure Communication Services boundaries with independent fail-closed configuration, signed webhooks, idempotent payment reconciliation, approved full-refund handling, safe-recipient email redirection, templates, runner payment-status UI and scheduled-work domain logic. Real test-mode provider proof remains gated on organiser-controlled configuration. See `registration-phase3b.md`.
 
 Progression remains: `Phase 3B — controlled integrations` → `Phase 3C — production infrastructure/application deployed CLOSED` → `Phase 3D — private live pilot with real Stripe and real email` → `Public OPEN`.
 

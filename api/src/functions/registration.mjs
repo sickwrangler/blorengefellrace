@@ -6,6 +6,7 @@ import { RegistrationService } from "../shared/server/service.mjs";
 import { Phase3IntegrationService } from "../shared/server/phase3-service.mjs";
 import { createAzureTableTransport } from "../storage.mjs";
 import { createDevelopmentEmailAdapter, createDevelopmentStripeGateway } from "../providers.mjs";
+import { createControlledDevelopmentEmail } from "../shared/server/development-email.mjs";
 
 const required = (name) => {
   const value = process.env[name];
@@ -28,13 +29,14 @@ const repository = createAzureTableRepository(transport);
 const paymentAdapter = createMockPaymentAdapter();
 const emailAdapter = createCapturedEmailAdapter();
 assertSafeAdapters({ payment: paymentAdapter, email: emailAdapter }, "development");
-const phase3Enabled = process.env.REGISTRATION_PHASE3B_ENABLED === "true";
-const phase3Integrations = phase3Enabled ? new Phase3IntegrationService({
+const stripeEnabled = process.env.STRIPE_ENABLED === "true";
+const emailEnabled = process.env.ACS_EMAIL_ENABLED === "true";
+const phase3Integrations = new Phase3IntegrationService({
   repository,
-  stripeGateway: createDevelopmentStripeGateway(),
-  emailAdapter: createDevelopmentEmailAdapter(),
-  publicBaseUrl: required("REGISTRATION_PUBLIC_BASE_URL")
-}) : null;
+  stripeGateway: stripeEnabled ? createDevelopmentStripeGateway() : null,
+  emailAdapter: emailEnabled ? createDevelopmentEmailAdapter() : createControlledDevelopmentEmail(),
+  publicBaseUrl: stripeEnabled ? required("REGISTRATION_PUBLIC_BASE_URL") : ""
+});
 const handle = createApi({ service: new RegistrationService({ repository, paymentAdapter, emailAdapter }), phase3Integrations, environment: "development" });
 
 const handler = async (request, context) => {

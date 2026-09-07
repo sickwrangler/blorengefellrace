@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createDatabase, RegistrationService, csvFormulaSafe, parseSyntheticCsv } from "../registration/server/service.mjs";
+import { createDatabase, migrateDevelopmentDatabase, RegistrationService, csvFormulaSafe, parseSyntheticCsv } from "../registration/server/service.mjs";
 import { createMemoryRepository, createJsonFileRepository, createAzureTableRepository } from "../registration/server/repositories.mjs";
 import { createMockPaymentAdapter, createCapturedEmailAdapter, assertSafeAdapters } from "../registration/server/adapters.mjs";
 import { authorize, developmentActor, staticWebAppActor } from "../registration/server/auth.mjs";
@@ -25,8 +25,28 @@ test("server validation normalizes names and enforces age, consent and WFRA memb
 
 test("idempotent submission and duplicate policy prevent duplicate entries", async () => {
   const { service, repository } = setup(); const first = await service.create(runner(3), { idempotencyKey: "same-create-key" }); const replay = await service.create(runner(3), { idempotencyKey: "same-create-key" });
-  assert.equal(replay.idempotentReplay, true); assert.equal(replay.registration.id, first.registration.id); assert.equal((await repository.read()).registrations.length, 1);
+  assert.equal(replay.idempotentReplay, true); assert.equal(replay.registration.id, first.registration.id); assert.equal(replay.managementToken, first.managementToken); assert.equal((await repository.read()).registrations.length, 1);
   assert.equal((await service.create(runner(4, { email: runner(3).email }), { idempotencyKey: "different-key-123" })).code, "DUPLICATE");
+});
+
+test("persistent development migration retains entries and adds Phase 3 payment metadata", async () => {
+  const legacy = createDatabase({ environment: "development", registrationState: "test", capacity: 110 });
+  legacy.schemaVersion = 2; legacy.event.capacity = 110; delete legacy.processedPaymentEvents; delete legacy.managementTokens;
+  const migratedInitial = migrateDevelopmentDatabase(legacy);
+  const repository = createJsonFileRepository(path.join(fs.mkdtempSync(path.join(os.tmpdir(), "blorenge-phase3-migration-")), "state.json"), migratedInitial);
+  const service = new RegistrationService({ repository, paymentAdapter: createMockPaymentAdapter(), emailAdapter: createCapturedEmailAdapter() });
+  const created = await service.create(runner(31), { idempotencyKey: "persistent-payment-key" });
+  const restarted = createJsonFileRepository(repository.filePath, await repository.read());
+  const afterRestart = await restarted.read();
+  const payment = afterRestart.payments.find((item) => item.registrationId === created.registration.id);
+  assert.equal(afterRestart.event.capacity, 120);
+  assert.equal(payment.status, "not_configured");
+  assert.equal(payment.expectedAmountPence, 600);
+  assert.equal(payment.currency, "gbp");
+  assert.equal(payment.externalCall, false);
+  assert.ok(Array.isArray(afterRestart.processedPaymentEvents));
+  assert.ok(afterRestart.managementTokens.some((item) => item.registrationId === created.registration.id && item.tokenHash));
+  assert.equal(JSON.stringify(afterRestart).includes(created.managementToken), false);
 });
 
 test("atomic final place allocation and waiting-list ordering survive concurrency", async () => {

@@ -10,16 +10,28 @@ function registrationForToken(state, token) {
 }
 
 export class Phase3IntegrationService {
-  constructor({ repository, stripeGateway, emailAdapter, publicBaseUrl }) {
+  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "" }) {
     this.repository = repository;
     this.stripeGateway = stripeGateway;
     this.emailAdapter = emailAdapter;
     this.publicBaseUrl = String(publicBaseUrl ?? "").replace(/\/$/, "");
   }
 
+  integrationStatus() {
+    return {
+      ok: true,
+      environment: "development",
+      stripe: this.stripeGateway ? "sandbox" : "disabled",
+      paymentsAvailable: Boolean(this.stripeGateway),
+      email: this.emailAdapter?.kind ?? "captured-only",
+      externalEmailAvailable: this.emailAdapter?.kind === "acs-controlled-development"
+    };
+  }
+
   checkout(managementToken, at = new Date()) {
+    if (!this.stripeGateway) return Promise.resolve({ ok: false, code: "PAYMENTS_UNAVAILABLE" });
     return this.repository.transaction(async (state) => {
-      if (state.environment !== "development" || !["PRIVATE_LIVE", "OPEN"].includes(state.registrationState)) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
+      if (state.environment !== "development" || !(state.registrationState === "test" || ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState))) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
       const registration = registrationForToken(state, managementToken);
       if (!registration) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
       return beginStripeCheckout(state, registration.id, this.stripeGateway, {
@@ -36,6 +48,7 @@ export class Phase3IntegrationService {
   }
 
   webhook(rawBody, signature, at = new Date()) {
+    if (!this.stripeGateway) return Promise.resolve({ ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
     let event;
     try { event = this.stripeGateway.verifyWebhook(rawBody, signature); }
     catch { return Promise.resolve({ ok: false, code: "INVALID_WEBHOOK_SIGNATURE" }); }
@@ -44,6 +57,7 @@ export class Phase3IntegrationService {
 
   refund(actor, refundRequestId, at = new Date()) {
     if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    if (!this.stripeGateway) return Promise.resolve({ ok: false, code: "PAYMENTS_UNAVAILABLE" });
     return this.repository.transaction((state) => executeApprovedStripeRefund(state, refundRequestId, this.stripeGateway, actor, at));
   }
 

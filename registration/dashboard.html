@@ -16,7 +16,7 @@
   <header class="prototype-header"><a href="index.html">← Runner registration</a><span id="environment-status" class="environment-status">Development · Closed</span></header>
   <main id="main-content" class="prototype-shell">
     <h1>Registration organiser</h1>
-    <p class="lede">Manage registration operations. This development environment uses synthetic entries, mock payments and captured messages only.</p>
+    <p class="lede">Manage synthetic registration operations in the isolated development environment. <span id="integration-status">Payments unavailable · Email captured only</span></p>
     <div id="organiser-alert" class="form-alert" role="status" tabindex="-1" hidden></div>
 
     <section class="summary-grid" aria-label="Test entry summary">
@@ -34,14 +34,14 @@
     <details class="technical-details">
       <summary id="progress-title">Development test checklist</summary>
       <ul id="testing-progress" class="progress-checklist">
-        <li data-check="submitted">Test entry submitted</li><li data-check="payment">Mock payment completed</li><li data-check="visible">Entry visible to organiser</li><li data-check="raceNumber">Race number assigned</li><li data-check="managed">Entry cancelled or retained</li><li data-check="reset">Test reset when finished</li>
+        <li data-check="submitted">Test entry submitted</li><li data-check="payment">Payment confirmed</li><li data-check="visible">Entry visible to organiser</li><li data-check="raceNumber">Race number assigned</li><li data-check="managed">Entry cancelled or retained</li><li data-check="reset">Test reset when finished</li>
       </ul>
       <p id="journey-complete" class="success-message" hidden>End-to-end registration test completed successfully.</p>
     </details>
 
     <section class="prototype-card" aria-labelledby="entries-title">
       <h2 id="entries-title">Test entries</h2>
-      <div class="organiser-filters"><label>Search<input id="search" type="search" placeholder="Reference, name or example email"></label><label>Entry status<select id="entry-filter"><option value="">All</option><option value="accepted">Accepted</option><option value="waiting_list">Waiting list</option><option value="cancelled">Cancelled</option></select></label><label>Mock payment<select id="payment-filter"><option value="">All</option><option value="not_started">Not started</option><option value="successful">Successful</option><option value="declined">Declined</option><option value="abandoned">Abandoned</option><option value="refunded">Refunded</option></select></label></div>
+      <div class="organiser-filters"><label>Search<input id="search" type="search" placeholder="Reference, name or example email"></label><label>Entry status<select id="entry-filter"><option value="">All</option><option value="accepted">Accepted</option><option value="waiting_list">Waiting list</option><option value="cancelled">Cancelled</option></select></label><label>Payment<select id="payment-filter"><option value="">All</option><option value="not_configured">Unavailable</option><option value="checkout_pending">Awaiting payment</option><option value="processing">Processing</option><option value="successful">Confirmed</option><option value="declined">Unsuccessful</option><option value="abandoned">Expired</option><option value="refunded">Refunded</option></select></label></div>
       <div id="entrant-list" class="entrant-list"></div><p id="empty-state">There are no test entries. Complete the runner test to add one.</p>
       <div class="secondary-actions"><button id="export-csv" class="text-button" type="button">Export sanitized test CSV</button><span>The export contains test reference, name, club, category and race-management statuses—not contact or emergency details.</span></div>
     </section>

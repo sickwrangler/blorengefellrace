@@ -210,6 +210,19 @@ test("v3 API keeps integrations unavailable until explicitly configured", async 
   assert.equal(result.status, 503); assert.deepEqual(result.body, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
 });
 
+test("configured Phase 3 routes report disabled providers and cannot make external calls", async () => {
+  const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
+  const created = beginProductionRegistration(state, { runner: runner(), declaration: declaration() }, { at });
+  const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), emailAdapter: createControlledDevelopmentEmail() });
+  const api = createApi({ service: {}, phase3Integrations: phase3, environment: "development" });
+  const integrationStatus = await api({ method: "GET", pathname: "/api/v3/registration/status" });
+  assert.deepEqual(integrationStatus.body, { ok: true, environment: "development", stripe: "disabled", paymentsAvailable: false, email: "captured-only", externalEmailAvailable: false });
+  const checkout = await api({ method: "POST", pathname: "/api/v3/payments/checkout", headers: { "x-management-token": created.managementToken } });
+  assert.equal(checkout.status, 503); assert.deepEqual(checkout.body, { ok: false, code: "PAYMENTS_UNAVAILABLE" });
+  const webhook = await api({ method: "POST", pathname: "/api/v3/stripe/webhook", headers: { "stripe-signature": "untrusted" }, body: { rawBody: "{}" } });
+  assert.equal(webhook.status, 503); assert.deepEqual(webhook.body, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+});
+
 test("v3 Checkout/status and raw signed webhook routes use the Phase 3 integration service", async () => {
   const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
   const created = beginProductionRegistration(state, { runner: runner(), declaration: declaration() }, { at });

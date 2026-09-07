@@ -85,16 +85,10 @@
 
           <section data-stage="4" aria-labelledby="payment-heading" hidden>
             <div id="payment-choice">
-              <h2 id="payment-heading">Test payment and confirmation</h2>
+              <h2 id="payment-heading">Payment and confirmation</h2>
               <p>Test reference: <strong id="payment-reference"></strong></p>
-              <p>No money, card details or real payment service are involved.</p>
-              <div class="choice-actions"><button id="payment-successful" data-payment="successful" class="button" type="button">Simulate successful payment</button><button id="payment-declined" data-payment="declined" class="button button--quiet" type="button">Simulate declined payment</button><button id="payment-abandoned" data-payment="abandoned" class="button button--quiet" type="button">Simulate abandoned payment</button></div>
-            </div>
-            <div id="payment-result" tabindex="-1" hidden>
-              <p class="eyebrow">Test result</p><h2 id="result-title"></h2><p id="result-copy"></p>
-              <dl class="review-list"><dt>Test reference</dt><dd id="result-reference"></dd><dt>Entry status</dt><dd id="result-entry"></dd><dt>Mock payment</dt><dd id="result-payment"></dd></dl>
-              <div id="success-action"><a id="organiser-handover" class="button" href="dashboard.html">View this entry as organiser</a></div>
-              <div id="retry-action" hidden><button id="retry-payment" class="button" type="button">Retry mock payment</button></div>
+              <p id="payment-availability" class="noteAlt">Payments are not yet enabled in this development environment. No payment will be attempted.</p>
+              <div class="form-actions"><button id="continue-payment" class="button" type="button">Continue to payment</button><a id="view-payment-status" class="button button--quiet" href="payment-return.html">View payment status</a></div>
             </div>
           </section>
         </form>
