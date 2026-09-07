@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
+import { decideRefund, requestRefund } from "./phase3-domain.mjs";
 import { beginStripeCheckout, executeApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 
 const hashToken = (value) => crypto.createHash("sha256").update(String(value ?? "")).digest("hex");
@@ -45,6 +46,24 @@ export class Phase3IntegrationService {
   async paymentStatus(managementToken) {
     const state = await this.repository.read(); const registration = registrationForToken(state, managementToken);
     return registration ? runnerPaymentState(state, registration.id) : { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
+  }
+
+  requestRefund(managementToken, at = new Date()) {
+    return this.repository.transaction((state) => {
+      const registration = registrationForToken(state, managementToken);
+      if (!registration) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
+      const payment = state.payments.find((item) => item.registrationId === registration.id);
+      if (payment?.status !== "paid") return { ok: false, code: "REFUND_NOT_READY" };
+      const existing = state.refundRequests.find((item) => item.registrationId === registration.id && ["requested", "approved"].includes(item.status));
+      if (existing) return { ok: true, duplicate: true, request: { id: existing.id, status: existing.status, requestedAt: existing.requestedAt } };
+      const result = requestRefund(state, registration.id, { actorType: "runner" }, at);
+      return result.ok ? { ok: true, request: { id: result.request.id, status: result.request.status, requestedAt: result.request.requestedAt } } : result;
+    });
+  }
+
+  decideRefund(actor, refundRequestId, decision, at = new Date()) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.repository.transaction((state) => decideRefund(state, refundRequestId, decision, actor, at));
   }
 
   webhook(rawBody, signature, at = new Date()) {

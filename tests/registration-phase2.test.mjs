@@ -29,6 +29,14 @@ test("idempotent submission and duplicate policy prevent duplicate entries", asy
   assert.equal((await service.create(runner(4, { email: runner(3).email }), { idempotencyKey: "different-key-123" })).code, "DUPLICATE");
 });
 
+test("an eligible entry consumes capacity only when Checkout reserves its place", async () => {
+  const { service, repository } = setup();
+  const created = await service.create(runner(32), { idempotencyKey: "unreserved-until-checkout" });
+  assert.equal(created.registration.entryStatus, "accepted");
+  assert.equal(created.registration.placeStatus, "none");
+  assert.equal((await repository.read()).registrations[0].placeStatus, "none");
+});
+
 test("persistent development migration retains entries and adds Phase 3 payment metadata", async () => {
   const legacy = createDatabase({ environment: "development", registrationState: "test", capacity: 110 });
   legacy.schemaVersion = 2; legacy.event.capacity = 110; delete legacy.processedPaymentEvents; delete legacy.managementTokens;
