@@ -2,7 +2,7 @@
 
 ## Status
 
-The provider-neutral implementation is complete on the Phase 3 feature branch. The runner journey includes a server-authoritative payment-status return page, but external payment and email remain disabled unless each isolated development integration is explicitly enabled and fully configured. Live provider proof remains pending organiser-controlled Stripe and Azure setup; production is unchanged.
+Phase 3B.2 adds the communications and runner self-service layer on the Phase 3 feature branch. External payment and email remain independently fail-closed unless the isolated development integrations are explicitly enabled and fully configured. Production is unchanged and contains no registration artifact.
 
 No Stripe live key is accepted in development. No email is delivered to a runner-supplied address. Missing provider configuration fails closed.
 
@@ -43,7 +43,7 @@ Runner request → organiser approval/rejection → Stripe full-refund request �
 
 ## Controlled development email
 
-Sixteen English templates cover payment, entry management, refunds and waiting-list events. Template data is provider-neutral so selective Welsh content can be introduced later without redesigning delivery.
+Nineteen English templates cover payment, entry management, amendments/transfers, refunds, cancellation and waiting-list events. Template data is provider-neutral and scoped to an individual registration so a later order/purchaser summary can be added without replacing runner communications.
 
 The development adapter has two modes:
 
@@ -58,7 +58,17 @@ The preferred production authentication is a managed identity with the minimum A
 
 The queue retains first name, last name and email only. An offer reserves capacity for 48 hours and becomes reminder-eligible after 24 hours. Decline/expiry releases it and progresses to the next eligible person. Offer tokens remain hashed and are revalidated for purpose, revocation, expiry and use before acceptance or payment.
 
-The domain exposes one idempotent scheduled-work operation for reminder detection, offer expiry/progression and stale payment reservations. A low-frequency authenticated trigger is sufficient for a 120-person race. Reliable scheduling in the current managed Static Web Apps Functions topology is not yet confirmed; moving hosting or adding a paid scheduler requires separate approval.
+The domain exposes one idempotent scheduled-work operation for reminder detection, offer expiry/progression and stale payment reservations. A low-frequency authenticated trigger is sufficient for a 120-person race. Managed Static Web Apps Functions support the deployed HTTP API but do not provide a proven reliable timer trigger for this project. The smallest viable production-shaped alternative is a dedicated Azure Functions Flex Consumption or Consumption app with a timer-triggered function and workload identity/least-privilege access to the registration service. At this race's scale, executions should sit inside the platform's monthly free grant where applicable, leaving only minimal associated storage/monitoring cost; actual subscription pricing must be checked before provisioning. No hosting change or scheduler resource is made in Phase 3B.2 without a separate cost/architecture approval.
+
+## Secure runner self-service
+
+Each registration has its own opaque management token. Only a SHA-256 hash is persisted. The emailed URL places the raw token in the URL fragment so it is not sent in ordinary HTTP request paths; browser code immediately moves it into session storage and removes the fragment from the visible address. Race reference alone never authenticates a runner.
+
+The management page shows runner, entry, payment/refund, eligibility and race-number state without provider/database identifiers. It can continue an unpaid or expired payment, request a refund, make limited non-identity amendments and initiate a transfer. Transfer requires a complete new adult runner record and fresh WFRA declaration evidence, invalidates the previous token immediately and sends a new registration-specific link.
+
+Recovery accepts an email address but always returns the same generic response. Matching is server-side, attempts are stored as email hashes and limited to three successful rotations per address per hour. A successful match rotates the token and sends the replacement only through the controlled development recipient redirect. Stored communication receipts omit secure URLs and tokens.
+
+Lifecycle messages use persistent idempotency keys. Stripe event IDs prevent duplicate payment messages, refund actions reuse their refund-request identity, amendment/transfer messages use the persisted change timestamp, and scheduled reminder/expiry flags plus communication keys prevent repeat scheduler delivery.
 
 ## Runtime configuration names
 

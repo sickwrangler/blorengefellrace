@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { EVENT, safeRegistrationState, validateRunner } from "../registration-core.mjs";
 import { authorize } from "./auth.mjs";
 import { PRIVATE_INVITATION_KINDS, issuePrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, authorizePrivateInvitation, calculateEntryPrice } from "./phase3-domain.mjs";
+import { deliverRegistrationCommunication } from "./communications.mjs";
 
 const now = () => new Date().toISOString();
 const id = (prefix) => `${prefix}_${crypto.randomUUID()}`;
@@ -20,7 +21,7 @@ export function createDatabase({ environment = "local", registrationState = "tes
     phase3RegistrationState: "CLOSED",
     counters: { waitingSequence: 0 },
     runners: [], emergencyContacts: [], registrations: [], payments: [], consents: [], communications: [], auditEvents: [],
-    idempotency: [], amendmentRequests: [], privateInvitations: [], waitingList: [], waitingListOffers: [], refundRequests: [], managementTokens: [], processedPaymentEvents: [],
+    idempotency: [], amendmentRequests: [], privateInvitations: [], waitingList: [], waitingListOffers: [], refundRequests: [], managementTokens: [], managementRecoveryAttempts: [], processedPaymentEvents: [],
     testProgress: { submittedReference: null, organiserViewed: false, resetCompleted: false }
   };
 }
@@ -35,7 +36,7 @@ export function migrateDevelopmentDatabase(input) {
     raceDate: db.event?.raceDate ?? db.event?.date ?? EVENT.date,
     transferRefundCutoffUtc: db.event?.transferRefundCutoffUtc ?? db.event?.transferRefundCutoff ?? EVENT.transferRefundCutoff
   };
-  for (const name of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests", "privateInvitations", "waitingList", "waitingListOffers", "refundRequests", "managementTokens", "processedPaymentEvents"]) db[name] ??= [];
+  for (const name of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests", "privateInvitations", "waitingList", "waitingListOffers", "refundRequests", "managementTokens", "managementRecoveryAttempts", "processedPaymentEvents"]) db[name] ??= [];
   db.phase3RegistrationState ??= "CLOSED";
   db.testProgress ??= { submittedReference: null, organiserViewed: false, resetCompleted: false };
   for (const registration of db.registrations) {
@@ -68,7 +69,7 @@ function entities(db, registration) {
     runner: db.runners.find((item) => item.id === registration.runnerId),
     emergency: db.emergencyContacts.find((item) => item.registrationId === registration.id),
     payment: db.payments.find((item) => item.registrationId === registration.id),
-    consent: db.consents.find((item) => item.registrationId === registration.id)
+    consent: [...db.consents].reverse().find((item) => item.registrationId === registration.id)
   };
 }
 
@@ -137,7 +138,20 @@ export function parseSyntheticCsv(text) {
 }
 
 export class RegistrationService {
-  constructor({ repository, paymentAdapter, emailAdapter }) { this.repository = repository; this.paymentAdapter = paymentAdapter; this.emailAdapter = emailAdapter; }
+  constructor({ repository, paymentAdapter, emailAdapter, publicBaseUrl = "" }) {
+    this.repository = repository;
+    this.paymentAdapter = paymentAdapter;
+    this.emailAdapter = emailAdapter;
+    this.publicBaseUrl = String(publicBaseUrl ?? "").replace(/\/$/, "");
+  }
+  managementUrl(token) { return `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(token)}`; }
+  async lifecycleMessage(db, message, idempotencyKey) {
+    if (this.emailAdapter?.send) return deliverRegistrationCommunication(db, this.emailAdapter, message, { idempotencyKey });
+    const captured = await this.emailAdapter.capture({ id: id("message"), ...message, createdAt: now() });
+    const receipt = { id: captured.id, idempotencyKey, registrationId: message.registrationId ?? null, template: message.template, intendedRecipientAddress: message.intendedRecipientAddress, delivery: captured.delivery, providerReference: null, externalCall: false, createdAt: captured.createdAt };
+    db.communications.push(receipt);
+    return { ok: true, receipt };
+  }
   async status() { return status(await this.repository.read()); }
 
   create(input, { idempotencyKey, actor = { actorType: "runner" }, privateInvitationToken = null } = {}) {
@@ -175,7 +189,12 @@ export class RegistrationService {
       db.testProgress.submittedReference = registration.testReference;
       audit(db, actor, "registration_created", registrationId, null, { entryStatus: registration.entryStatus });
       audit(db, { actorType: "system" }, "entry_price_calculated", registrationId, null, { priceActuallyChargedPence: pricing.priceActuallyChargedPence, adjustmentReason: pricing.adjustmentReason, wfraDiscountApplied: pricing.wfraDiscountApplied });
-      const captured = await this.emailAdapter.capture({ id: id("message"), registrationId, template: "registration_received", intendedRecipientAddress: normalized.email, intendedRecipientReference: runnerId, createdAt }); db.communications.push(captured);
+      await this.lifecycleMessage(db, {
+        registrationId,
+        template: "continue_to_payment",
+        intendedRecipientAddress: normalized.email,
+        data: { runnerName: `${normalized.firstName} ${normalized.lastName}`, secureUrl: this.managementUrl(managementToken) }
+      }, `registration:${registrationId}:payment-required:v1`);
       return { ok: true, registration: view(db, registration, { runnerSafe: true }), confirmationToken, managementToken };
     });
   }
@@ -200,7 +219,7 @@ export class RegistrationService {
       if (!["successful", "declined", "abandoned"].includes(outcome)) return { ok: false, code: "INVALID_PAYMENT_TRANSITION" };
       const payment = entities(db, registration).payment; const before = payment.status; const recorded = await this.paymentAdapter.record(outcome); payment.status = recorded.status === "successful" ? "paid" : recorded.status === "declined" ? "failed" : recorded.status; payment.updatedAt = now();
       db.idempotency.push({ operation: "payment", key: idempotencyKey, registrationId: registration.id, createdAt: now() }); audit(db, { actorType: "runner" }, "payment_state_changed", registration.id, { status: before }, { status: payment.status });
-      if (payment.status === "paid") { const runner = entities(db, registration).runner; db.communications.push(await this.emailAdapter.capture({ id: id("message"), registrationId: registration.id, template: "payment_successful", intendedRecipientAddress: runner.email, intendedRecipientReference: runner.id, createdAt: now() })); }
+      if (payment.status === "paid") { const runner = entities(db, registration).runner; await this.lifecycleMessage(db, { registrationId: registration.id, template: "entry_confirmed", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, `registration:${registration.id}:entry-confirmed:v1`); }
       return { ok: true, registration: view(db, registration, { runnerSafe: true }) };
     });
   }
@@ -262,7 +281,7 @@ export class RegistrationService {
         const releasedPlace = registration.entryStatus === "accepted"; registration.entryStatus = "cancelled"; registration.waitingListPosition = null; audit(db, actor, "entry_cancelled", registration.id, { entryStatus: before.entryStatus }, { entryStatus: "cancelled" });
         if (releasedPlace) { const promoted = db.registrations.filter((item) => item.entryStatus === "waiting_list" && active(item)).sort((a, b) => a.waitingSequence - b.waitingSequence)[0]; if (promoted) { promoted.entryStatus = "accepted"; promoted.waitingListPosition = null; audit(db, actor, "entry_promoted", promoted.id, { entryStatus: "waiting_list" }, { entryStatus: "accepted" }); } }
         refreshWaiting(db, actor);
-        const runner = entities(db, registration).runner; db.communications.push(await this.emailAdapter.capture({ id: id("message"), registrationId: registration.id, template: "registration_cancelled", intendedRecipientAddress: runner.email, intendedRecipientReference: runner.id, createdAt: now() }));
+        const runner = entities(db, registration).runner; await this.lifecycleMessage(db, { registrationId: registration.id, template: "registration_cancelled", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, `registration:${registration.id}:cancelled:v1`);
       } else if (action === "promote") {
         if (registration.entryStatus !== "waiting_list" || status(db).remaining < 1) return { ok: false, code: "NO_AVAILABLE_PLACE" }; registration.entryStatus = "accepted"; registration.waitingListPosition = null; refreshWaiting(db, actor); audit(db, actor, "entry_promoted", registration.id, { entryStatus: "waiting_list" }, { entryStatus: "accepted" });
       } else if (action === "entry_status") {

@@ -25,9 +25,42 @@ export function createApi({ service, phase3Integrations = null, environment = "l
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.paymentStatus(headers["x-management-token"]));
     }
+    if (method === "GET" && pathname === "/api/v3/management/entry") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.managementEntry(headers["x-management-token"]));
+    }
+    if (method === "POST" && pathname === "/api/v3/management/recover") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return response(202, await phase3Integrations.recoverManagementLink(body.email));
+    }
+    if (method === "POST" && pathname === "/api/v3/management/amend") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.amend(headers["x-management-token"], body));
+    }
+    if (method === "POST" && pathname === "/api/v3/management/transfer") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.transfer(headers["x-management-token"], body));
+    }
     if (method === "POST" && pathname === "/api/v3/refunds/request") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.requestRefund(headers["x-management-token"]), 201);
+    }
+    if (method === "POST" && pathname === "/api/v3/waiting-list/join") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.joinWaitingList(body), 201);
+    }
+    if (method === "POST" && pathname === "/api/v3/waiting-list/decline") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.declineWaitingPlace(headers["x-private-invitation"]));
+    }
+    if (method === "POST" && pathname === "/api/v3/organiser/waiting-list/offer-next") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.offerNextWaitingPlace(actor));
+    }
+    const revokeManagement = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/revoke-management$/);
+    if (method === "POST" && revokeManagement) {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.revokeManagementLink(actor, decodeURIComponent(revokeManagement[1])));
     }
     const refundDecision = pathname.match(/^\/api\/v3\/organiser\/refunds\/([^/]+)\/(approve|reject)$/);
     if (method === "POST" && refundDecision) {

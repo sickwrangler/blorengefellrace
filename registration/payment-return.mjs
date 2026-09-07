@@ -9,6 +9,7 @@ const retry = document.querySelector("#retry-payment");
 const refresh = document.querySelector("#refresh-payment");
 const requestRefund = document.querySelector("#request-refund");
 const help = document.querySelector("#payment-help");
+const environmentStatus = document.querySelector("#payment-environment-status");
 
 const fragment = new URLSearchParams(location.hash.replace(/^#/, ""));
 if (fragment.get("manage")) prototype.rememberManagementToken(fragment.get("manage"));
@@ -22,6 +23,7 @@ async function render() {
     actions.hidden = true; help.hidden = false; return;
   }
   const [status, integrations] = await Promise.all([prototype.paymentStatus(token), prototype.integrationStatus()]);
+  environmentStatus.textContent = integrations.paymentsAvailable ? "Development · Stripe sandbox" : "Development · Payments unavailable";
   if (!status.ok) {
     title.textContent = "Payment status unavailable";
     message.textContent = runnerMessageForCode(status.code);
