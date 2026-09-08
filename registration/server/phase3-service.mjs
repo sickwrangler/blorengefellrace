@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { ageOnRaceDate, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund } from "./phase3-domain.mjs";
+import { ageOnRaceDate, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
 import { beginStripeCheckout, executeApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService } from "./order-service.mjs";
@@ -8,6 +8,7 @@ import { OrderRegistrationService } from "./order-service.mjs";
 const hashToken = (value) => crypto.createHash("sha256").update(String(value ?? "")).digest("hex");
 const iso = (value = new Date()) => new Date(value).toISOString();
 const normalizeEmail = (value) => String(value ?? "").trim().toLowerCase();
+const syntheticEmail = /@(example\.(?:com|org|net)|[^@]+\.invalid)$/i;
 const activeRegistration = (item) => item && !item.deletedAt && !["cancelled", "place_released"].includes(item.entryStatus);
 const runnerFor = (state, registration) => state.runners.find((item) => item.id === registration?.runnerId);
 const paymentFor = (state, registration) => state.payments.find((item) => item.registrationId === registration?.id || item.registrationIds?.includes(registration?.id));
@@ -122,14 +123,16 @@ export class Phase3IntegrationService {
     });
   }
 
-  transfer(managementToken, input, at = new Date()) {
+  transferRegistration({ managementToken = null, registrationId = null, input, actor, allowCutoffOverride = false }, at = new Date()) {
     return this.repository.transaction(async (state) => {
-      const registration = registrationForToken(state, managementToken);
-      if (!registration || !activeRegistration(registration)) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
-      if (new Date(at) > new Date(state.event.transferRefundCutoffUtc)) return { ok: false, code: "TRANSFER_CUTOFF_PASSED" };
+      const registration = managementToken ? registrationForToken(state, managementToken) : state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
+      if (!registration || !activeRegistration(registration)) return { ok: false, code: managementToken ? "MANAGEMENT_TOKEN_INVALID" : "NOT_FOUND" };
+      const afterCutoff = new Date(at) > new Date(state.event.transferRefundCutoffUtc);
+      if (afterCutoff && !allowCutoffOverride) return { ok: false, code: managementToken ? "TRANSFER_CUTOFF_PASSED" : "ORGANISER_OVERRIDE_REQUIRED" };
       const next = input.runner ?? {};
-      const required = ["email", "firstName", "lastName", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "raceCategory", "emergencyContactName", "emergencyContactPhone"];
-      if (required.some((field) => !String(next[field] ?? "").trim())) return { ok: false, code: "VALIDATION_ERROR" };
+      const errors = validateProductionRunner(next);
+      if (!syntheticEmail.test(normalizeEmail(next.email))) errors.email = "Use synthetic information only in development.";
+      if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
       if (ageOnRaceDate(next.dateOfBirth, state.event.raceDate) < 18) return { ok: false, code: "PARENTAL_CONSENT_REQUIREMENTS_PENDING" };
       if (state.registrations.some((item) => item.id !== registration.id && activeRegistration(item) && ["payment_reserved", "confirmed"].includes(item.placeStatus) && normalizeEmail(runnerFor(state, item)?.email) === normalizeEmail(next.email))) return { ok: false, code: "DUPLICATE_ACTIVE_ENTRY" };
       const previous = runnerFor(state, registration);
@@ -137,20 +140,46 @@ export class Phase3IntegrationService {
       state.runners.push(runner); registration.runnerId = runner.id; registration.updatedAt = iso(at);
       registration.declarationStatus = "pending"; registration.declarationCompletionMethod = null;
       for (const priorDeclaration of (state.declarations ?? []).filter((item) => item.registrationId === registration.id && !item.revokedAt)) priorDeclaration.revokedAt = iso(at);
+      for (const consent of state.consents.filter((item) => item.registrationId === registration.id && item.declaration)) {
+        state.declarations ??= []; state.declarations.push({ ...consent.declaration, id: `declaration_${crypto.randomUUID()}`, registrationId: registration.id, runnerId: previous.id, completionMethod: "digital_during_entry", revokedAt: iso(at), revocationReason: "entry_transferred" }); consent.declaration = null;
+      }
+      for (const token of (state.declarationTokens ?? []).filter((item) => item.registrationId === registration.id && !item.revokedAt)) { token.revokedAt = iso(at); token.revokedReason = "entry_transferred"; }
       const emergency = state.emergencyContacts.find((item) => item.registrationId === registration.id);
       if (emergency) { emergency.name = String(next.emergencyContactName).trim(); emergency.phone = String(next.emergencyContactPhone).trim(); }
       else state.emergencyContacts.push({ id: `emergency_${crypto.randomUUID()}`, registrationId: registration.id, name: String(next.emergencyContactName).trim(), phone: String(next.emergencyContactPhone).trim(), deleteAfterEvent: true });
-      const issued = issueManagementToken(state, registration.id, { actorType: "runner" }, at);
-      state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: "runner", actorId: null, action: "entry_transferred", subjectId: registration.id, before: null, after: { declarationStatus: "pending" }, environment: state.environment });
+      const issued = issueManagementToken(state, registration.id, actor, at);
+      const action = actor.actorType === "organiser" ? "organiser_entry_transferred" : "entry_transferred";
+      state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType, actorId: actor.id ?? null, action, subjectId: registration.id, before: { runnerId: previous.id }, after: { runnerId: runner.id, declarationStatus: "pending", cutoffOverride: Boolean(afterCutoff && allowCutoffOverride) }, environment: state.environment });
       await this.communicate(state, { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} }, `registration:${registration.id}:transfer-old:${registration.updatedAt}`, at);
       await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
-      return { ...managementView(state, registration, at), replacementManagementToken: issued.token, transferredRegistrationId: registration.id };
+      return { ...managementView(state, registration, at), transferredRegistrationId: registration.id };
     }).then(async (result) => {
       if (result.ok) {
         await this.orders.resendDeclaration({ authenticated: true, role: "administrator", actorType: "system", id: "transfer-declaration" }, result.transferredRegistrationId, at);
         delete result.transferredRegistrationId;
       }
       return result;
+    });
+  }
+
+  transfer(managementToken, input, at = new Date()) {
+    return this.transferRegistration({ managementToken, input, actor: { actorType: "runner", id: null } }, at);
+  }
+
+  organiserTransfer(actor, registrationId, input, at = new Date()) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.transferRegistration({ registrationId, input, actor, allowCutoffOverride: input.overrideCutoff === true }, at);
+  }
+
+  resendManagementLink(actor, registrationId, at = new Date()) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.repository.transaction(async (state) => {
+      const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item)); const runner = runnerFor(state, registration);
+      if (!registration || !runner) return { ok: false, code: "NOT_FOUND" };
+      const issued = issueManagementToken(state, registration.id, actor, at);
+      await this.communicate(state, { registrationId, template: "management_link", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token) } }, `registration:${registration.id}:management-organiser:${registration.updatedAt}:${state.managementTokens.at(-1).id}`, at);
+      state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType ?? "organiser", actorId: actor.id ?? null, action: "management_link_resent", subjectId: registration.id, before: null, after: {}, environment: state.environment });
+      return { ok: true };
     });
   }
 

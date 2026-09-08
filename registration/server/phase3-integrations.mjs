@@ -48,8 +48,9 @@ export function createStripeGateway({ stripe, environment = "development", secre
       }, { idempotencyKey: `checkout-${paymentId}` });
       return { id: session.id, url: session.url, expiresAt: new Date(expiresAt * 1000).toISOString() };
     },
-    async createOrderCheckoutSession({ orderId, paymentId, runnerPricesPence, successUrl, cancelUrl, at = new Date() }) {
+    async createOrderCheckoutSession({ orderId, paymentId, checkoutAttemptId, runnerPricesPence, successUrl, cancelUrl, at = new Date() }) {
       if (!Array.isArray(runnerPricesPence) || runnerPricesPence.length < 1 || runnerPricesPence.some((amount) => !Number.isInteger(amount) || amount < 1)) throw new Error("Invalid server-calculated order price.");
+      if (!checkoutAttemptId) throw new Error("A Checkout attempt identifier is required.");
       const expiresAt = Math.floor(new Date(at).getTime() / 1000) + reservationMinutes * 60;
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
@@ -58,7 +59,7 @@ export function createStripeGateway({ stripe, environment = "development", secre
         success_url: successUrl,
         cancel_url: cancelUrl,
         metadata: { orderId, paymentId, runnerCount: String(runnerPricesPence.length) }
-      }, { idempotencyKey: `checkout-order-${paymentId}` });
+      }, { idempotencyKey: `checkout-order-${paymentId}-${checkoutAttemptId}` });
       return { id: session.id, url: session.url, expiresAt: new Date(expiresAt * 1000).toISOString() };
     },
     verifyWebhook(rawBody, signature) {

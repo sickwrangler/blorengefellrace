@@ -59,6 +59,8 @@ function orderView(state, order) {
     totalPence: order.totalPence,
     currency: "gbp",
     paymentStatus: payment?.status ?? "not_started",
+    paymentRequired: !["paid", "refunded"].includes(payment?.status),
+    canContinuePayment: ["draft", "checkout_expired", "checkout_pending"].includes(order.status),
     registrations: registrationsFor(state, order).map((registration) => {
       const runner = runnerFor(state, registration);
       return {
@@ -209,26 +211,50 @@ export class OrderRegistrationService {
 
   checkout(token, at = new Date()) {
     if (!this.stripeGateway) return Promise.resolve({ ok: false, code: "PAYMENTS_UNAVAILABLE" });
+    const checkoutAttemptId = id("checkout_attempt");
     return this.repository.transaction(async (state) => {
+      let recognisedExpiredCheckout = false;
+      const reject = (result) => recognisedExpiredCheckout ? { ok: true, committedError: result } : result;
       ensureCollections(state); const order = orderForToken(state, token);
-      if (!order || !["draft", "checkout_expired"].includes(order.status)) return { ok: false, code: "ORDER_NOT_EDITABLE" };
-      const registrations = registrationsFor(state, order).filter(active);
-      if (!registrations.length || registrations.length > this.maxRunnersPerOrder) return { ok: false, code: "ORDER_RUNNER_COUNT_INVALID" };
-      if (capacitySummary(state).remaining < registrations.length) return { ok: false, code: "GROUP_CAPACITY_UNAVAILABLE", availablePlaces: capacitySummary(state).remaining };
-      const emails = registrations.map((registration) => normalizeEmail(runnerFor(state, registration)?.email));
-      if (new Set(emails).size !== emails.length) return { ok: false, code: "DUPLICATE_ORDER_EMAIL" };
-      const conflicts = state.registrations.some((candidate) => !order.registrationIds.includes(candidate.id) && active(candidate) && ["payment_reserved", "confirmed"].includes(candidate.placeStatus) && emails.includes(normalizeEmail(runnerFor(state, candidate)?.email)));
-      if (conflicts) return { ok: false, code: "DUPLICATE_ACTIVE_ENTRY" };
+      if (!order) return { ok: false, code: "ORDER_NOT_EDITABLE" };
       let payment = orderPayment(state, order);
-      if (!payment) { payment = { id: id("payment"), orderId: order.id, registrationIds: [...order.registrationIds], status: "created", expectedAmountPence: order.totalPence, actualPaidAmountPence: null, refundedAmountPence: 0, refundedRegistrationIds: [], currency: "gbp", provider: "stripe", providerMode: "test", createdAt: iso(at), updatedAt: iso(at) }; state.payments.push(payment); }
-      if (payment.status === "checkout_pending" && new Date(payment.checkoutExpiresAt) > at) return { ok: true, duplicate: true, checkoutUrl: payment.checkoutUrl, expiresAt: payment.checkoutExpiresAt, totalPence: payment.expectedAmountPence };
+      if (order.status === "checkout_pending" && payment?.status === "checkout_pending" && new Date(payment.checkoutExpiresAt) > new Date(at)) {
+        return { ok: true, duplicate: true, checkoutUrl: payment.checkoutUrl, expiresAt: payment.checkoutExpiresAt, totalPence: payment.expectedAmountPence };
+      }
+      if (order.status === "checkout_pending" && (!payment?.checkoutExpiresAt || new Date(payment.checkoutExpiresAt) <= new Date(at))) {
+        recognisedExpiredCheckout = true;
+        order.status = "checkout_expired"; if (payment) payment.status = "expired";
+        registrationsFor(state, order).filter(active).forEach((registration) => { registration.placeStatus = "none"; registration.entryStatus = "draft"; });
+        audit(state, "order_checkout_released", order.id, { runnerCount: order.registrationIds.length, recognisedOnReturn: true }, at, { actorType: "purchaser" });
+      }
+      if (!["draft", "checkout_expired"].includes(order.status)) return reject({ ok: false, code: "ORDER_NOT_EDITABLE" });
+      const registrations = registrationsFor(state, order).filter(active);
+      if (!registrations.length || registrations.length > this.maxRunnersPerOrder) return reject({ ok: false, code: "ORDER_RUNNER_COUNT_INVALID" });
+      let recalculatedTotal = 0;
+      for (const registration of registrations) {
+        const runner = runnerFor(state, registration);
+        const checked = validateAdultRunner(state, { ...runner, emergencyContactName: state.emergencyContacts.find((item) => item.registrationId === registration.id)?.name, emergencyContactPhone: state.emergencyContacts.find((item) => item.registrationId === registration.id)?.phone, acceptTerms: true, acceptPrivacy: true });
+        if (Object.keys(checked.errors).length) return reject({ ok: false, code: "VALIDATION_ERROR", errors: checked.errors });
+        const pricing = calculateEntryPrice(state.event, runner); registration.pricing = pricing; registration.priceActuallyChargedPence = pricing.priceActuallyChargedPence; recalculatedTotal += pricing.priceActuallyChargedPence;
+      }
+      order.totalPence = recalculatedTotal;
+      if (capacitySummary(state).remaining < registrations.length) return reject({ ok: false, code: "GROUP_CAPACITY_UNAVAILABLE", availablePlaces: capacitySummary(state).remaining });
+      const emails = registrations.map((registration) => normalizeEmail(runnerFor(state, registration)?.email));
+      if (new Set(emails).size !== emails.length) return reject({ ok: false, code: "DUPLICATE_ORDER_EMAIL" });
+      const conflicts = state.registrations.some((candidate) => !order.registrationIds.includes(candidate.id) && active(candidate) && ["payment_reserved", "confirmed"].includes(candidate.placeStatus) && emails.includes(normalizeEmail(runnerFor(state, candidate)?.email)));
+      if (conflicts) return reject({ ok: false, code: "DUPLICATE_ACTIVE_ENTRY" });
+      if (!payment) { payment = { id: id("payment"), orderId: order.id, registrationIds: [...order.registrationIds], status: "created", expectedAmountPence: order.totalPence, actualPaidAmountPence: null, refundedAmountPence: 0, refundedRegistrationIds: [], checkoutAttempts: [], currency: "gbp", provider: "stripe", providerMode: "test", createdAt: iso(at), updatedAt: iso(at) }; state.payments.push(payment); }
+      payment.checkoutAttempts ??= [];
+      if (payment.checkoutSessionId) payment.checkoutAttempts = payment.checkoutAttempts.map((attempt) => attempt.sessionId === payment.checkoutSessionId && attempt.status === "active" ? { ...attempt, status: "expired", expiredAt: iso(at) } : attempt);
+      payment.expectedAmountPence = order.totalPence; payment.registrationIds = [...order.registrationIds];
       registrations.forEach((registration) => { registration.placeStatus = "payment_reserved"; registration.entryStatus = "accepted"; registration.updatedAt = iso(at); });
-      const created = await this.stripeGateway.createOrderCheckoutSession({ orderId: order.id, paymentId: payment.id, runnerPricesPence: registrations.map((registration) => registration.priceActuallyChargedPence), successUrl: `${this.publicBaseUrl}/registration/payment-return.html?order=1`, cancelUrl: `${this.publicBaseUrl}/registration/?cancelled=1`, at });
+      const created = await this.stripeGateway.createOrderCheckoutSession({ orderId: order.id, paymentId: payment.id, checkoutAttemptId, runnerPricesPence: registrations.map((registration) => registration.priceActuallyChargedPence), successUrl: `${this.publicBaseUrl}/registration/payment-return.html?order=1`, cancelUrl: `${this.publicBaseUrl}/registration/?cancelled=1`, at });
+      payment.checkoutAttempts.push({ id: checkoutAttemptId, sessionId: created.id, status: "active", createdAt: iso(at), expiresAt: created.expiresAt, amountPence: order.totalPence, runnerCount: registrations.length });
       Object.assign(payment, { status: "checkout_pending", checkoutSessionId: created.id, checkoutUrl: created.url, checkoutExpiresAt: created.expiresAt, webhookReconciliationState: "awaiting_event", externalCall: true, updatedAt: iso(at) });
       Object.assign(order, { status: "checkout_pending", checkoutExpiresAt: created.expiresAt, updatedAt: iso(at) });
       audit(state, "order_checkout_created", order.id, { runnerCount: registrations.length, totalPence: order.totalPence }, at, { actorType: "purchaser" });
       return { ok: true, checkoutUrl: created.url, expiresAt: created.expiresAt, totalPence: payment.expectedAmountPence };
-    });
+    }).then((result) => result.committedError ?? result);
   }
 
   async webhook(event, at = new Date()) {
@@ -244,6 +270,7 @@ export class OrderRegistrationService {
         if (paid !== payment.expectedAmountPence || currency !== "gbp") return { ok: false, code: "PAYMENT_MISMATCH" };
         if (event.type === "checkout.session.completed" && object.payment_status && object.payment_status !== "paid") { payment.status = "processing"; order.status = "payment_processing"; }
         else {
+          payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.sessionId === object.id ? { ...attempt, status: "completed", completedAt: iso(at) } : attempt);
           payment.status = "paid"; payment.actualPaidAmountPence = paid; payment.paymentIntentId = typeof object.payment_intent === "string" ? object.payment_intent : object.payment_intent?.id; payment.completedAt = iso(at); payment.webhookReconciliationState = "reconciled"; order.status = "paid"; order.paidAt = iso(at);
           for (const registration of registrations) {
             registration.placeStatus = "confirmed"; registration.entryStatus = "accepted"; registration.updatedAt = iso(at);
@@ -258,7 +285,7 @@ export class OrderRegistrationService {
           audit(state, "order_payment_confirmed", order.id, { runnerCount: registrations.length, totalPence: order.totalPence }, at);
         }
       } else if (["checkout.session.expired", "checkout.session.async_payment_failed"].includes(event.type)) {
-        if (payment.status !== "paid") { payment.status = event.type === "checkout.session.expired" ? "expired" : "failed"; order.status = "checkout_expired"; registrations.forEach((registration) => { registration.placeStatus = "none"; registration.entryStatus = "draft"; }); audit(state, "order_checkout_released", order.id, { runnerCount: registrations.length }, at); }
+        if (payment.status !== "paid") { payment.status = event.type === "checkout.session.expired" ? "expired" : "failed"; payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.sessionId === object.id ? { ...attempt, status: payment.status, expiredAt: iso(at) } : attempt); order.status = "checkout_expired"; registrations.forEach((registration) => { registration.placeStatus = "none"; registration.entryStatus = "draft"; }); audit(state, "order_checkout_released", order.id, { runnerCount: registrations.length }, at); }
       } else if (event.type === "charge.refunded") {
         payment.webhookReconciliationState = "refund_event_observed";
       } else if (event.type === "refund.failed") {
@@ -347,7 +374,7 @@ export class OrderRegistrationService {
       }
       for (const order of state.orders.filter((item) => item.status === "checkout_pending" && new Date(item.checkoutExpiresAt) <= new Date(at))) {
         const payment = orderPayment(state, order); if (payment?.status === "paid") continue;
-        order.status = "checkout_expired"; if (payment) payment.status = "expired";
+        order.status = "checkout_expired"; if (payment) { payment.status = "expired"; payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.status === "active" ? { ...attempt, status: "expired", expiredAt: iso(at) } : attempt); }
         registrationsFor(state, order).forEach((registration) => { registration.placeStatus = "none"; registration.entryStatus = "draft"; }); abandonedOrders += 1;
       }
       if (this.draftRetentionHours) for (const order of state.orders.filter((item) => item.status === "draft" && new Date(item.updatedAt) <= new Date(new Date(at).getTime() - this.draftRetentionHours * 3_600_000))) {

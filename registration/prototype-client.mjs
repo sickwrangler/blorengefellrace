@@ -99,6 +99,7 @@ export const prototype = {
     return localApiOrRepository("/registrations", { method: "POST", body: JSON.stringify(payload) }, (state) => submitRegistration(state, payload, { source: "runner" }));
   },
   rememberManagementToken(token) { if (token) window.sessionStorage.setItem(MANAGEMENT_TOKEN_SESSION_KEY, token); },
+  forgetManagementToken() { window.sessionStorage.removeItem(MANAGEMENT_TOKEN_SESSION_KEY); },
   managementToken() { return window.sessionStorage.getItem(MANAGEMENT_TOKEN_SESSION_KEY); },
   rememberOrderToken(token) { if (token) window.sessionStorage.setItem(ORDER_TOKEN_SESSION_KEY, token); },
   orderToken() {
@@ -131,6 +132,7 @@ export const prototype = {
   async completeDeclaration(token, input) { try { return await phase4Api("/declarations/complete", { method: "POST", body: JSON.stringify(input), headers: { "x-declaration-token": token } }); } catch { return { ok: false, code: "LINK_UNAVAILABLE" }; } },
   async resendDeclaration(registrationId) { try { return await phase4Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/declaration/resend`, { method: "POST" }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
   async recordPaperDeclaration(registrationId) { try { return await phase4Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/declaration/paper`, { method: "POST" }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
+  async organiserTransfer(registrationId, input) { try { return await phase4Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/transfer`, { method: "POST", body: JSON.stringify(input) }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
   async integrationStatus() {
     if (!usesApi) return { ok: true, stripe: "disabled", paymentsAvailable: false, email: "captured-only", externalEmailAvailable: false };
     try { return await phase3Api("/registration/status"); }
@@ -181,6 +183,11 @@ export const prototype = {
     try { return await phase3Api(`/organiser/refunds/${encodeURIComponent(id)}/execute`, { method: "POST" }, true); }
     catch { return { ok: false, code: "REFUND_UNAVAILABLE" }; }
   },
+  async resendManagementLink(registrationId) {
+    if (!usesApi) return { ok: false, code: "MANAGED_API_REQUIRED" };
+    try { return await phase3Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/resend-management`, { method: "POST" }, true); }
+    catch { return { ok: false, code: "MANAGEMENT_UNAVAILABLE" }; }
+  },
   payment(id, outcome) {
     if (usesApi) { const confirmationToken = confirmationTokens.get(id); const key = paymentKeys.get(id) ?? crypto.randomUUID(); paymentKeys.set(id, key); return api(`/registrations/${encodeURIComponent(confirmationToken)}/mock-payment`, { method: "POST", body: JSON.stringify({ outcome }), headers: { "idempotency-key": key } }).then((result) => { if (result.ok) paymentKeys.delete(id); return result; }); }
     return localApiOrRepository(`/registrations/${id}/payment`, { method: "POST", body: JSON.stringify({ outcome }) }, (state) => applyMockPayment(state, id, outcome));
@@ -199,6 +206,7 @@ export const prototype = {
   promote(id) { return localApiOrRepository(`/organiser/registrations/${id}/promote`, { method: "POST" }, (state) => promoteRegistration(state, id), true); },
   assign(id, raceNumber) { return localApiOrRepository(`/organiser/registrations/${id}/race-number`, { method: "POST", body: JSON.stringify({ raceNumber }) }, (state) => assignRaceNumber(state, id, raceNumber), true); },
   removeRaceNumber(id) { return localApiOrRepository(`/organiser/registrations/${id}/remove-race-number`, { method: "POST" }, (state) => removeRaceNumber(state, id), true); },
+  correctEntry(id, changes) { return localApiOrRepository(`/organiser/registrations/${id}/correct`, { method: "POST", body: JSON.stringify(changes) }, () => ({ ok: false, code: "MANAGED_API_REQUIRED" }), true); },
   refund(id) { return localApiOrRepository(`/organiser/registrations/${id}/refund`, { method: "POST" }, (state) => applyMockPayment(state, id, "refunded"), true); },
   markViewed(testReference) { return localApiOrRepository(`/organiser/registrations/reference/${encodeURIComponent(testReference)}/viewed`, { method: "POST" }, (state) => markOrganiserViewed(state, testReference), true); },
   async audit(id) {

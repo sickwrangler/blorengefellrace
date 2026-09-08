@@ -367,12 +367,13 @@ test("transfer resets declaration state, rotates ownership and invalidates the o
   const transferred = await phase3.transfer(created.managementToken, { runner: runner(41) }, at);
   assert.equal(transferred.ok, true); assert.equal(transferred.registration.runner.firstName, "Runner 41");
   assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
-  assert.equal((await phase3.managementEntry(transferred.replacementManagementToken, at)).registration.runner.email, "runner-41@example.com");
   const state = await repository.read();
+  assert.equal("replacementManagementToken" in transferred, false);
+  assert.equal(state.managementTokens.filter((item) => !item.invalidatedAt).length, 1);
   assert.equal(state.registrations[0].declarationStatus, "pending");
   assert.equal(state.registrations[0].declarationCompletionMethod, null);
   assert.equal(state.emergencyContacts.find((item) => item.registrationId === state.registrations[0].id).name, "Contact Example");
-  assert.equal(JSON.stringify(state).includes(transferred.replacementManagementToken), false);
+  assert.equal(state.communications.some((item) => item.template === "entry_transferred"), true);
 });
 
 test("development waiting-list communications cover join, offer, reminder, decline and expiry without duplicates", async () => {

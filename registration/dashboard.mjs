@@ -6,6 +6,7 @@ let currentState;
 let selectedReference = new URLSearchParams(window.location.search).get("ref");
 let markingViewed = false;
 let pendingCancellation = null;
+let pendingTransfer = null;
 let currentIntegrations = { paymentsAvailable: false, email: "captured-only" };
 if (canTest) await render();
 
@@ -127,6 +128,15 @@ function renderActions(item) {
     actions.append(actionButton("Resend declaration email", async () => { const result = await prototype.resendDeclaration(item.id); showNotice(result.ok ? "Declaration email resent through the controlled development channel." : `Declaration email unavailable: ${result.code}`, !result.ok); await render(); }));
     actions.append(actionButton("Record paper declaration", async () => { if (!window.confirm("Confirm that the named runner signed the current paper declaration in person? This records an audited organiser action, not a digital signature.")) return; const result = await prototype.recordPaperDeclaration(item.id); showNotice(result.ok ? "Paper declaration recorded. Runner is cleared from the declaration perspective." : `Declaration could not be recorded: ${result.code}`, !result.ok); await render(); }));
   }
+  if (item.placeStatus === "confirmed") {
+    actions.append(actionButton("Edit phone / club", async () => {
+      const phone = window.prompt("Correct the runner's phone number", item.runner.phone ?? ""); if (phone === null) return;
+      const club = window.prompt("Correct the runner's club", item.runner.club ?? ""); if (club === null) return;
+      const result = await prototype.correctEntry(item.id, { phone, club }); showNotice(result.ok ? "Phone and club details updated without transferring the entry." : `Details could not be updated: ${result.code}`, !result.ok); await render();
+    }));
+    actions.append(actionButton("Transfer entry", () => openTransferDialog(item)));
+    actions.append(actionButton("Resend management link", async () => { const result = await prototype.resendManagementLink(item.id); showNotice(result.ok ? "A new management link was sent through the controlled development channel." : `Management link unavailable: ${result.code}`, !result.ok); await render(); }));
+  }
   if (available.includes("race_number")) actions.append(actionButton(item.raceNumber ? "Change race number" : "Assign race number", async () => {
     const value = window.prompt("Enter a synthetic race number", item.raceNumber ?? ""); if (value === null) return;
     const result = await prototype.assign(item.id, value); if (!result.ok) showNotice(`Race number not changed: ${result.code}`, true); else showNotice(`Race number ${value} assigned to ${item.testReference}.`); await render();
@@ -155,6 +165,13 @@ function renderActions(item) {
     await cancelEntry(item.id, false);
   }, "button button--quiet danger-button"));
   if (available.includes("messages")) actions.append(actionButton("Preview captured messages", () => { const preview = document.querySelector("#message-preview"); preview.hidden = false; preview.scrollIntoView({ behavior: "smooth", block: "nearest" }); }));
+}
+
+function openTransferDialog(item) {
+  pendingTransfer = item.id; const form = document.querySelector("#organiser-transfer-form");
+  const runner = item.runner; const values = { firstName: runner.firstName, lastName: runner.lastName, email: runner.email, phone: runner.phone, addressLine1: runner.addressLine1, addressLine2: runner.addressLine2, city: runner.city, postcode: runner.postcode, dateOfBirth: runner.dateOfBirth, raceCategory: runner.genderCategory, club: runner.club, wfraMember: runner.wfraMember ? "yes" : "no", wfraMembershipNumber: runner.wfraMembershipNumber, emergencyContactName: runner.emergencyName, emergencyContactPhone: runner.emergencyPhone };
+  for (const [name, value] of Object.entries(values)) if (form.elements[name]) form.elements[name].value = value ?? "";
+  form.elements.overrideCutoff.checked = false; document.querySelector("#transfer-entry-dialog").showModal();
 }
 async function cancelEntry(id, releaseRaceNumber) {
   const result = await prototype.cancel(id, releaseRaceNumber);
@@ -198,5 +215,13 @@ document.querySelector("#confirm-cancel-entry")?.addEventListener("click", async
   if (!pendingCancellation) return;
   const id = pendingCancellation; const release = document.querySelector("#release-race-number").checked;
   pendingCancellation = null; document.querySelector("#cancel-entry-dialog").close(); await cancelEntry(id, release);
+});
+document.querySelector("#close-transfer-entry")?.addEventListener("click", () => { pendingTransfer = null; document.querySelector("#transfer-entry-dialog").close(); });
+document.querySelector("#organiser-transfer-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault(); if (!pendingTransfer || !window.confirm("Transfer this paid race place to the replacement runner? The previous runner's secure links and declaration will be revoked.")) return;
+  const form = event.currentTarget; const data = Object.fromEntries(new FormData(form)); data.wfraMember = data.wfraMember === "yes"; const overrideCutoff = form.elements.overrideCutoff.checked; delete data.overrideCutoff;
+  const registrationId = pendingTransfer; pendingTransfer = null; const result = await prototype.organiserTransfer(registrationId, { runner: data, overrideCutoff });
+  if (result.ok) document.querySelector("#transfer-entry-dialog").close();
+  showNotice(result.ok ? `Entry transferred. The paid place was retained and the replacement runner now requires their own declaration.${overrideCutoff ? " The organiser cutoff override was audited." : ""}` : result.code === "ORGANISER_OVERRIDE_REQUIRED" ? "The normal transfer cutoff has passed. Review the details and explicitly select the organiser cutoff override to proceed." : `Transfer unavailable: ${result.code}`, !result.ok); await render();
 });
 prototype.subscribe(() => render());

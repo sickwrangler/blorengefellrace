@@ -114,7 +114,7 @@ function updateDeclarationFields() { const now = form.elements.declarationTiming
 
 async function beginOrRecover() {
   const recovered = await prototype.currentOrder();
-  if (recovered.ok && ["draft", "checkout_expired"].includes(recovered.order.status)) { currentOrder = recovered.order; document.querySelector("#test-landing").hidden = true; document.querySelector("#runner-flow").hidden = false; showStage(3); document.querySelector("#submit-test").closest(".form-actions").hidden = true; renderOrder(); }
+  if (recovered.ok && ["draft", "checkout_expired", "checkout_pending"].includes(recovered.order.status)) { currentOrder = recovered.order; document.querySelector("#test-landing").hidden = true; document.querySelector("#runner-flow").hidden = false; showStage(3); document.querySelector("#submit-test").closest(".form-actions").hidden = true; renderOrder(); if (recovered.order.paymentRequired) { alert.textContent = recovered.order.status === "checkout_pending" ? "Payment required. Continue to payment to return to your existing secure Checkout." : "Payment required. Places are not held after Checkout expires; capacity and price will be checked again."; alert.hidden = false; } }
 }
 
 if (!canTest) document.querySelector("#closed-panel").hidden = false;

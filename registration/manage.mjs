@@ -50,7 +50,7 @@ document.querySelector("#transfer-form").addEventListener("submit", async (event
   const data = Object.fromEntries(new FormData(event.currentTarget));
   const result = await prototype.transferEntry({ runner: { ...data } });
   document.querySelector("#transfer-message").textContent = result.ok ? "Transfer complete. The new runner has been sent a new secure link." : runnerMessageForCode(result.code);
-  if (result.ok) { prototype.rememberManagementToken(result.replacementManagementToken); await render(); }
+  if (result.ok) { prototype.forgetManagementToken(); history.replaceState(null, "", "manage.html"); entryPanel.hidden = true; amendPanel.hidden = true; transferPanel.hidden = true; accessPanel.hidden = false; accessMessage.textContent = "Entry transferred. This previous secure link has been revoked and the new runner has been sent their own links."; }
 });
 
 await render();

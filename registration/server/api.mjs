@@ -23,6 +23,8 @@ export function createApi({ service, phase3Integrations = null, environment = "l
     if (method === "POST" && pathname === "/api/v4/declarations/complete") return resultResponse(await phase3Integrations.orders.completeDeclaration(headers["x-declaration-token"], body));
     const declarationAction = pathname.match(/^\/api\/v4\/organiser\/registrations\/([^/]+)\/declaration\/(resend|paper)$/);
     if (method === "POST" && declarationAction) return resultResponse(await (declarationAction[2] === "resend" ? phase3Integrations.orders.resendDeclaration(actor, decodeURIComponent(declarationAction[1])) : phase3Integrations.orders.recordPaperDeclaration(actor, decodeURIComponent(declarationAction[1]))));
+    const organiserTransfer = pathname.match(/^\/api\/v4\/organiser\/registrations\/([^/]+)\/transfer$/);
+    if (method === "POST" && organiserTransfer) return resultResponse(await phase3Integrations.organiserTransfer(actor, decodeURIComponent(organiserTransfer[1]), body));
     if (method === "POST" && pathname === "/api/v3/stripe/webhook") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.webhook(body.rawBody, headers["stripe-signature"]));
@@ -76,6 +78,8 @@ export function createApi({ service, phase3Integrations = null, environment = "l
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.revokeManagementLink(actor, decodeURIComponent(revokeManagement[1])));
     }
+    const resendManagement = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/resend-management$/);
+    if (method === "POST" && resendManagement) return resultResponse(await phase3Integrations.resendManagementLink(actor, decodeURIComponent(resendManagement[1])));
     const refundDecision = pathname.match(/^\/api\/v3\/organiser\/refunds\/([^/]+)\/(approve|reject)$/);
     if (method === "POST" && refundDecision) {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });

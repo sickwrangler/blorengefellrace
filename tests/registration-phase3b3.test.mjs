@@ -6,6 +6,7 @@ import { OrderRegistrationService, DEFAULT_MAX_RUNNERS_PER_ORDER } from "../regi
 import { capacitySummary, decideRefund, requestRefund } from "../registration/server/phase3-domain.mjs";
 import { createStripeGateway, executeApprovedStripeRefund } from "../registration/server/phase3-integrations.mjs";
 import { createApi } from "../registration/server/api.mjs";
+import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
 
 const start = new Date("2026-09-01T12:00:00Z");
 const admin = { authenticated: true, role: "administrator", actorType: "organiser", id: "synthetic-organiser" };
@@ -16,7 +17,7 @@ function setup({ capacity = 120, memberPrice = null, draftRetentionHours = null 
   const state = createDatabase({ environment: "development", registrationState: "test", capacity }); state.event.capacity = capacity; state.event.wfraMemberPricePence = memberPrice;
   const sent = []; const stripeCalls = { checkout: [], refund: [] };
   const stripeGateway = {
-    async createOrderCheckoutSession(input) { stripeCalls.checkout.push(input); return { id: `cs_test_order_${stripeCalls.checkout.length}`, url: "https://checkout.stripe.test/group", expiresAt: new Date(new Date(input.at).getTime() + 30 * 60_000).toISOString() }; },
+    async createOrderCheckoutSession(input) { stripeCalls.checkout.push(input); return { id: `cs_test_order_${stripeCalls.checkout.length}`, url: `https://checkout.stripe.test/group-${stripeCalls.checkout.length}`, expiresAt: new Date(new Date(input.at).getTime() + 30 * 60_000).toISOString() }; },
     async createPartialRefund(input) { stripeCalls.refund.push(input); return { id: `re_test_${stripeCalls.refund.length}`, status: "succeeded" }; }
   };
   const emailAdapter = { kind: "test", async send(message) { sent.push(message); return { delivery: "test", externalCall: false }; } };
@@ -86,9 +87,10 @@ test("Stripe group Checkout contains server prices and minimal non-personal meta
     refunds: { async create() {} }
   };
   const gateway = createStripeGateway({ stripe, environment: "development", secretKey: "sk_test_example_only", webhookSecret: "whsec_example_only" });
-  await gateway.createOrderCheckoutSession({ orderId: "order_test", paymentId: "payment_test", runnerPricesPence: [600, 500], successUrl: "https://development.example/success", cancelUrl: "https://development.example/cancel", at: start });
+  await gateway.createOrderCheckoutSession({ orderId: "order_test", paymentId: "payment_test", checkoutAttemptId: "attempt_test", runnerPricesPence: [600, 500], successUrl: "https://development.example/success", cancelUrl: "https://development.example/cancel", at: start });
   assert.deepEqual(calls[0].input.line_items.map((item) => item.price_data.unit_amount), [600, 500]);
   assert.deepEqual(calls[0].input.metadata, { orderId: "order_test", paymentId: "payment_test", runnerCount: "2" });
+  assert.match(calls[0].options.idempotencyKey, /attempt_test$/);
   assert.equal(JSON.stringify(calls[0]).includes("runner-"), false);
   assert.equal(JSON.stringify(calls[0]).includes("emergency"), false);
 });
@@ -100,14 +102,16 @@ test("v4 API exposes order routes and protects organiser declaration actions", a
     async getOrder(token) { calls.push(["get", token]); return { ok: true, order: { id: "order_test" } }; },
     async recordPaperDeclaration(actor, id) { calls.push(["paper", actor, id]); return actor.authenticated ? { ok: true } : { ok: false, code: "FORBIDDEN" }; }
   };
-  const api = createApi({ service: {}, phase3Integrations: { orders }, environment: "development" });
+  const phase3Integrations = { orders, async organiserTransfer(actor, id) { calls.push(["transfer", actor, id]); return actor.authenticated ? { ok: true } : { ok: false, code: "FORBIDDEN" }; } };
+  const api = createApi({ service: {}, phase3Integrations, environment: "development" });
   const created = await api({ method: "POST", pathname: "/api/v4/orders", body: { purchaserEmail: "synthetic@example.com" }, hostname: "development.example" });
   assert.equal(created.status, 201);
   const current = await api({ method: "GET", pathname: "/api/v4/orders/current", headers: { "x-order-token": "opaque" }, hostname: "development.example" });
   assert.equal(current.status, 200);
   const forbidden = await api({ method: "POST", pathname: "/api/v4/organiser/registrations/reg_test/declaration/paper", hostname: "development.example" });
   assert.equal(forbidden.status, 403);
-  assert.deepEqual(calls.map((item) => item[0]), ["create", "get", "paper"]);
+  const transferForbidden = await api({ method: "POST", pathname: "/api/v4/organiser/registrations/reg_test/transfer", hostname: "development.example", body: { runner: runner(9) } }); assert.equal(transferForbidden.status, 403);
+  assert.deepEqual(calls.map((item) => item[0]), ["create", "get", "paper", "transfer"]);
 });
 
 test("capacity reservation is all-or-nothing at the boundary", async () => {
@@ -180,4 +184,43 @@ test("Checkout expiry releases every runner and scheduler reminders stop after c
 test("draft cleanup is available only with an explicitly configured retention period", async () => {
   const disabled = setup(); const first = await createOrder(disabled.orders); await add(disabled.orders, first.orderToken, 1); assert.equal((await disabled.orders.runScheduledWork(new Date("2026-09-03T12:00:00Z"))).abandonedOrders, 0);
   const enabled = setup({ draftRetentionHours: 24 }); const second = await createOrder(enabled.orders); await add(enabled.orders, second.orderToken, 2); assert.equal((await enabled.orders.runScheduledWork(new Date("2026-09-03T12:00:00Z"))).abandonedOrders, 1); assert.equal((await enabled.orders.getOrder(second.orderToken)).code, "ORDER_TOKEN_INVALID");
+});
+
+test("secure order recovery reuses a valid Checkout and safely replaces an expired one", async () => {
+  const { orders, repository, stripeCalls } = setup({ capacity: 4 }); const created = await createOrder(orders); await add(orders, created.orderToken, 1); await add(orders, created.orderToken, 2);
+  const first = await orders.checkout(created.orderToken, start); assert.equal(first.ok, true); assert.equal(capacitySummary(await repository.read()).remaining, 2);
+  const freshBrowser = await orders.getOrder(created.orderToken); assert.equal(freshBrowser.order.paymentRequired, true); assert.equal(freshBrowser.order.canContinuePayment, true);
+  const resumed = await orders.checkout(created.orderToken, new Date("2026-09-01T12:10:00Z")); assert.equal(resumed.duplicate, true); assert.equal(resumed.checkoutUrl, first.checkoutUrl); assert.equal(stripeCalls.checkout.length, 1);
+  const replacement = await orders.checkout(created.orderToken, new Date("2026-09-01T12:31:00Z")); assert.equal(replacement.ok, true); assert.notEqual(replacement.checkoutUrl, first.checkoutUrl); assert.equal(stripeCalls.checkout.length, 2);
+  const state = await repository.read(); assert.equal(state.payments.length, 1); assert.deepEqual(state.payments[0].checkoutAttempts.map((attempt) => attempt.status), ["expired", "active"]); assert.equal(capacitySummary(state).remaining, 2);
+  assert.notEqual(stripeCalls.checkout[0].checkoutAttemptId, stripeCalls.checkout[1].checkoutAttemptId);
+});
+
+test("expired order retry recalculates price and revalidates all-or-nothing capacity", async () => {
+  const setupResult = setup({ capacity: 3 }); const created = await createOrder(setupResult.orders); await add(setupResult.orders, created.orderToken, 1); await add(setupResult.orders, created.orderToken, 2); await setupResult.orders.checkout(created.orderToken, start);
+  await setupResult.repository.transaction((state) => { state.event.capacity = 1; return { ok: true }; });
+  const rejected = await setupResult.orders.checkout(created.orderToken, new Date("2026-09-01T12:31:00Z")); assert.equal(rejected.code, "GROUP_CAPACITY_UNAVAILABLE"); assert.equal(rejected.availablePlaces, 1); assert.equal(setupResult.stripeCalls.checkout.length, 1); assert.equal(capacitySummary(await setupResult.repository.read()).reserved, 0);
+});
+
+test("organiser transfer preserves payment/place, revokes old links and resets declaration", async () => {
+  const paid = await paidTwo(); const before = await paid.repository.read(); const target = before.registrations[1]; const oldRunnerId = target.runnerId; const paymentId = before.payments[0].id;
+  const priorMessage = paid.sent.find((item) => item.template === "entry_confirmed_declaration_required"); const oldManagementToken = new URL(priorMessage.data.managementUrl).hash.split("token=")[1]; const oldDeclarationToken = new URL(priorMessage.data.secureUrl).hash.split("token=")[1];
+  const phase3 = new Phase3IntegrationService({ repository: paid.repository, stripeGateway: paid.stripeGateway, emailAdapter: { kind: "test", async send(message) { paid.sent.push(message); return { delivery: "test", externalCall: false }; } }, publicBaseUrl: "https://development.example" });
+  const amended = await phase3.amend(oldManagementToken, { phone: "07700 900999", club: "Corrected Club" }, start); assert.equal(amended.ok, true); assert.equal((await paid.repository.read()).registrations[1].runnerId, oldRunnerId);
+  const transferred = await phase3.organiserTransfer(admin, target.id, { runner: runner(3) }, start); assert.equal(transferred.ok, true); assert.equal("replacementManagementToken" in transferred, false);
+  assert.equal((await phase3.managementEntry(oldManagementToken, start)).code, "MANAGEMENT_TOKEN_INVALID"); assert.equal((await paid.orders.inspectDeclaration(oldDeclarationToken)).code, "LINK_UNAVAILABLE");
+  const after = await paid.repository.read(); const registration = after.registrations.find((item) => item.id === target.id);
+  assert.notEqual(registration.runnerId, oldRunnerId); assert.equal(registration.placeStatus, "confirmed"); assert.equal(registration.declarationStatus, "pending"); assert.equal(after.payments[0].id, paymentId); assert.equal(after.payments[0].status, "paid");
+  assert.ok(after.auditEvents.find((item) => item.action === "runner_details_amended")); assert.ok(after.auditEvents.find((item) => item.action === "organiser_entry_transferred" && item.after.cutoffOverride === false));
+  const newDeclaration = [...paid.sent].reverse().find((item) => item.template === "declaration_reminder" && item.registrationId === target.id); const newDeclarationToken = new URL(newDeclaration.data.secureUrl).hash.split("token=")[1];
+  assert.equal((await paid.orders.completeDeclaration(newDeclarationToken, { accepted: true, typedFullName: "Runner 3 Example", completedByNamedRunner: true }, start)).ok, true);
+  const complete = await paid.repository.read(); assert.equal(complete.registrations.find((item) => item.id === target.id).declarationStatus, "complete"); assert.equal(complete.payments[0].status, "paid");
+});
+
+test("organiser transfer after cutoff requires an explicit audited override", async () => {
+  const paid = await paidTwo(); const state = await paid.repository.read(); const target = state.registrations[0];
+  const phase3 = new Phase3IntegrationService({ repository: paid.repository, stripeGateway: paid.stripeGateway, emailAdapter: { kind: "test", async send(message) { paid.sent.push(message); return { delivery: "test", externalCall: false }; } }, publicBaseUrl: "https://development.example" });
+  const afterCutoff = new Date("2026-12-01T12:00:00Z"); assert.equal((await phase3.organiserTransfer(admin, target.id, { runner: runner(4) }, afterCutoff)).code, "ORGANISER_OVERRIDE_REQUIRED");
+  assert.equal((await phase3.organiserTransfer(admin, target.id, { runner: runner(4), overrideCutoff: true }, afterCutoff)).ok, true);
+  const final = await paid.repository.read(); assert.ok(final.auditEvents.find((item) => item.action === "organiser_entry_transferred" && item.after.cutoffOverride === true));
 });
