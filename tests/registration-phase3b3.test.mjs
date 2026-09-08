@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createMemoryRepository } from "../registration/server/repositories.mjs";
+import { createAzureTableRepository, createMemoryRepository } from "../registration/server/repositories.mjs";
 import { createDatabase } from "../registration/server/service.mjs";
 import { OrderRegistrationService, DEFAULT_MAX_RUNNERS_PER_ORDER } from "../registration/server/order-service.mjs";
 import { capacitySummary, decideRefund, requestRefund } from "../registration/server/phase3-domain.mjs";
@@ -168,6 +168,26 @@ test("individual partial refund releases one place and cannot exceed the order p
   const { repository, stripeGateway, stripeCalls } = await paidTwo(); const state = await repository.read(); const target = state.registrations[0]; const requested = requestRefund(state, target.id, { actorType: "runner" }, start); decideRefund(state, requested.request.id, "approved", admin, start);
   const result = await executeApprovedStripeRefund(state, requested.request.id, stripeGateway, admin, start); assert.equal(result.ok, true); assert.equal(stripeCalls.refund[0].amountPence, 600); assert.equal(target.placeStatus, "none"); assert.equal(state.registrations[1].placeStatus, "confirmed"); assert.equal(state.payments[0].status, "paid"); assert.equal(state.orders[0].status, "partially_refunded");
   assert.equal((await executeApprovedStripeRefund(state, requested.request.id, stripeGateway, admin, start)).code, "REFUND_NOT_READY");
+});
+
+test("Stripe refund and notification side effects are not repeated by Azure ETag retries", async () => {
+  const paid = await paidTwo(); let stored = await paid.repository.read(); const target = stored.registrations[1];
+  const requested = requestRefund(stored, target.id, { actorType: "runner" }, start); decideRefund(stored, requested.request.id, "approved", admin, start);
+  let writes = 0; let etag = 1;
+  const repository = createAzureTableRepository({
+    async loadPartition() { return { state: structuredClone(stored), etag: String(etag) }; },
+    async submitTransaction({ after }) {
+      writes += 1;
+      if (writes % 2 === 1) { const error = new Error("synthetic conflict"); error.statusCode = 412; throw error; }
+      stored = structuredClone(after); etag += 1;
+    }
+  });
+  const delivered = [];
+  const phase3 = new Phase3IntegrationService({ repository, stripeGateway: paid.stripeGateway, emailAdapter: { kind: "test", async send(message) { delivered.push(message); return { delivery: "test", externalCall: false }; } }, publicBaseUrl: "https://development.example" });
+  const result = await phase3.refund(admin, requested.request.id, start); const final = await repository.read();
+  assert.equal(result.ok, true); assert.equal(paid.stripeCalls.refund.length, 1); assert.equal(delivered.filter((item) => item.template === "refund_completed").length, 1);
+  assert.equal(final.registrations.find((item) => item.id === target.id).placeStatus, "none"); assert.equal(final.payments[0].refundedAmountPence, 600); assert.equal(capacitySummary(final).remaining, 119);
+  assert.equal(final.communications.filter((item) => item.template === "refund_completed").length, 1); assert.equal(writes, 6);
 });
 
 test("Checkout expiry releases every runner and scheduler reminders stop after completion", async () => {

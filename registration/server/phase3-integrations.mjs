@@ -182,37 +182,57 @@ export function expireStalePaymentReservations(state, at = new Date()) {
   return { ok: true, expired };
 }
 
-export async function executeApprovedStripeRefund(state, refundRequestId, gateway, actor, at = new Date()) {
+export function prepareApprovedStripeRefund(state, refundRequestId, actor, at = new Date()) {
   const request = state.refundRequests.find((item) => item.id === refundRequestId && item.status === "approved");
   const payment = paymentFor(state, request?.registrationId);
   const registration = state.registrations.find((item) => item.id === request?.registrationId && activeRegistration(item));
   if (!request || !payment || !registration || payment.status !== "paid" || payment.refundedRegistrationIds?.includes(registration.id)) return { ok: false, code: "REFUND_NOT_READY" };
+  const partial = Boolean(payment.orderId);
+  const refundAmountPence = partial ? registration.priceActuallyChargedPence : payment.expectedAmountPence;
+  const alreadyRefunded = payment.refundedAmountPence ?? 0;
+  if (!Number.isInteger(refundAmountPence) || alreadyRefunded + refundAmountPence > payment.expectedAmountPence) return { ok: false, code: "REFUND_CAP_EXCEEDED" };
   payment.refundState = "processing"; payment.updatedAt = iso(at);
+  return { ok: true, partial, refundAmountPence, alreadyRefunded, paymentId: payment.id, paymentIntentId: payment.paymentIntentId, registrationId: registration.id, actorType: actor?.actorType ?? "organiser" };
+}
+
+export function completeApprovedStripeRefund(state, prepared, refund, at = new Date()) {
+  const request = state.refundRequests.find((item) => item.id === prepared.refundRequestId && item.status === "approved");
+  const payment = state.payments.find((item) => item.id === prepared.paymentId);
+  const registration = state.registrations.find((item) => item.id === prepared.registrationId && activeRegistration(item));
+  if (!request || !payment || !registration || payment.status !== "paid" || payment.refundedRegistrationIds?.includes(registration.id)) return { ok: false, code: "REFUND_NOT_READY" };
+  if (!refund?.id || !["succeeded", "pending"].includes(refund.status)) return failApprovedStripeRefund(state, prepared, at);
+  payment.refundId = refund.id; payment.refundState = refund.status === "succeeded" ? "refunded" : "pending"; payment.updatedAt = iso(at);
+  request.status = refund.status === "succeeded" ? "refunded" : "approved";
+  if (refund.status === "succeeded") {
+    payment.refundedAmountPence = prepared.alreadyRefunded + prepared.refundAmountPence;
+    payment.refundedRegistrationIds ??= []; payment.refundedRegistrationIds.push(registration.id);
+    payment.status = payment.refundedAmountPence === payment.expectedAmountPence ? "refunded" : "paid";
+    payment.refundedAt = iso(at); request.refundedAt = iso(at); request.placeReleasedAt = iso(at);
+    const order = state.orders?.find((item) => item.id === payment.orderId); if (order) order.status = payment.status === "refunded" ? "refunded" : "partially_refunded";
+    registration.entryStatus = "place_released"; registration.placeStatus = "none"; registration.updatedAt = iso(at);
+    audit(state, "stripe_refund_completed", registration.id, { amountPence: prepared.refundAmountPence, orderStatus: order?.status ?? null }, at, prepared.actorType);
+  }
+  return { ok: true, refundState: payment.refundState, placeReleased: registration.placeStatus === "none", registrationId: registration.id };
+}
+
+export function failApprovedStripeRefund(state, prepared, at = new Date()) {
+  const payment = state.payments.find((item) => item.id === prepared.paymentId);
+  if (payment) { payment.refundState = "failed"; payment.updatedAt = iso(at); }
+  audit(state, "stripe_refund_failed", prepared.registrationId, {}, at, prepared.actorType);
+  return { ok: false, code: "REFUND_FAILED", placeReleased: false };
+}
+
+export async function executeApprovedStripeRefund(state, refundRequestId, gateway, actor, at = new Date()) {
+  const prepared = prepareApprovedStripeRefund(state, refundRequestId, actor, at);
+  if (!prepared.ok) return prepared;
+  prepared.refundRequestId = refundRequestId;
   try {
-    const partial = Boolean(payment.orderId);
-    const refundAmountPence = partial ? registration.priceActuallyChargedPence : payment.expectedAmountPence;
-    const alreadyRefunded = payment.refundedAmountPence ?? 0;
-    if (!Number.isInteger(refundAmountPence) || alreadyRefunded + refundAmountPence > payment.expectedAmountPence) return { ok: false, code: "REFUND_CAP_EXCEEDED" };
-    const refund = partial
-      ? await gateway.createPartialRefund({ paymentIntentId: payment.paymentIntentId, paymentId: payment.id, registrationId: registration.id, amountPence: refundAmountPence })
-      : await gateway.createFullRefund({ paymentIntentId: payment.paymentIntentId, paymentId: payment.id });
-    if (!refund?.id || !["succeeded", "pending"].includes(refund.status)) throw new Error("Refund was not accepted.");
-    payment.refundId = refund.id; payment.refundState = refund.status === "succeeded" ? "refunded" : "pending";
-    request.status = refund.status === "succeeded" ? "refunded" : "approved";
-    if (refund.status === "succeeded") {
-      payment.refundedAmountPence = alreadyRefunded + refundAmountPence;
-      payment.refundedRegistrationIds ??= []; payment.refundedRegistrationIds.push(registration.id);
-      payment.status = payment.refundedAmountPence === payment.expectedAmountPence ? "refunded" : "paid";
-      payment.refundedAt = iso(at); request.refundedAt = iso(at); request.placeReleasedAt = iso(at);
-      const order = state.orders?.find((item) => item.id === payment.orderId); if (order) order.status = payment.status === "refunded" ? "refunded" : "partially_refunded";
-      registration.entryStatus = "place_released"; registration.placeStatus = "none";
-      audit(state, "stripe_refund_completed", registration.id, { amountPence: refundAmountPence, orderStatus: order?.status ?? null }, at, actor?.actorType ?? "organiser");
-    }
-    return { ok: true, refundState: payment.refundState, placeReleased: registration.placeStatus === "none" };
+    const refund = prepared.partial
+      ? await gateway.createPartialRefund({ paymentIntentId: prepared.paymentIntentId, paymentId: prepared.paymentId, registrationId: prepared.registrationId, amountPence: prepared.refundAmountPence })
+      : await gateway.createFullRefund({ paymentIntentId: prepared.paymentIntentId, paymentId: prepared.paymentId });
+    return completeApprovedStripeRefund(state, prepared, refund, at);
   } catch {
-    payment.refundState = "failed"; payment.updatedAt = iso(at);
-    audit(state, "stripe_refund_failed", registration.id, {}, at, actor?.actorType ?? "organiser");
-    return { ok: false, code: "REFUND_FAILED", placeReleased: false };
+    return failApprovedStripeRefund(state, prepared, at);
   }
 }
 

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
 import { ageOnRaceDate, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
-import { beginStripeCheckout, executeApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
+import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService } from "./order-service.mjs";
 
@@ -240,15 +240,34 @@ export class Phase3IntegrationService {
     });
   }
 
-  refund(actor, refundRequestId, at = new Date()) {
+  async refund(actor, refundRequestId, at = new Date()) {
     if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
     if (!this.stripeGateway) return Promise.resolve({ ok: false, code: "PAYMENTS_UNAVAILABLE" });
-    return this.repository.transaction(async (state) => {
-      const result = await executeApprovedStripeRefund(state, refundRequestId, this.stripeGateway, actor, at);
-      const request = state.refundRequests.find((item) => item.id === refundRequestId); const registration = state.registrations.find((item) => item.id === request?.registrationId); const runner = runnerFor(state, registration);
-      if (result.ok && result.refundState === "refunded" && runner) await this.communicate(state, { registrationId: registration.id, template: "refund_completed", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, `refund:${refundRequestId}:completed`, at);
+    const prepared = await this.repository.transaction((state) => {
+      const result = prepareApprovedStripeRefund(state, refundRequestId, actor, at);
+      if (result.ok) result.refundRequestId = refundRequestId;
       return result;
     });
+    if (!prepared.ok) return prepared;
+    let providerRefund;
+    try {
+      providerRefund = prepared.partial
+        ? await this.stripeGateway.createPartialRefund({ paymentIntentId: prepared.paymentIntentId, paymentId: prepared.paymentId, registrationId: prepared.registrationId, amountPence: prepared.refundAmountPence })
+        : await this.stripeGateway.createFullRefund({ paymentIntentId: prepared.paymentIntentId, paymentId: prepared.paymentId });
+    } catch {
+      return this.repository.transaction((state) => failApprovedStripeRefund(state, prepared, at));
+    }
+    const result = await this.repository.transaction((state) => completeApprovedStripeRefund(state, prepared, providerRefund, at));
+    if (result.ok && result.refundState === "refunded") {
+      try {
+        const snapshot = await this.repository.read(); const registration = snapshot.registrations.find((item) => item.id === result.registrationId); const runner = runnerFor(snapshot, registration);
+        const key = `refund:${refundRequestId}:completed`; const before = snapshot.communications.length;
+        if (runner) await this.communicate(snapshot, { registrationId: registration.id, template: "refund_completed", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, key, at);
+        const receipt = snapshot.communications.length > before ? snapshot.communications.at(-1) : null;
+        if (receipt) await this.repository.transaction((state) => { if (!state.communications.some((item) => item.idempotencyKey === key)) state.communications.push(receipt); return { ok: true }; });
+      } catch { /* A notification failure must not roll back a completed refund. */ }
+    }
+    return result;
   }
 
   joinWaitingList(input, at = new Date()) {
