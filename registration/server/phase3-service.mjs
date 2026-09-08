@@ -3,13 +3,14 @@ import { authorize } from "./auth.mjs";
 import { ageOnRaceDate, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund } from "./phase3-domain.mjs";
 import { beginStripeCheckout, executeApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
+import { OrderRegistrationService } from "./order-service.mjs";
 
 const hashToken = (value) => crypto.createHash("sha256").update(String(value ?? "")).digest("hex");
 const iso = (value = new Date()) => new Date(value).toISOString();
 const normalizeEmail = (value) => String(value ?? "").trim().toLowerCase();
 const activeRegistration = (item) => item && !item.deletedAt && !["cancelled", "place_released"].includes(item.entryStatus);
 const runnerFor = (state, registration) => state.runners.find((item) => item.id === registration?.runnerId);
-const paymentFor = (state, registration) => state.payments.find((item) => item.registrationId === registration?.id);
+const paymentFor = (state, registration) => state.payments.find((item) => item.registrationId === registration?.id || item.registrationIds?.includes(registration?.id));
 const refundFor = (state, registration) => [...state.refundRequests].reverse().find((item) => item.registrationId === registration?.id);
 
 function registrationForToken(state, token) {
@@ -36,6 +37,7 @@ function managementView(state, registration, at = new Date()) {
         club: runner.club, wfraMember: runner.wfraMember === true
       },
       entryStatus: registration.entryStatus, placeStatus: registration.placeStatus,
+      declaration: { status: registration.declarationStatus ?? "complete", completionMethod: registration.declarationCompletionMethod ?? "digital_during_entry", clearedToStart: (registration.declarationStatus ?? "complete") === "complete" && registration.placeStatus === "confirmed" },
       payment: { state: stateName, label: labels[stateName] ?? paymentState.label, canContinue: ["created", "not_configured", "failed", "expired"].includes(payment?.status) },
       amendmentEligible: beforeCutoff && activeRegistration(registration),
       transferEligible: beforeCutoff && activeRegistration(registration),
@@ -46,11 +48,12 @@ function managementView(state, registration, at = new Date()) {
 }
 
 export class Phase3IntegrationService {
-  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "" }) {
+  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "", orderConfiguration = {} }) {
     this.repository = repository;
     this.stripeGateway = stripeGateway;
     this.emailAdapter = emailAdapter;
     this.publicBaseUrl = String(publicBaseUrl ?? "").replace(/\/$/, "");
+    this.orders = new OrderRegistrationService({ repository, stripeGateway, emailAdapter, publicBaseUrl, ...orderConfiguration });
   }
 
   managementUrl(token) { return `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(token)}`; }
@@ -124,23 +127,30 @@ export class Phase3IntegrationService {
       const registration = registrationForToken(state, managementToken);
       if (!registration || !activeRegistration(registration)) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
       if (new Date(at) > new Date(state.event.transferRefundCutoffUtc)) return { ok: false, code: "TRANSFER_CUTOFF_PASSED" };
-      const next = input.runner ?? {}; const declaration = input.declaration ?? {};
+      const next = input.runner ?? {};
       const required = ["email", "firstName", "lastName", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "raceCategory", "emergencyContactName", "emergencyContactPhone"];
       if (required.some((field) => !String(next[field] ?? "").trim())) return { ok: false, code: "VALIDATION_ERROR" };
       if (ageOnRaceDate(next.dateOfBirth, state.event.raceDate) < 18) return { ok: false, code: "PARENTAL_CONSENT_REQUIREMENTS_PENDING" };
-      if (declaration.declarationIdentifier !== state.event.declarationIdentifier || declaration.declarationVersion !== state.event.declarationVersion || declaration.accepted !== true || declaration.signatoryRole !== "Competitor" || !String(declaration.typedFullName ?? "").trim()) return { ok: false, code: "DECLARATION_NOT_ACCEPTED" };
+      if (state.registrations.some((item) => item.id !== registration.id && activeRegistration(item) && ["payment_reserved", "confirmed"].includes(item.placeStatus) && normalizeEmail(runnerFor(state, item)?.email) === normalizeEmail(next.email))) return { ok: false, code: "DUPLICATE_ACTIVE_ENTRY" };
       const previous = runnerFor(state, registration);
       const runner = { ...next, id: `runner_${crypto.randomUUID()}`, email: normalizeEmail(next.email), firstName: String(next.firstName).trim(), lastName: String(next.lastName).trim(), wfraMembershipNumber: next.wfraMember === true ? String(next.wfraMembershipNumber ?? "").trim() || null : null, wfraMembershipVerified: false, wfraDiscountApplied: false, transferredAt: iso(at) };
       state.runners.push(runner); registration.runnerId = runner.id; registration.updatedAt = iso(at);
+      registration.declarationStatus = "pending"; registration.declarationCompletionMethod = null;
+      for (const priorDeclaration of (state.declarations ?? []).filter((item) => item.registrationId === registration.id && !item.revokedAt)) priorDeclaration.revokedAt = iso(at);
       const emergency = state.emergencyContacts.find((item) => item.registrationId === registration.id);
       if (emergency) { emergency.name = String(next.emergencyContactName).trim(); emergency.phone = String(next.emergencyContactPhone).trim(); }
       else state.emergencyContacts.push({ id: `emergency_${crypto.randomUUID()}`, registrationId: registration.id, name: String(next.emergencyContactName).trim(), phone: String(next.emergencyContactPhone).trim(), deleteAfterEvent: true });
-      state.consents.push({ id: `consent_${crypto.randomUUID()}`, registrationId: registration.id, termsVersion: state.event.termsVersion, privacyVersion: state.event.privacyVersion, recordedAt: iso(at), declaration: { identifier: declaration.declarationIdentifier, version: declaration.declarationVersion, accepted: true, typedFullName: String(declaration.typedFullName).trim(), signatoryRole: "Competitor", acceptedAt: iso(at), contentStatus: state.event.declarationContentStatus } });
       const issued = issueManagementToken(state, registration.id, { actorType: "runner" }, at);
-      state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: "runner", actorId: null, action: "entry_transferred", subjectId: registration.id, before: null, after: { declarationVersion: declaration.declarationVersion }, environment: state.environment });
+      state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: "runner", actorId: null, action: "entry_transferred", subjectId: registration.id, before: null, after: { declarationStatus: "pending" }, environment: state.environment });
       await this.communicate(state, { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} }, `registration:${registration.id}:transfer-old:${registration.updatedAt}`, at);
-      await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token) } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
-      return { ...managementView(state, registration, at), replacementManagementToken: issued.token };
+      await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
+      return { ...managementView(state, registration, at), replacementManagementToken: issued.token, transferredRegistrationId: registration.id };
+    }).then(async (result) => {
+      if (result.ok) {
+        await this.orders.resendDeclaration({ authenticated: true, role: "administrator", actorType: "system", id: "transfer-declaration" }, result.transferredRegistrationId, at);
+        delete result.transferredRegistrationId;
+      }
+      return result;
     });
   }
 
@@ -180,9 +190,15 @@ export class Phase3IntegrationService {
     });
   }
 
-  webhook(rawBody, signature, at = new Date()) {
+  async webhook(rawBody, signature, at = new Date()) {
     if (!this.stripeGateway) return Promise.resolve({ ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
     let event; try { event = this.stripeGateway.verifyWebhook(rawBody, signature); } catch { return Promise.resolve({ ok: false, code: "INVALID_WEBHOOK_SIGNATURE" }); }
+    if (event?.data?.object?.metadata?.orderId) return this.orders.webhook(event, at);
+    const providerPaymentIntent = event?.data?.object?.payment_intent?.id ?? event?.data?.object?.payment_intent;
+    if (providerPaymentIntent) {
+      const snapshot = await this.repository.read();
+      if (snapshot.payments.some((item) => item.orderId && item.paymentIntentId === providerPaymentIntent)) return this.orders.webhook(event, at);
+    }
     return this.repository.transaction(async (state) => {
       const result = reconcileStripeEvent(state, event, { at });
       if (!result.ok || result.duplicate) return result;
@@ -264,6 +280,10 @@ export class Phase3IntegrationService {
         }
       };
       return result;
+    }).then(async (result) => {
+      if (!result.ok) return result;
+      const orderResult = await this.orders.runScheduledWork(at);
+      return { ...result, declarationReminders: orderResult.declarationReminders, abandonedOrders: orderResult.abandonedOrders };
     });
   }
 }

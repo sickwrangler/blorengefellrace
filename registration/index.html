@@ -30,6 +30,7 @@
         <p class="lede">In development, this journey accepts synthetic information only. It creates no real race entry, takes no money and sends no email.</p>
         <div class="status-grid" aria-live="polite"><div><span>Places</span><strong id="status-places">0 of 120</strong></div><div><span>Waiting list</span><strong id="status-waiting">0</strong></div><div><span>Standard entry fee</span><strong id="status-price">£6.00</strong></div></div>
         <div id="runner-recovery" class="form-alert" role="alert" hidden></div>
+        <label>Purchaser email address <span class="hint">Used for the group payment summary; synthetic address only</span><input id="purchaser-email" type="email" value="alex.runner@example.com" required></label>
         <div class="form-actions"><button id="start-test" class="button" type="button">Start a test registration</button><a class="secondary-link" href="dashboard.html">View organiser test area</a></div>
         <button id="reset-test" class="text-button" type="button">Reset test</button>
       </section>
@@ -39,7 +40,7 @@
         <form id="registration-form" class="prototype-card" novalidate>
           <div id="form-alert" class="form-alert" role="alert" tabindex="-1" hidden></div>
           <section data-stage="1" aria-labelledby="runner-heading">
-            <h2 id="runner-heading">Your details</h2>
+            <h2 id="runner-heading">Runner details</h2>
             <p>Use synthetic information only.</p>
             <div class="field-grid">
               <label>Email address <span class="hint">Reserved example address in development</span><input name="email" type="email" autocomplete="email" required value="alex.runner@example.com"></label>
@@ -70,24 +71,30 @@
             <label class="checkbox-field"><input name="acceptPrivacy" type="checkbox" required> I acknowledge the prototype privacy notice and will use synthetic data only.</label>
             <div class="declaration-panel">
               <h3>WFRA competitor declaration</h3>
+              <fieldset class="choice-group"><legend>When will this runner complete their declaration?</legend><label class="checkbox-field"><input name="declarationTiming" type="radio" value="now" checked> The named runner is here and will complete it now</label><label class="checkbox-field"><input name="declarationTiming" type="radio" value="later"> Runner will complete this later</label></fieldset>
+              <div id="declaration-fields">
+              <p><strong>This declaration must be accepted by the runner named above.</strong> The purchaser must not sign for another adult.</p>
               <div id="declaration-content"></div>
               <p><a id="safety-requirements-link" href="https://www.welshfellrunnersassociation.org.uk/en/info-for-runners#safety-requirements-for-competitors" target="_blank" rel="noopener">WFRA Safety Requirements for Competitors</a></p>
               <label>Who is signing?<select name="declarationSignatoryRole" required><option value="">Select one</option><option value="Competitor" selected>Competitor</option><option value="Parent / Legal Guardian">Parent / Legal Guardian</option></select></label>
               <label>Enter your full name to sign the declaration <input name="declarationName" autocomplete="name" required value="Alex Example"></label>
               <label class="checkbox-field"><input name="acceptDeclaration" type="checkbox" required> I accept the WFRA declaration above.</label>
+              <label class="checkbox-field"><input name="completedByNamedRunner" type="checkbox" required> I confirm I am the runner named in this entry and I am completing this declaration myself.</label>
+              </div>
             </div>
             <div class="form-actions"><button id="race-back" class="button button--quiet" type="button">Back</button><button id="race-continue" class="button" type="button">Continue</button></div>
           </section>
 
           <section data-stage="3" aria-labelledby="review-heading" hidden>
-            <h2 id="review-heading">Review and submit</h2><dl id="review-list" class="review-list"></dl>
-            <div class="form-actions"><button id="review-back" class="button button--quiet" type="button">Back and edit</button><button id="submit-test" class="button" type="submit">Submit test entry</button></div>
+            <h2 id="review-heading">Review this runner</h2><dl id="review-list" class="review-list"></dl>
+            <div class="form-actions"><button id="review-back" class="button button--quiet" type="button">Back and edit</button><button id="submit-test" class="button" type="submit">Add runner to order</button></div>
+            <div id="order-review" hidden><h3>Your entries</h3><div id="order-runner-list" class="entrant-list"></div><p><strong>Order total: <span id="order-total">£0.00</span></strong></p><div class="form-actions"><button id="add-another-runner" class="button button--quiet" type="button">Add another runner</button><button id="continue-order-payment" class="button" type="button">Continue to payment</button></div></div>
           </section>
 
           <section data-stage="4" aria-labelledby="payment-heading" hidden>
             <div id="payment-choice">
               <h2 id="payment-heading">Payment and confirmation</h2>
-              <p>Test reference: <strong id="payment-reference"></strong></p>
+              <p><span id="payment-runner-count">0</span> runner(s) · total <strong id="payment-order-total">£0.00</strong></p>
               <p id="payment-availability" class="noteAlt">Payments are not yet enabled in this development environment. No payment will be attempted.</p>
               <div class="form-actions"><button id="continue-payment" class="button" type="button">Continue to payment</button><a id="view-payment-status" class="button button--quiet" href="payment-return.html">View payment status</a></div>
             </div>

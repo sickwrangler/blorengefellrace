@@ -39,6 +39,8 @@ export const PRODUCTION_FILES = Object.freeze([
 
 export const DEVELOPMENT_REGISTRATION_FILES = Object.freeze([
   "registration/declarations.mjs",
+  "registration/declaration.html",
+  "registration/declaration.mjs",
   "registration/dashboard.html",
   "registration/dashboard.mjs",
   "registration/index.html",
@@ -71,6 +73,7 @@ const DEVELOPMENT_API_COPIES = Object.freeze([
   ["registration/server/phase3-domain.mjs", "src/shared/server/phase3-domain.mjs"],
   ["registration/server/phase3-integrations.mjs", "src/shared/server/phase3-integrations.mjs"],
   ["registration/server/phase3-service.mjs", "src/shared/server/phase3-service.mjs"],
+  ["registration/server/order-service.mjs", "src/shared/server/order-service.mjs"],
   ["registration/server/development-email.mjs", "src/shared/server/development-email.mjs"],
   ["registration/server/email-templates.mjs", "src/shared/server/email-templates.mjs"],
   ["registration/server/communications.mjs", "src/shared/server/communications.mjs"],
@@ -146,7 +149,8 @@ function developmentConfiguration() {
     routes: [
       { route: "/registration/dashboard.html", allowedRoles: ["organiser"] },
       { route: "/api/v2/organiser/*", allowedRoles: ["organiser"] },
-      { route: "/api/v3/organiser/*", allowedRoles: ["organiser"] }
+      { route: "/api/v3/organiser/*", allowedRoles: ["organiser"] },
+      { route: "/api/v4/organiser/*", allowedRoles: ["organiser"] }
     ],
     responseOverrides: {
       "401": { redirect: "/.auth/login/aad?post_login_redirect_uri=.referrer", statusCode: 302 },

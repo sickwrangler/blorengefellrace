@@ -117,7 +117,7 @@ To validate the managed development API package without using any Azure credenti
 npm ci --prefix api --ignore-scripts
 node scripts/prepare-registration-api.mjs
 node scripts/validate-registration.mjs
-node --test tests/registration.test.mjs tests/registration-phase2.test.mjs
+node --test tests/*.test.mjs
 ```
 
 The preparation step creates ignored copies of the validated server modules inside the deployable API package. Never add `api/src/shared/` or `api/node_modules/` to Git.

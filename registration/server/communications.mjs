@@ -16,6 +16,7 @@ export async function deliverRegistrationCommunication(state, email, message, { 
     id: `communication_${crypto.randomUUID()}`,
     idempotencyKey,
     registrationId: message.registrationId ?? null,
+    orderId: message.orderId ?? null,
     waitingListId: message.waitingListId ?? null,
     template: message.template,
     intendedRecipientAddress: String(message.intendedRecipientAddress ?? "").trim().toLowerCase(),

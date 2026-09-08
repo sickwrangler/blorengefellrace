@@ -48,6 +48,19 @@ export function createStripeGateway({ stripe, environment = "development", secre
       }, { idempotencyKey: `checkout-${paymentId}` });
       return { id: session.id, url: session.url, expiresAt: new Date(expiresAt * 1000).toISOString() };
     },
+    async createOrderCheckoutSession({ orderId, paymentId, runnerPricesPence, successUrl, cancelUrl, at = new Date() }) {
+      if (!Array.isArray(runnerPricesPence) || runnerPricesPence.length < 1 || runnerPricesPence.some((amount) => !Number.isInteger(amount) || amount < 1)) throw new Error("Invalid server-calculated order price.");
+      const expiresAt = Math.floor(new Date(at).getTime() / 1000) + reservationMinutes * 60;
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        line_items: runnerPricesPence.map((unit_amount) => ({ quantity: 1, price_data: { currency: PAYMENT_CURRENCY, unit_amount, product_data: { name: "Blorenge Fell Race entry" } } })),
+        expires_at: expiresAt,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: { orderId, paymentId, runnerCount: String(runnerPricesPence.length) }
+      }, { idempotencyKey: `checkout-order-${paymentId}` });
+      return { id: session.id, url: session.url, expiresAt: new Date(expiresAt * 1000).toISOString() };
+    },
     verifyWebhook(rawBody, signature) {
       if (!(typeof rawBody === "string" || Buffer.isBuffer(rawBody)) || !signature) throw new Error("Stripe webhook signature verification failed.");
       return stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
@@ -55,12 +68,16 @@ export function createStripeGateway({ stripe, environment = "development", secre
     async createFullRefund({ paymentIntentId, paymentId }) {
       if (!paymentIntentId) throw new Error("A reconciled Stripe payment is required for refund.");
       return stripe.refunds.create({ payment_intent: paymentIntentId }, { idempotencyKey: `refund-${paymentId}` });
+    },
+    async createPartialRefund({ paymentIntentId, paymentId, registrationId, amountPence }) {
+      if (!paymentIntentId || !Number.isInteger(amountPence) || amountPence < 1) throw new Error("A valid reconciled payment and refund amount are required.");
+      return stripe.refunds.create({ payment_intent: paymentIntentId, amount: amountPence, metadata: { registrationId } }, { idempotencyKey: `refund-${paymentId}-${registrationId}` });
     }
   });
 }
 
 function paymentFor(state, registrationId) {
-  return state.payments.find((item) => item.registrationId === registrationId);
+  return state.payments.find((item) => item.registrationId === registrationId || item.registrationIds?.includes(registrationId));
 }
 
 export async function beginStripeCheckout(state, registrationId, gateway, { successUrl, cancelUrl, at = new Date() } = {}) {
@@ -168,17 +185,27 @@ export async function executeApprovedStripeRefund(state, refundRequestId, gatewa
   const request = state.refundRequests.find((item) => item.id === refundRequestId && item.status === "approved");
   const payment = paymentFor(state, request?.registrationId);
   const registration = state.registrations.find((item) => item.id === request?.registrationId && activeRegistration(item));
-  if (!request || !payment || !registration || payment.status !== "paid") return { ok: false, code: "REFUND_NOT_READY" };
+  if (!request || !payment || !registration || payment.status !== "paid" || payment.refundedRegistrationIds?.includes(registration.id)) return { ok: false, code: "REFUND_NOT_READY" };
   payment.refundState = "processing"; payment.updatedAt = iso(at);
   try {
-    const refund = await gateway.createFullRefund({ paymentIntentId: payment.paymentIntentId, paymentId: payment.id });
+    const partial = Boolean(payment.orderId);
+    const refundAmountPence = partial ? registration.priceActuallyChargedPence : payment.expectedAmountPence;
+    const alreadyRefunded = payment.refundedAmountPence ?? 0;
+    if (!Number.isInteger(refundAmountPence) || alreadyRefunded + refundAmountPence > payment.expectedAmountPence) return { ok: false, code: "REFUND_CAP_EXCEEDED" };
+    const refund = partial
+      ? await gateway.createPartialRefund({ paymentIntentId: payment.paymentIntentId, paymentId: payment.id, registrationId: registration.id, amountPence: refundAmountPence })
+      : await gateway.createFullRefund({ paymentIntentId: payment.paymentIntentId, paymentId: payment.id });
     if (!refund?.id || !["succeeded", "pending"].includes(refund.status)) throw new Error("Refund was not accepted.");
     payment.refundId = refund.id; payment.refundState = refund.status === "succeeded" ? "refunded" : "pending";
     request.status = refund.status === "succeeded" ? "refunded" : "approved";
     if (refund.status === "succeeded") {
-      payment.status = "refunded"; payment.refundedAt = iso(at); request.refundedAt = iso(at); request.placeReleasedAt = iso(at);
+      payment.refundedAmountPence = alreadyRefunded + refundAmountPence;
+      payment.refundedRegistrationIds ??= []; payment.refundedRegistrationIds.push(registration.id);
+      payment.status = payment.refundedAmountPence === payment.expectedAmountPence ? "refunded" : "paid";
+      payment.refundedAt = iso(at); request.refundedAt = iso(at); request.placeReleasedAt = iso(at);
+      const order = state.orders?.find((item) => item.id === payment.orderId); if (order) order.status = payment.status === "refunded" ? "refunded" : "partially_refunded";
       registration.entryStatus = "place_released"; registration.placeStatus = "none";
-      audit(state, "stripe_refund_completed", registration.id, {}, at, actor?.actorType ?? "organiser");
+      audit(state, "stripe_refund_completed", registration.id, { amountPence: refundAmountPence, orderStatus: order?.status ?? null }, at, actor?.actorType ?? "organiser");
     }
     return { ok: true, refundState: payment.refundState, placeReleased: registration.placeStatus === "none" };
   } catch {

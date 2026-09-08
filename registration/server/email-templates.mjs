@@ -18,6 +18,10 @@ const templates = Object.freeze({
   waiting_list_declined: ["Blorenge Fell Race place offer declined", "Your place offer has been declined and released to the next person."],
   waiting_list_expired: ["Blorenge Fell Race place offer expired", "Your 48-hour place offer has expired and the place has been released."],
   registration_cancelled: ["Blorenge Fell Race entry cancelled", "This race entry has been cancelled."],
+  order_payment_confirmed: ["Blorenge Fell Race group payment confirmed", "Your group payment has been received. Each runner has their own entry and will receive their own secure communication."],
+  order_saved: ["Continue your Blorenge Fell Race group entry", "Your unpaid group order has been saved. Use this secure link to add, edit or remove runners and continue to payment."],
+  entry_confirmed_declaration_required: ["Blorenge Fell Race entry confirmed — declaration required", "Your race place has been paid for and confirmed. You must personally complete the WFRA declaration before you can start the race."],
+  declaration_reminder: ["Blorenge Fell Race declaration reminder", "Your race place remains confirmed. Please personally complete the WFRA declaration before race day."],
 });
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -30,10 +34,15 @@ export function renderRegistrationEmail(template, data = {}) {
   if (data.expiresAt) lines.push(`Expires: ${new Date(data.expiresAt).toLocaleString("en-GB", { timeZone: "Europe/London" })}`);
   if (data.runnerName) lines.push(`Runner: ${data.runnerName}`);
   if (data.status) lines.push(`Status: ${data.status}`);
+  if (data.runnerCount) lines.push(`Entries: ${data.runnerCount}`);
+  if (Number.isInteger(data.amountPence)) lines.push(`Payment: £${(data.amountPence / 100).toFixed(2)}`);
   if (data.secureUrl) lines.push(`Secure entry link: ${data.secureUrl}`);
+  if (data.managementUrl) lines.push(`Manage your entry: ${data.managementUrl}`);
   const text = lines.join("\n\n");
   const html = lines.map((line) => line.startsWith("Secure entry link: ")
     ? `<p><a href="${escapeHtml(data.secureUrl)}">Open your secure entry page</a></p>`
+    : line.startsWith("Manage your entry: ")
+      ? `<p><a href="${escapeHtml(data.managementUrl)}">Manage your entry</a></p>`
     : `<p>${escapeHtml(line)}</p>`).join("");
   return { subject: selected[0], text, html };
 }

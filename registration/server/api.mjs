@@ -6,9 +6,23 @@ const resultResponse = (result, success = 200) => response(result.ok ? success :
 export function createApi({ service, phase3Integrations = null, environment = "local" }) {
   const attempts = new Map();
   return async function handle({ method, pathname, headers = {}, body = {}, hostname = "127.0.0.1", query = {} }) {
-    if (!pathname.startsWith("/api/v2/") && !pathname.startsWith("/api/v3/")) return response(404, { ok: false, code: "NOT_FOUND" });
+    if (!pathname.startsWith("/api/v2/") && !pathname.startsWith("/api/v3/") && !pathname.startsWith("/api/v4/")) return response(404, { ok: false, code: "NOT_FOUND" });
     const actor = actorForRequest({ environment, hostname, headers });
-    if (method === "POST" && pathname !== "/api/v3/stripe/webhook" && !pathname.startsWith("/api/v2/organiser/") && !pathname.startsWith("/api/v3/organiser/")) { const key = `${hostname}:${pathname}`; const current = attempts.get(key) ?? { startedAt: Date.now(), count: 0 }; if (Date.now() - current.startedAt > 60_000) { current.startedAt = Date.now(); current.count = 0; } current.count += 1; attempts.set(key, current); if (current.count > 30) return response(429, { ok: false, code: "RATE_LIMITED" }, { "retry-after": "60" }); }
+    if (method === "POST" && pathname !== "/api/v3/stripe/webhook" && !pathname.startsWith("/api/v2/organiser/") && !pathname.startsWith("/api/v3/organiser/") && !pathname.startsWith("/api/v4/organiser/")) { const key = `${hostname}:${pathname}`; const current = attempts.get(key) ?? { startedAt: Date.now(), count: 0 }; if (Date.now() - current.startedAt > 60_000) { current.startedAt = Date.now(); current.count = 0; } current.count += 1; attempts.set(key, current); if (current.count > 30) return response(429, { ok: false, code: "RATE_LIMITED" }, { "retry-after": "60" }); }
+    if (pathname.startsWith("/api/v4/") && !phase3Integrations?.orders) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+    if (method === "POST" && pathname === "/api/v4/orders") return resultResponse(await phase3Integrations.orders.createOrder(body), 201);
+    if (method === "GET" && pathname === "/api/v4/orders/current") return resultResponse(await phase3Integrations.orders.getOrder(headers["x-order-token"]));
+    if (method === "POST" && pathname === "/api/v4/orders/runners") return resultResponse(await phase3Integrations.orders.addRunner(headers["x-order-token"], body), 201);
+    const updateOrderRunner = pathname.match(/^\/api\/v4\/orders\/runners\/([^/]+)$/);
+    if (method === "POST" && updateOrderRunner) return resultResponse(await phase3Integrations.orders.updateRunner(headers["x-order-token"], decodeURIComponent(updateOrderRunner[1]), body));
+    const removeOrderRunner = pathname.match(/^\/api\/v4\/orders\/runners\/([^/]+)\/remove$/);
+    if (method === "POST" && removeOrderRunner) return resultResponse(await phase3Integrations.orders.removeRunner(headers["x-order-token"], decodeURIComponent(removeOrderRunner[1])));
+    if (method === "POST" && pathname === "/api/v4/orders/checkout") return resultResponse(await phase3Integrations.orders.checkout(headers["x-order-token"]));
+    if (method === "GET" && pathname === "/api/v4/declarations/entry") return resultResponse(await phase3Integrations.orders.inspectDeclaration(headers["x-declaration-token"]));
+    if (method === "POST" && pathname === "/api/v4/declarations/recover") return response(202, await phase3Integrations.orders.recoverDeclarationLink(body.email));
+    if (method === "POST" && pathname === "/api/v4/declarations/complete") return resultResponse(await phase3Integrations.orders.completeDeclaration(headers["x-declaration-token"], body));
+    const declarationAction = pathname.match(/^\/api\/v4\/organiser\/registrations\/([^/]+)\/declaration\/(resend|paper)$/);
+    if (method === "POST" && declarationAction) return resultResponse(await (declarationAction[2] === "resend" ? phase3Integrations.orders.resendDeclaration(actor, decodeURIComponent(declarationAction[1])) : phase3Integrations.orders.recordPaperDeclaration(actor, decodeURIComponent(declarationAction[1]))));
     if (method === "POST" && pathname === "/api/v3/stripe/webhook") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.webhook(body.rawBody, headers["stripe-signature"]));

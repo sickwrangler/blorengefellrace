@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 3B.2 is complete in the isolated stable development environment. It adds communications, runner self-service and reliable scheduled waiting-list processing on the Phase 3 feature branch. External payment and email remain independently fail-closed unless the isolated development integrations are explicitly enabled and fully configured. Production is unchanged and contains no registration artifact.
+Phase 3B.2 is complete in the isolated stable development environment. Phase 3B.3 adds the multi-runner order, individual declaration and per-runner refund model on the Phase 3 feature branch. External payment and email remain independently fail-closed unless the isolated development integrations are explicitly enabled and fully configured. Production is unchanged and contains no registration artifact.
 
 No Stripe live key is accepted in development. No email is delivered to a runner-supplied address. Missing provider configuration fails closed.
 
@@ -39,11 +39,11 @@ Supported lifecycle events are Checkout completion, Checkout expiry, asynchronou
 
 ### Refund state
 
-Runner request → organiser approval/rejection → Stripe full-refund request → server reconciliation → place release. Normal requests remain subject to the 28 October 2026 23:59 Europe/London cutoff; an exceptional organiser action remains audited. A failed refund does not release the place. Partial refunds, admin fees and retained processing charges are not implemented.
+Runner request → organiser approval/rejection → Stripe refund request → server reconciliation → place release. A single-runner order uses a full refund; a group order refunds that registration's server-calculated price only and becomes partially refunded while the other registrations remain confirmed. Cumulative refunds are capped at the original order payment. Normal requests remain subject to the 28 October 2026 23:59 Europe/London cutoff; an exceptional organiser action remains audited. A failed refund does not release the place. Admin fees and retained processing charges are not implemented.
 
 ## Controlled development email
 
-Nineteen English templates cover payment, entry management, amendments/transfers, refunds, cancellation and waiting-list events. Template data is provider-neutral and scoped to an individual registration so a later order/purchaser summary can be added without replacing runner communications.
+Twenty-three English templates cover saved orders, group and individual payment, declarations, entry management, amendments/transfers, refunds, cancellation and waiting-list events. Template data is provider-neutral and scoped to either an order or one individual registration.
 
 The development adapter has two modes:
 
@@ -53,6 +53,20 @@ The development adapter has two modes:
 Safe recipients and provider credentials are runtime configuration only. Actual addresses are neither committed nor returned in API responses. Management and offer tokens may appear in their intended email or one-time creation response, but not in logs or audit payloads.
 
 The preferred production authentication is a managed identity with the minimum ACS email role. The current managed Static Web Apps Functions environment has not been proven to support that identity model. Phase 3B therefore supports either `DefaultAzureCredential` with an endpoint or an ACS connection string held only in isolated runtime secret configuration. No service-plan or hosting migration should be made solely for managed identity without a separate cost/architecture approval.
+
+## Multi-runner orders and declarations
+
+One purchaser may save an unpaid order containing one to five adult registrations, edit or remove its runners, and recover it through an opaque secure order link. Each adult must have a unique normalized email address within the order and across active entries. The unresolved approved parent/legal-guardian route means entrants aged 16 or 17 remain blocked in this phase.
+
+Order, registration, payment and declaration are separate states. One Stripe Checkout covers the sum of the server-calculated prices for every registration in the order. Capacity is not reserved while an order is a draft; Checkout atomically reserves all requested places or none. Checkout success confirms every registration exactly once. It is valid for a runner to have a paid, confirmed race place while their declaration remains outstanding. Every runner must complete the required declaration before being permitted to start the race.
+
+The named runner may accept the declaration during order entry when physically present, or defer it without blocking Checkout. After payment, each outstanding runner receives a purpose-bound, registration-specific declaration link; the raw token is carried in the URL fragment and only its hash is stored. Digital completion records the current declaration identifier/version, runner name, server timestamp and completion method. A race-day paper declaration is recorded as `paper_in_person` by an explicit audited organiser action and is never represented as a digital signature. Transfers reset the declaration and rotate individual management credentials.
+
+The initial configurable reminder policy is deliberately proportionate: send the declaration link immediately after payment, one follow-up seven days later if still outstanding, and one final reminder three days before the race if still outstanding. Persistent business keys make reminders idempotent, and completion suppresses all later reminders. These timings are configuration, not a final WFRA policy decision.
+
+Checkout reservations are released by the scheduler after their existing 30-minute expiry. Stale draft cleanup is implemented as an optional configured retention period but remains disabled until the organiser approves a draft-retention duration; no long-term retention period is silently invented.
+
+Waiting-list handling remains individual. A group that cannot fit is not split and its runners are not automatically wait-listed.
 
 ## Waiting-list and scheduled work
 
@@ -66,7 +80,7 @@ The Function has zero always-ready instances and uses its system-assigned manage
 
 Each registration has its own opaque management token. Only a SHA-256 hash is persisted. The emailed URL places the raw token in the URL fragment so it is not sent in ordinary HTTP request paths; browser code immediately moves it into session storage and removes the fragment from the visible address. Race reference alone never authenticates a runner.
 
-The management page shows runner, entry, payment/refund, eligibility and race-number state without provider/database identifiers. It can continue an unpaid or expired payment, request a refund, make limited non-identity amendments and initiate a transfer. Transfer requires a complete new adult runner record and fresh WFRA declaration evidence, invalidates the previous token immediately and sends a new registration-specific link.
+The management page shows runner, entry, payment/refund, declaration eligibility and race-number state without provider/database identifiers. It can continue an unpaid or expired payment, request an individual refund, make limited non-identity amendments and initiate a transfer. Transfer requires a complete new adult runner record, invalidates the previous token immediately, resets the declaration to pending and sends new registration-specific links.
 
 Recovery accepts an email address but always returns the same generic response. Matching is server-side, attempts are stored as email hashes and limited to three successful rotations per address per hour. A successful match rotates the token and sends the replacement only through the controlled development recipient redirect. Stored communication receipts omit secure URLs and tokens.
 
@@ -84,6 +98,10 @@ Values belong only in isolated development runtime settings:
 - `REGISTRATION_EMAIL_SAFE_RECIPIENTS`
 - `REGISTRATION_EMAIL_SENDER`
 - `ACS_EMAIL_ENDPOINT` or `ACS_EMAIL_CONNECTION_STRING`
+- `REGISTRATION_MAX_RUNNERS_PER_ORDER` — defaults to 5 and must not exceed the reviewed UI/domain limit
+- `REGISTRATION_DECLARATION_REMINDER_DAYS` — defaults to 7 days after payment
+- `REGISTRATION_DECLARATION_FINAL_DAYS` — defaults to 3 days before the race
+- `REGISTRATION_DRAFT_RETENTION_HOURS` — optional; stale draft cleanup remains disabled when absent
 
 The existing storage settings remain required. Stripe and ACS Email have independent controls, so configuring a credential alone cannot enable either provider. Development rejects Stripe live-mode server credentials without logging or returning their values. The browser has no live/test selector.
 

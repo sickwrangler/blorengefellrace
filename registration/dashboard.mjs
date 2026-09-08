@@ -20,9 +20,11 @@ async function render() {
   const reserved = active.filter((item) => item.placeStatus === "payment_reserved").length;
   const waiting = active.filter((item) => item.entryStatus === "waiting_list").length;
   const attention = active.filter((item) => ["created", "not_configured", "declined", "abandoned", "failed", "expired"].includes(item.paymentStatus)).length;
+  const declarations = active.filter((item) => item.placeStatus === "confirmed" && item.declarationStatus === "pending").length;
   document.querySelector("#summary-accepted").textContent = accepted;
   document.querySelector("#summary-waiting").textContent = waiting;
   document.querySelector("#summary-payments").textContent = attention;
+  document.querySelector("#summary-declarations").textContent = declarations;
   document.querySelector("#summary-remaining").textContent = Math.max(0, currentState.event.capacity - accepted - reserved);
   const environment = currentState.environment === "production" ? "Production" : "Development";
   const currentOperationalState = currentState.phase3RegistrationState ?? "CLOSED";
@@ -80,7 +82,9 @@ async function renderAudit(item) {
   if (!result.events.length) { const li = document.createElement("li"); li.textContent = "No audit events recorded for this test entry."; list.append(li); }
 }
 function filteredEntries() {
-  return queryRegistrations(currentState, { search: document.querySelector("#search").value, entry: document.querySelector("#entry-filter").value, payment: document.querySelector("#payment-filter").value });
+  const entries = queryRegistrations(currentState, { search: document.querySelector("#search").value, entry: document.querySelector("#entry-filter").value, payment: document.querySelector("#payment-filter").value });
+  const declaration = document.querySelector("#declaration-filter").value;
+  return declaration ? entries.filter((item) => item.declarationStatus === declaration) : entries;
 }
 function renderList() {
   const entries = filteredEntries(); const list = document.querySelector("#entrant-list"); list.replaceChildren();
@@ -90,7 +94,7 @@ function renderList() {
     const heading = document.createElement("h3"); heading.textContent = `${item.runner.firstName} ${item.runner.lastName}`;
     const reference = document.createElement("p"); reference.className = "entrant-reference"; reference.textContent = item.testReference;
     const facts = document.createElement("dl"); facts.className = "entrant-facts";
-    for (const [label, value] of [["Club", item.runner.club], ["Entry", item.entryStatus.replace("_", " ")], ["Payment", item.paymentStatus.replaceAll("_", " ")], ["Race number", item.raceNumber ?? "Not assigned"]]) {
+    for (const [label, value] of [["Club", item.runner.club], ["Entry", item.entryStatus.replace("_", " ")], ["Payment", item.paymentStatus.replaceAll("_", " ")], ["Declaration", item.declarationStatus === "complete" ? "Complete" : "Required"], ["Race number", item.raceNumber ?? "Not assigned"]]) {
       const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; facts.append(dt, dd);
     }
     const button = document.createElement("button"); button.className = "button button--quiet"; button.type = "button"; button.textContent = "View entry";
@@ -108,7 +112,7 @@ function renderDetail(item) {
   document.querySelector("#detail-title").textContent = `${item.runner.firstName} ${item.runner.lastName}`;
   document.querySelector("#detail-reference").textContent = item.testReference;
   const money = (value, currency = "gbp") => value == null ? "Not recorded" : `${new Intl.NumberFormat("en-GB", { style: "currency", currency: String(currency).toUpperCase() }).format(value / 100)} ${String(currency).toUpperCase()}`;
-  const fields = { "Email address": item.runner.email, "Phone number": item.runner.phone, "Club": item.runner.club, "Race category": item.runner.genderCategory, "WFRA member?": item.runner.wfraMember ? "Yes (self-declared, not verified)" : "No", "WFRA membership number": item.runner.wfraMembershipNumber ?? "Not supplied", "Entry status": item.entryStatus.replace("_", " "), "Place status": item.placeStatus.replaceAll("_", " "), "Payment status": item.paymentStatus.replaceAll("_", " "), "Expected charge": money(item.payment?.expectedAmountPence, item.payment?.currency), "Actual charge": money(item.payment?.actualPaidAmountPence, item.payment?.currency), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact name": item.runner.emergencyName, "Emergency contact phone number": item.runner.emergencyPhone, "Price calculated by server": item.pricing?.priceActuallyChargedPence == null ? "Not recorded" : `£${(item.pricing.priceActuallyChargedPence / 100).toFixed(2)} · ${item.pricing.adjustmentReason}` };
+  const fields = { "Email address": item.runner.email, "Phone number": item.runner.phone, "Club": item.runner.club, "Race category": item.runner.genderCategory, "WFRA member?": item.runner.wfraMember ? "Yes (self-declared, not verified)" : "No", "WFRA membership number": item.runner.wfraMembershipNumber ?? "Not supplied", "Entry status": item.entryStatus.replace("_", " "), "Place status": item.placeStatus.replaceAll("_", " "), "Payment status": item.paymentStatus.replaceAll("_", " "), "Declaration": item.declarationStatus === "complete" ? `Complete · ${String(item.declarationCompletionMethod ?? "digital").replaceAll("_", " ")}` : "Required before the runner can start", "Cleared to start": item.clearedToStart ? "Yes" : "No", "Expected charge": money(item.pricing?.priceActuallyChargedPence ?? item.payment?.expectedAmountPence, item.payment?.currency), "Actual charge": money(item.payment?.actualPaidAmountPence, item.payment?.currency), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact name": item.runner.emergencyName, "Emergency contact phone number": item.runner.emergencyPhone, "Price calculated by server": item.pricing?.priceActuallyChargedPence == null ? "Not recorded" : `£${(item.pricing.priceActuallyChargedPence / 100).toFixed(2)} · ${item.pricing.adjustmentReason}` };
   document.querySelector("#entry-details").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
   renderActions(item); renderMessages(item);
 }
@@ -119,6 +123,10 @@ function renderActions(item) {
   const actions = document.querySelector("#entry-actions"); actions.replaceChildren();
   const available = availableOrganiserActions(item);
   const refundRequest = currentState.refundRequests?.find((request) => request.registrationId === item.id && ["requested", "approved"].includes(request.status));
+  if (item.placeStatus === "confirmed" && item.declarationStatus === "pending") {
+    actions.append(actionButton("Resend declaration email", async () => { const result = await prototype.resendDeclaration(item.id); showNotice(result.ok ? "Declaration email resent through the controlled development channel." : `Declaration email unavailable: ${result.code}`, !result.ok); await render(); }));
+    actions.append(actionButton("Record paper declaration", async () => { if (!window.confirm("Confirm that the named runner signed the current paper declaration in person? This records an audited organiser action, not a digital signature.")) return; const result = await prototype.recordPaperDeclaration(item.id); showNotice(result.ok ? "Paper declaration recorded. Runner is cleared from the declaration perspective." : `Declaration could not be recorded: ${result.code}`, !result.ok); await render(); }));
+  }
   if (available.includes("race_number")) actions.append(actionButton(item.raceNumber ? "Change race number" : "Assign race number", async () => {
     const value = window.prompt("Enter a synthetic race number", item.raceNumber ?? ""); if (value === null) return;
     const result = await prototype.assign(item.id, value); if (!result.ok) showNotice(`Race number not changed: ${result.code}`, true); else showNotice(`Race number ${value} assigned to ${item.testReference}.`); await render();
@@ -171,7 +179,7 @@ function renderProgress() {
   const complete = Object.values(checks).every(Boolean); document.querySelector("#journey-complete").hidden = !complete;
 }
 
-for (const selector of ["#search", "#entry-filter", "#payment-filter"]) document.querySelector(selector)?.addEventListener("input", renderList);
+for (const selector of ["#search", "#entry-filter", "#payment-filter", "#declaration-filter"]) document.querySelector(selector)?.addEventListener("input", renderList);
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
 document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });

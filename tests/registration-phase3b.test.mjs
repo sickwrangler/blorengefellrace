@@ -164,7 +164,7 @@ test("amount mismatch cannot confirm an entry", async () => {
 });
 
 test("all production-quality email templates render without duplicated Welsh content", () => {
-  assert.equal(REGISTRATION_EMAIL_TEMPLATE_NAMES.length, 19);
+  assert.equal(REGISTRATION_EMAIL_TEMPLATE_NAMES.length, 23);
   for (const name of REGISTRATION_EMAIL_TEMPLATE_NAMES) {
     const rendered = renderRegistrationEmail(name, { intendedRecipientAddress: "runner@example.com", secureUrl: "https://example.test/secure", expiresAt: "2026-10-03T12:00:00Z" });
     assert.ok(rendered.subject && rendered.text && rendered.html); assert.equal(/Cymraeg|Cyfeiriad|Cofrestru/.test(rendered.text), false);
@@ -359,20 +359,18 @@ test("management amendments communicate once and expose refund lifecycle state",
   assert.equal((await phase3.managementEntry(created.managementToken, at)).registration.payment.state, "refunded");
 });
 
-test("transfer requires a new adult declaration, rotates ownership and invalidates the old token", async () => {
+test("transfer resets declaration state, rotates ownership and invalidates the old token", async () => {
   const repository = createMemoryRepository(createDatabase({ environment: "development", registrationState: "test" })); const mail = controlledEmail();
   const service = new RegistrationService({ repository, paymentAdapter: createMockPaymentAdapter(), emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
   const created = await service.create(phase2Runner(4), { idempotencyKey: "phase3b-transfer-link-4" });
   const phase3 = new Phase3IntegrationService({ repository, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
-  const invalid = await phase3.transfer(created.managementToken, { runner: runner(40), declaration: { ...declaration(40), accepted: false } }, at);
-  assert.equal(invalid.code, "DECLARATION_NOT_ACCEPTED");
-  const transferred = await phase3.transfer(created.managementToken, { runner: runner(41), declaration: declaration(41) }, at);
+  const transferred = await phase3.transfer(created.managementToken, { runner: runner(41) }, at);
   assert.equal(transferred.ok, true); assert.equal(transferred.registration.runner.firstName, "Runner 41");
   assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
   assert.equal((await phase3.managementEntry(transferred.replacementManagementToken, at)).registration.runner.email, "runner-41@example.com");
   const state = await repository.read();
-  assert.equal(state.consents.filter((item) => item.registrationId === state.registrations[0].id).length, 2);
-  assert.equal(state.consents.at(-1).declaration.typedFullName, "Runner 41 Example");
+  assert.equal(state.registrations[0].declarationStatus, "pending");
+  assert.equal(state.registrations[0].declarationCompletionMethod, null);
   assert.equal(state.emergencyContacts.find((item) => item.registrationId === state.registrations[0].id).name, "Contact Example");
   assert.equal(JSON.stringify(state).includes(transferred.replacementManagementToken), false);
 });

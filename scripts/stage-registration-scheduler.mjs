@@ -22,6 +22,7 @@ const copies = [
   ["registration/server/phase3-domain.mjs", "src/shared/server/phase3-domain.mjs"],
   ["registration/server/phase3-integrations.mjs", "src/shared/server/phase3-integrations.mjs"],
   ["registration/server/phase3-service.mjs", "src/shared/server/phase3-service.mjs"],
+  ["registration/server/order-service.mjs", "src/shared/server/order-service.mjs"],
   ["registration/server/repositories.mjs", "src/shared/server/repositories.mjs"],
   ["registration/server/service.mjs", "src/shared/server/service.mjs"]
 ];

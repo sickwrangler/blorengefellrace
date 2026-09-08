@@ -87,7 +87,7 @@ test("CLOSED development state with no due work is harmless and observable", asy
   const { repository, service } = setup();
   const at = new Date("2026-09-04T12:00:00Z");
   const result = await createSchedulerHandler({ service, environment, clock: () => at, logger: { log() {}, error() {} } })();
-  assert.deepEqual(result, { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, nextOfferCreated: false });
+  assert.deepEqual(result, { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, nextOfferCreated: false, declarationReminders: 0, abandonedOrders: 0 });
   assert.equal((await repository.read()).schedulerStatus.lastSuccessfulRunAt, at.toISOString());
 });
 

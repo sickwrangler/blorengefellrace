@@ -21,7 +21,7 @@
     <section id="entry-panel" class="prototype-card" hidden aria-labelledby="entry-title">
       <p class="eyebrow">Individual runner entry</p><h2 id="entry-title">Entry details</h2>
       <dl id="entry-summary" class="summary-list"></dl>
-      <div class="form-actions"><button id="continue-payment" class="button" type="button" hidden>Continue to payment</button><button id="request-refund" class="button button--quiet" type="button" hidden>Request full refund</button><button id="refresh-entry" class="button button--quiet" type="button">Refresh status</button></div>
+      <div class="form-actions"><button id="continue-payment" class="button" type="button" hidden>Continue to payment</button><button id="request-refund" class="button button--quiet" type="button" hidden>Request refund for this entry</button><button id="refresh-entry" class="button button--quiet" type="button">Refresh status</button></div>
     </section>
     <section id="amend-panel" class="prototype-card" hidden aria-labelledby="amend-title">
       <h2 id="amend-title">Update entry details</h2>
@@ -31,14 +31,13 @@
     </section>
     <section id="transfer-panel" class="prototype-card" hidden aria-labelledby="transfer-title">
       <h2 id="transfer-title">Transfer this entry</h2>
-      <p>A transfer invalidates this management link. The new adult runner must provide their own declaration evidence.</p>
+      <p>A transfer invalidates this management link. The new adult runner receives their own secure links and must complete their own declaration before racing.</p>
       <form id="transfer-form" class="prototype-form">
         <label>New runner email <input name="email" type="email" required></label><label>First name <input name="firstName" required></label><label>Last name <input name="lastName" required></label>
         <label>Phone number <input name="phone" type="tel" required></label><label>Address line 1 <input name="addressLine1" required></label><label>City <input name="city" required></label><label>Postcode <input name="postcode" required></label>
         <label>Date of birth <input name="dateOfBirth" type="date" required></label><label>Race category <select name="raceCategory" required><option value="Female">Female</option><option value="Male / Open">Male / Open</option></select></label>
         <label>Emergency contact name <input name="emergencyContactName" required></label><label>Emergency contact phone number <input name="emergencyContactPhone" type="tel" required></label>
-        <label>Club <input name="club"></label><label>Full name for the WFRA declaration <input name="typedFullName" required></label>
-        <label><input name="accepted" type="checkbox" required> The new runner accepts the current WFRA declaration as the competitor.</label>
+        <label>Club <input name="club"></label>
         <button class="button" type="submit">Transfer entry</button>
       </form><p id="transfer-message" aria-live="polite"></p>
     </section>

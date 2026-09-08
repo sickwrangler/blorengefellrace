@@ -35,7 +35,7 @@ async function requestBody(request) {
 const server = http.createServer(async (request, res) => {
   try {
     const url = new URL(request.url, `http://127.0.0.1:${port}`);
-    if (url.pathname.startsWith("/api/v2/") || url.pathname.startsWith("/api/v3/")) {
+    if (url.pathname.startsWith("/api/v2/") || url.pathname.startsWith("/api/v3/") || url.pathname.startsWith("/api/v4/")) {
       const headers = Object.fromEntries(Object.entries(request.headers).map(([key, value]) => [key.toLowerCase(), value]));
       const result = await api({ method: request.method, pathname: url.pathname, headers, body: await requestBody(request), hostname: "127.0.0.1", query: Object.fromEntries(url.searchParams) });
       res.writeHead(result.status, result.headers); res.end(JSON.stringify(result.body)); return;

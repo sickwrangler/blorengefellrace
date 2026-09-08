@@ -22,6 +22,7 @@ export function createDatabase({ environment = "local", registrationState = "tes
     counters: { waitingSequence: 0 },
     runners: [], emergencyContacts: [], registrations: [], payments: [], consents: [], communications: [], auditEvents: [],
     idempotency: [], amendmentRequests: [], privateInvitations: [], waitingList: [], waitingListOffers: [], refundRequests: [], managementTokens: [], managementRecoveryAttempts: [], processedPaymentEvents: [],
+    orders: [], orderTokens: [], declarations: [], declarationTokens: [], declarationRecoveryAttempts: [],
     testProgress: { submittedReference: null, organiserViewed: false, resetCompleted: false },
     schedulerStatus: { lastSuccessfulRunAt: null, lastResult: null }
   };
@@ -37,13 +38,16 @@ export function migrateDevelopmentDatabase(input) {
     raceDate: db.event?.raceDate ?? db.event?.date ?? EVENT.date,
     transferRefundCutoffUtc: db.event?.transferRefundCutoffUtc ?? db.event?.transferRefundCutoff ?? EVENT.transferRefundCutoff
   };
-  for (const name of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests", "privateInvitations", "waitingList", "waitingListOffers", "refundRequests", "managementTokens", "managementRecoveryAttempts", "processedPaymentEvents"]) db[name] ??= [];
+  for (const name of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests", "privateInvitations", "waitingList", "waitingListOffers", "refundRequests", "managementTokens", "managementRecoveryAttempts", "processedPaymentEvents", "orders", "orderTokens", "declarations", "declarationTokens", "declarationRecoveryAttempts"]) db[name] ??= [];
   db.phase3RegistrationState ??= "CLOSED";
   db.testProgress ??= { submittedReference: null, organiserViewed: false, resetCompleted: false };
   db.schedulerStatus ??= { lastSuccessfulRunAt: null, lastResult: null };
   for (const registration of db.registrations) {
     const payment = db.payments.find((item) => item.registrationId === registration.id);
     registration.placeStatus ??= registration.entryStatus === "accepted" ? (payment?.status === "paid" ? "confirmed" : "payment_reserved") : "none";
+    const declaration = [...db.declarations, ...db.consents.map((item) => item.declaration ? { ...item.declaration, registrationId: item.registrationId, completionMethod: "digital_during_entry" } : null).filter(Boolean)].find((item) => item.registrationId === registration.id && item.accepted !== false);
+    registration.declarationStatus ??= declaration ? "complete" : "pending";
+    registration.declarationCompletionMethod ??= declaration?.completionMethod ?? null;
   }
   for (const payment of db.payments) {
     payment.provider ??= null;
@@ -70,21 +74,26 @@ function entities(db, registration) {
   return {
     runner: db.runners.find((item) => item.id === registration.runnerId),
     emergency: db.emergencyContacts.find((item) => item.registrationId === registration.id),
-    payment: db.payments.find((item) => item.registrationId === registration.id),
+    payment: db.payments.find((item) => item.registrationId === registration.id || item.registrationIds?.includes(registration.id)),
     consent: [...db.consents].reverse().find((item) => item.registrationId === registration.id)
   };
 }
 
 function view(db, registration, { runnerSafe = false } = {}) {
   const { runner, emergency, payment, consent } = entities(db, registration);
+  const completedDeclaration = [...(db.declarations ?? [])].reverse().find((item) => item.registrationId === registration.id && !item.revokedAt);
+  const declarationStatus = completedDeclaration ? "complete" : registration.declarationStatus ?? (consent?.declaration ? "complete" : "pending");
   const result = {
     ...registration,
-    paymentStatus: payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status === "expired" ? "abandoned" : payment?.status ?? "created",
-    pricing: payment ? { standardPricePence: payment.standardPricePence, wfraMemberPricePence: payment.wfraMemberPricePence, priceActuallyChargedPence: payment.priceActuallyChargedPence, adjustmentReason: payment.adjustmentReason, wfraDiscountApplied: payment.wfraDiscountApplied } : null,
-    payment: runnerSafe || !payment ? undefined : { expectedAmountPence: payment.expectedAmountPence, actualPaidAmountPence: payment.actualPaidAmountPence, currency: payment.currency, refundState: payment.refundState, webhookReconciliationState: payment.webhookReconciliationState },
+    paymentStatus: registration.entryStatus === "place_released" && payment?.refundedRegistrationIds?.includes(registration.id) ? "refunded" : payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status === "expired" ? "abandoned" : payment?.status ?? "created",
+    pricing: registration.pricing ?? (payment ? { standardPricePence: payment.standardPricePence, wfraMemberPricePence: payment.wfraMemberPricePence, priceActuallyChargedPence: payment.priceActuallyChargedPence, adjustmentReason: payment.adjustmentReason, wfraDiscountApplied: payment.wfraDiscountApplied } : null),
+    payment: runnerSafe || !payment ? undefined : { expectedAmountPence: payment.orderId ? registration.priceActuallyChargedPence : payment.expectedAmountPence, actualPaidAmountPence: payment.orderId && payment.status === "paid" ? registration.priceActuallyChargedPence : payment.actualPaidAmountPence, currency: payment.currency, refundState: payment.refundedRegistrationIds?.includes(registration.id) ? "refunded" : payment.refundState, webhookReconciliationState: payment.webhookReconciliationState },
     runner: { ...runner, emergencyName: emergency?.name, emergencyPhone: emergency?.phone },
     termsVersion: consent?.termsVersion, privacyVersion: consent?.privacyVersion, consentRecordedAt: consent?.recordedAt,
-    declaration: consent?.declaration
+    declaration: completedDeclaration ?? consent?.declaration,
+    declarationStatus,
+    declarationCompletionMethod: completedDeclaration?.completionMethod ?? registration.declarationCompletionMethod ?? (consent?.declaration ? "digital_during_entry" : null),
+    clearedToStart: declarationStatus === "complete" && registration.placeStatus === "confirmed" && registration.entryStatus !== "place_released"
   };
   delete result.confirmationTokenHash;
   // Legacy Phase 2 fields can remain in old synthetic storage, but are retired
@@ -242,6 +251,7 @@ export class RegistrationService {
     const search = String(filters.search ?? "").toLowerCase(); if (search) registrations = registrations.filter((item) => [item.testReference, item.runner.firstName, item.runner.lastName, item.runner.email].some((value) => String(value).toLowerCase().includes(search)));
     if (filters.entry) registrations = registrations.filter((item) => item.entryStatus === filters.entry);
     if (filters.payment) registrations = registrations.filter((item) => item.paymentStatus === filters.payment);
+    if (filters.declaration) registrations = registrations.filter((item) => item.declarationStatus === filters.declaration);
     return { ok: true, state: { version: db.schemaVersion ?? 2, event: db.event, environment: db.environment, registrationState: db.registrationState, phase3RegistrationState: db.phase3RegistrationState ?? "CLOSED", registrations, communications: db.communications, refundRequests: db.refundRequests.map(({ id, registrationId, status, requestedAt, decidedAt, refundedAt, placeReleasedAt }) => ({ id, registrationId, status, requestedAt, decidedAt, refundedAt, placeReleasedAt })), auditEvents: [], testProgress: db.testProgress }, totals: status(db) };
   }
 

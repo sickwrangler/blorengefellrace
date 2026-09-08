@@ -33,11 +33,17 @@ const stripeEnabled = process.env.STRIPE_ENABLED === "true";
 const emailEnabled = process.env.ACS_EMAIL_ENABLED === "true";
 const publicBaseUrl = stripeEnabled || emailEnabled ? required("REGISTRATION_PUBLIC_BASE_URL") : "";
 const lifecycleEmailAdapter = emailEnabled ? createDevelopmentEmailAdapter() : createControlledDevelopmentEmail();
+const positiveInteger = (name, fallback = null) => { const value = Number(process.env[name]); return Number.isInteger(value) && value > 0 ? value : fallback; };
 const phase3Integrations = new Phase3IntegrationService({
   repository,
   stripeGateway: stripeEnabled ? createDevelopmentStripeGateway() : null,
   emailAdapter: lifecycleEmailAdapter,
-  publicBaseUrl
+  publicBaseUrl,
+  orderConfiguration: {
+    maxRunnersPerOrder: positiveInteger("REGISTRATION_MAX_RUNNERS_PER_ORDER", 5),
+    reminderPolicy: { afterPaymentDays: positiveInteger("REGISTRATION_DECLARATION_REMINDER_DAYS", 7), beforeRaceDays: positiveInteger("REGISTRATION_DECLARATION_FINAL_DAYS", 3) },
+    draftRetentionHours: positiveInteger("REGISTRATION_DRAFT_RETENTION_HOURS")
+  }
 });
 const handle = createApi({ service: new RegistrationService({ repository, paymentAdapter, emailAdapter: lifecycleEmailAdapter, publicBaseUrl }), phase3Integrations, environment: "development" });
 
@@ -65,7 +71,7 @@ const handler = async (request, context) => {
   }
 };
 
-for (const version of ["v2", "v3"]) app.http(`registration-${version}`, {
+for (const version of ["v2", "v3", "v4"]) app.http(`registration-${version}`, {
   methods: ["GET", "POST"],
   authLevel: "anonymous",
   route: `${version}/{*path}`,

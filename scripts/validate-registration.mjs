@@ -1,14 +1,14 @@
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
-const files = ["registration/index.html", "registration/dashboard.html", "registration/payment-return.html", "registration/prototype.css", "registration/runner.mjs", "registration/runner-flow.mjs", "registration/runner-errors.mjs", "registration/payment-return.mjs", "registration/payment-state.mjs", "registration/dashboard.mjs", "registration/organiser-view.mjs", "registration/prototype-client.mjs", "registration/preview-repository.mjs", "registration/registration-core.mjs", "registration/fixtures.json", "registration/server/service.mjs", "registration/server/api.mjs", "registration/server/auth.mjs", "registration/server/adapters.mjs", "registration/server/phase3-domain.mjs", "registration/server/phase3-integrations.mjs", "registration/server/phase3-service.mjs", "registration/server/development-email.mjs", "registration/server/email-templates.mjs", "registration/server/repositories.mjs", "api/package.json", "api/src/storage.mjs", "api/src/providers.mjs", "api/src/functions/registration.mjs", "scripts/prepare-registration-api.mjs", "scripts/prepare-registration-development-routes.mjs", "scripts/start-registration-prototype.mjs", "scripts/start-registration-phase2.mjs", "scripts/reset-registration-phase2.mjs", "scripts/backup-registration-phase2.mjs", "scripts/restore-registration-phase2.mjs"];
+const files = ["registration/index.html", "registration/dashboard.html", "registration/payment-return.html", "registration/declaration.html", "registration/declaration.mjs", "registration/prototype.css", "registration/runner.mjs", "registration/runner-flow.mjs", "registration/runner-errors.mjs", "registration/payment-return.mjs", "registration/payment-state.mjs", "registration/dashboard.mjs", "registration/organiser-view.mjs", "registration/prototype-client.mjs", "registration/preview-repository.mjs", "registration/registration-core.mjs", "registration/fixtures.json", "registration/server/service.mjs", "registration/server/api.mjs", "registration/server/auth.mjs", "registration/server/adapters.mjs", "registration/server/phase3-domain.mjs", "registration/server/phase3-integrations.mjs", "registration/server/phase3-service.mjs", "registration/server/order-service.mjs", "registration/server/development-email.mjs", "registration/server/email-templates.mjs", "registration/server/repositories.mjs", "api/package.json", "api/src/storage.mjs", "api/src/providers.mjs", "api/src/functions/registration.mjs", "scripts/prepare-registration-api.mjs", "scripts/prepare-registration-development-routes.mjs", "scripts/start-registration-prototype.mjs", "scripts/start-registration-phase2.mjs", "scripts/reset-registration-phase2.mjs", "scripts/backup-registration-phase2.mjs", "scripts/restore-registration-phase2.mjs"];
 files.push("registration/declarations.mjs", "registration/localisation.cy.mjs", "registration/server/phase3-integrations.mjs", "registration/server/phase3-service.mjs", "registration/server/development-email.mjs", "registration/server/email-templates.mjs", "api/src/providers.mjs");
 const errors = [];
 for (const file of files) if (!fs.existsSync(file)) errors.push(`Missing ${file}`);
 for (const file of files.filter((name) => name.endsWith(".mjs"))) {
   try { execFileSync(process.execPath, ["--check", file], { stdio: "pipe" }); } catch { errors.push(`JavaScript syntax failed: ${file}`); }
 }
-for (const htmlFile of ["registration/index.html", "registration/dashboard.html", "registration/payment-return.html"]) {
+for (const htmlFile of ["registration/index.html", "registration/dashboard.html", "registration/payment-return.html", "registration/declaration.html"]) {
   const html = fs.readFileSync(htmlFile, "utf8");
   for (const required of ["<meta name=\"viewport\"", "skip-link"]) if (!html.includes(required)) errors.push(`${htmlFile} missing ${required}`);
   if (!/(development|synthetic|test)/i.test(html)) errors.push(`${htmlFile} does not disclose its non-production context`);
@@ -17,7 +17,7 @@ for (const htmlFile of ["registration/index.html", "registration/dashboard.html"
 const runnerPage = fs.readFileSync("registration/index.html", "utf8");
 for (const required of ["Development · Closed", "takes no money", "dateOfBirth", "addressLine1", "postcode", ">Male / Open<", "acceptTerms", "acceptPrivacy", "acceptDeclaration", "declarationName", "Emergency contact phone number"])
   if (!runnerPage.includes(required)) errors.push(`Runner prototype missing: ${required}`);
-for (const required of ["Stage 1 of 4", "Submit test entry", "View organiser test area", "Start a test registration", "Continue to payment", "View payment status"])
+for (const required of ["Stage 1 of 4", "Add runner to order", "Add another runner", "View organiser test area", "Start a test registration", "Continue to payment", "View payment status"])
   if (!runnerPage.includes(required)) errors.push(`Runner journey is missing: ${required}`);
 for (const retired of ["Affiliated with UK Athletics?", "UK Athletics membership number", "name=\"affiliated\"", "name=\"membershipNumber\"", "name=\"travelMethod\""])
   if (runnerPage.includes(retired)) errors.push(`Runner journey still renders retired field: ${retired}`);
@@ -62,11 +62,14 @@ for (const required of ["PRIVATE_LIVE", "CLOSED_FINAL", "waiting_list_offer", "t
 const phase3b = fs.readFileSync("registration/server/phase3-integrations.mjs", "utf8") + fs.readFileSync("registration/server/phase3-service.mjs", "utf8") + fs.readFileSync("registration/server/development-email.mjs", "utf8");
 for (const required of ["CHECKOUT_RESERVATION_MINUTES = 30", "stripe_checkout_created", "verifyWebhook", "INVALID_WEBHOOK_SIGNATURE", "amount_or_currency_mismatch", "executeApprovedStripeRefund", "redirected_safe_recipient", "waiting_list_reminder"])
   if (!phase3b.includes(required)) errors.push(`Phase 3B integration boundary is missing: ${required}`);
+const phase3b3 = fs.readFileSync("registration/server/order-service.mjs", "utf8");
+for (const required of ["DEFAULT_MAX_RUNNERS_PER_ORDER = 5", "GROUP_CAPACITY_UNAVAILABLE", "digital_remote", "paper_in_person", "DUPLICATE_ORDER_EMAIL", "createOrderCheckoutSession", "declarationReminders"])
+  if (!phase3b3.includes(required)) errors.push(`Phase 3B.3 order boundary is missing: ${required}`);
 const staticConfig = fs.readFileSync("staticwebapp.config.json", "utf8");
 for (const blocked of ["/registration/server/*", "/registration/fixtures.json", "/api/src/*", "/api/package.json", "/api/package-lock.json", "/infrastructure/*", "/docs/internal/*", "/tests/*"])
   if (!staticConfig.includes(blocked)) errors.push(`Preview source route is not blocked: ${blocked}`);
 const developmentRoutes = fs.readFileSync("scripts/prepare-registration-development-routes.mjs", "utf8");
-for (const protectedRoute of ["/registration/dashboard.html", "/api/v2/organiser/*", "/api/v3/organiser/*", '"organiser"', "/.auth/login/aad"])
+for (const protectedRoute of ["/registration/dashboard.html", "/api/v2/organiser/*", "/api/v3/organiser/*", "/api/v4/organiser/*", '"organiser"', "/.auth/login/aad"])
   if (!developmentRoutes.includes(protectedRoute)) errors.push(`Cloud organiser boundary is missing: ${protectedRoute}`);
 if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
 console.log("Validated registration state guards, synthetic fixtures, HTML/mobile source, JavaScript syntax and external-service boundaries.");
