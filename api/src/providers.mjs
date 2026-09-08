@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import crypto from "node:crypto";
 import { EmailClient } from "@azure/communication-email";
 import { DefaultAzureCredential } from "@azure/identity";
 import { assertStripeDevelopmentConfiguration, createStripeGateway } from "./shared/server/phase3-integrations.mjs";
@@ -23,7 +24,9 @@ export function createDevelopmentEmailAdapter(environment = process.env) {
   const client = acsCredential ? new EmailClient(acsCredential) : new EmailClient(endpoint, new DefaultAzureCredential());
   const transport = {
     async send(message) {
-      const poller = await client.beginSend({ senderAddress: message.senderAddress, recipients: { to: message.recipients.map((address) => ({ address })) }, content: { subject: message.subject, plainText: message.text, html: message.html } });
+      const digest = crypto.createHash("sha256").update(String(message.deliveryIdempotencyKey ?? crypto.randomUUID())).digest("hex");
+      const operationId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+      const poller = await client.beginSend({ senderAddress: message.senderAddress, recipients: { to: message.recipients.map((address) => ({ address })) }, content: { subject: message.subject, plainText: message.text, html: message.html } }, { operationId });
       const result = await poller.pollUntilDone();
       if (result.status !== "Succeeded") throw new Error("Controlled development email delivery failed.");
       return { id: result.id };

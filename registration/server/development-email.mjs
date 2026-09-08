@@ -11,7 +11,7 @@ export function createControlledDevelopmentEmail({ transport = null, senderAddre
     async send(message) {
       const rendered = renderRegistrationEmail(message.template, { ...message.data, intendedRecipientAddress: message.intendedRecipientAddress });
       if (!configured) return { ...rendered, template: message.template, intendedRecipientAddress: message.intendedRecipientAddress, delivery: "captured_only", actualRecipients: [], externalCall: false };
-      const result = await transport.send({ senderAddress, recipients, subject: rendered.subject, text: rendered.text, html: rendered.html });
+      const result = await transport.send({ senderAddress, recipients, subject: rendered.subject, text: rendered.text, html: rendered.html, deliveryIdempotencyKey: message.deliveryIdempotencyKey });
       return { template: message.template, intendedRecipientAddress: message.intendedRecipientAddress, delivery: "redirected_safe_recipient", actualRecipients: recipients.map(() => "configured-safe-recipient"), providerReference: result?.id ?? null, externalCall: true };
     }
   });

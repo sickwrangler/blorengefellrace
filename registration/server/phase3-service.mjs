@@ -251,9 +251,19 @@ export class Phase3IntegrationService {
 
   runScheduledWork(actor, at = new Date()) {
     if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
-    return this.repository.transaction((state) => {
+    return this.repository.transaction(async (state) => {
       const scheduledEmail = { send: (message) => this.communicate(state, message, `scheduled:${message.template}:${hashToken(message.intendedRecipientAddress)}:${message.data?.expiresAt ?? iso(at)}`, at) };
-      return processScheduledRegistrationWork(state, { email: scheduledEmail, at, actor, offerUrl: (token) => `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(token)}` });
+      const result = await processScheduledRegistrationWork(state, { email: scheduledEmail, at, actor, offerUrl: (token) => `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(token)}` });
+      state.schedulerStatus = {
+        lastSuccessfulRunAt: iso(at),
+        lastResult: {
+          reminders: result.reminders,
+          expiredOffers: result.expiredOffers,
+          expiredPayments: result.expiredPayments,
+          nextOfferCreated: result.nextOfferCreated
+        }
+      };
+      return result;
     });
   }
 }
