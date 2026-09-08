@@ -11,7 +11,7 @@ export async function deliverRegistrationCommunication(state, email, message, { 
   state.communications ??= [];
   const existing = state.communications.find((item) => item.idempotencyKey === idempotencyKey);
   if (existing) return { ok: true, duplicate: true, receipt: existing };
-  const delivered = await email.send(message);
+  const delivered = await email.send({ ...message, deliveryIdempotencyKey: idempotencyKey });
   const receipt = {
     id: `communication_${crypto.randomUUID()}`,
     idempotencyKey,
@@ -28,4 +28,3 @@ export async function deliverRegistrationCommunication(state, email, message, { 
   state.communications.push(receipt);
   return { ok: true, duplicate: false, receipt };
 }
-

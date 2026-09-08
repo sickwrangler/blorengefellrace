@@ -22,7 +22,8 @@ export function createDatabase({ environment = "local", registrationState = "tes
     counters: { waitingSequence: 0 },
     runners: [], emergencyContacts: [], registrations: [], payments: [], consents: [], communications: [], auditEvents: [],
     idempotency: [], amendmentRequests: [], privateInvitations: [], waitingList: [], waitingListOffers: [], refundRequests: [], managementTokens: [], managementRecoveryAttempts: [], processedPaymentEvents: [],
-    testProgress: { submittedReference: null, organiserViewed: false, resetCompleted: false }
+    testProgress: { submittedReference: null, organiserViewed: false, resetCompleted: false },
+    schedulerStatus: { lastSuccessfulRunAt: null, lastResult: null }
   };
 }
 
@@ -39,6 +40,7 @@ export function migrateDevelopmentDatabase(input) {
   for (const name of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests", "privateInvitations", "waitingList", "waitingListOffers", "refundRequests", "managementTokens", "managementRecoveryAttempts", "processedPaymentEvents"]) db[name] ??= [];
   db.phase3RegistrationState ??= "CLOSED";
   db.testProgress ??= { submittedReference: null, organiserViewed: false, resetCompleted: false };
+  db.schedulerStatus ??= { lastSuccessfulRunAt: null, lastResult: null };
   for (const registration of db.registrations) {
     const payment = db.payments.find((item) => item.registrationId === registration.id);
     registration.placeStatus ??= registration.entryStatus === "accepted" ? (payment?.status === "paid" ? "confirmed" : "payment_reserved") : "none";

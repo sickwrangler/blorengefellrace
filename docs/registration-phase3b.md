@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 3B.2 adds the communications and runner self-service layer on the Phase 3 feature branch. External payment and email remain independently fail-closed unless the isolated development integrations are explicitly enabled and fully configured. Production is unchanged and contains no registration artifact.
+Phase 3B.2 is complete in the isolated stable development environment. It adds communications, runner self-service and reliable scheduled waiting-list processing on the Phase 3 feature branch. External payment and email remain independently fail-closed unless the isolated development integrations are explicitly enabled and fully configured. Production is unchanged and contains no registration artifact.
 
 No Stripe live key is accepted in development. No email is delivered to a runner-supplied address. Missing provider configuration fails closed.
 
@@ -58,7 +58,9 @@ The preferred production authentication is a managed identity with the minimum A
 
 The queue retains first name, last name and email only. An offer reserves capacity for 48 hours and becomes reminder-eligible after 24 hours. Decline/expiry releases it and progresses to the next eligible person. Offer tokens remain hashed and are revalidated for purpose, revocation, expiry and use before acceptance or payment.
 
-The domain exposes one idempotent scheduled-work operation for reminder detection, offer expiry/progression and stale payment reservations. A low-frequency authenticated trigger is sufficient for a 120-person race. Managed Static Web Apps Functions support the deployed HTTP API but do not provide a proven reliable timer trigger for this project. The smallest viable production-shaped alternative is a dedicated Azure Functions Flex Consumption or Consumption app with a timer-triggered function and workload identity/least-privilege access to the registration service. At this race's scale, executions should sit inside the platform's monthly free grant where applicable, leaving only minimal associated storage/monitoring cost; actual subscription pricing must be checked before provisioning. No hosting change or scheduler resource is made in Phase 3B.2 without a separate cost/architecture approval.
+The domain exposes one idempotent scheduled-work operation for reminder detection, offer expiry/progression and stale payment reservations. Managed Static Web Apps Functions support the deployed HTTP API but cannot host the required timer trigger. Phase 3B.2 therefore uses a dedicated development-only Azure Functions Flex Consumption app. Its monitored timer runs every 30 minutes and calls the shared scheduled-work service directly; it does not expose an application HTTP route or weaken organiser authentication.
+
+The Function has zero always-ready instances and uses its system-assigned managed identity for the shared development Table, deployment/host storage and ACS Email. Azure Timer host locking, Table ETag transactions, persisted communication keys and deterministic ACS operation IDs make concurrent/retried execution safe. Successful result counts are persisted with the registration state, while success/failure traces and platform invocation results are retained in Application Insights for 30 days. See `internal/registration-scheduler.md` for deployment, removal, monitoring, test-time and cost details.
 
 ## Secure runner self-service
 
@@ -87,7 +89,9 @@ The existing storage settings remain required. Stripe and ACS Email have indepen
 
 ## Release gates and progression
 
-Phase 3B cannot be called complete until a real Stripe test Checkout/webhook/refund and one redirected ACS delivery have been observed in the isolated stable development environment. The stable environment must be manually checked at capacity 120 with Entra-protected organiser operations before provider enablement. Until those provider proofs are approved, both integration controls remain disabled.
+Phase 3B.2 can be called complete only after the deployed timer has driven a controlled cloud reminder/expiry/progression cycle, an Azure-hosted amendment has persisted and generated its controlled ACS message, development has been reset to CLOSED with no due work, and production isolation has been reconfirmed.
+
+Those gates passed on 8 September 2026. The stable Azure API persisted a synthetic runner amendment, the organiser dashboard showed the amended record and minimal audit event, and ACS recorded one redirected amendment message. Two synthetic waiting-list joins were then tested at controlled full capacity. One released fixture produced one offer and one reserved place; the deployed timer sent one reminder at 24 hours, sent none on an immediate retry, expired the first offer at 48 hours, rejected its old URL and progressed only the second runner. The state was then reset to zero entries, reservations, offers and waiting-list records, with capacity 120 and operational state CLOSED. A final empty scheduler run completed with all action counts zero. The guarded test-time value was removed and its enable switch returned to `false`.
 
 The planned progression is:
 
