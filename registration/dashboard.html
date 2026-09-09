@@ -83,5 +83,13 @@
     <label class="checkbox-field"><input id="release-race-number" type="checkbox" checked> Yes — release it so the number becomes available for another entrant.</label>
     <div class="form-actions"><button id="keep-entry" class="button button--quiet" type="button">Keep entry</button><button id="confirm-cancel-entry" class="button danger-button" type="button">Cancel entry</button></div>
   </dialog>
+  <dialog id="race-number-dialog" class="confirmation-dialog" aria-labelledby="race-number-title">
+    <form id="race-number-form">
+      <h2 id="race-number-title">Assign race number</h2>
+      <p id="race-number-reference"></p>
+      <label>Race number<input id="race-number-value" name="raceNumber" type="number" min="1" max="999" step="1" inputmode="numeric" required></label>
+      <div class="form-actions"><button id="close-race-number" class="button button--quiet" type="button">Cancel</button><button class="button" type="submit">Save race number</button></div>
+    </form>
+  </dialog>
 </body>
 </html>

@@ -7,6 +7,7 @@ let selectedReference = new URLSearchParams(window.location.search).get("ref");
 let markingViewed = false;
 let pendingCancellation = null;
 let pendingTransfer = null;
+let pendingRaceNumber = null;
 let currentIntegrations = { paymentsAvailable: false, email: "captured-only" };
 if (canTest) await render();
 
@@ -137,9 +138,14 @@ function renderActions(item) {
     actions.append(actionButton("Transfer entry", () => openTransferDialog(item)));
     actions.append(actionButton("Resend management link", async () => { const result = await prototype.resendManagementLink(item.id); showNotice(result.ok ? "A new management link was sent through the controlled development channel." : `Management link unavailable: ${result.code}`, !result.ok); await render(); }));
   }
-  if (available.includes("race_number")) actions.append(actionButton(item.raceNumber ? "Change race number" : "Assign race number", async () => {
-    const value = window.prompt("Enter a synthetic race number", item.raceNumber ?? ""); if (value === null) return;
-    const result = await prototype.assign(item.id, value); if (!result.ok) showNotice(`Race number not changed: ${result.code}`, true); else showNotice(`Race number ${value} assigned to ${item.testReference}.`); await render();
+  if (available.includes("race_number")) actions.append(actionButton(item.raceNumber ? "Change race number" : "Assign race number", () => {
+    pendingRaceNumber = item.id;
+    document.querySelector("#race-number-title").textContent = item.raceNumber ? "Change race number" : "Assign race number";
+    document.querySelector("#race-number-reference").textContent = item.testReference;
+    const input = document.querySelector("#race-number-value");
+    input.value = item.raceNumber ?? "";
+    document.querySelector("#race-number-dialog").showModal();
+    input.focus();
   }));
   if (available.includes("remove_race_number")) actions.append(actionButton("Remove race number", async () => {
     if (!window.confirm(`Remove race number ${item.raceNumber} from ${item.testReference}? The released number becomes available for another entrant.`)) return;
@@ -217,6 +223,15 @@ document.querySelector("#confirm-cancel-entry")?.addEventListener("click", async
   pendingCancellation = null; document.querySelector("#cancel-entry-dialog").close(); await cancelEntry(id, release);
 });
 document.querySelector("#close-transfer-entry")?.addEventListener("click", () => { pendingTransfer = null; document.querySelector("#transfer-entry-dialog").close(); });
+document.querySelector("#close-race-number")?.addEventListener("click", () => { pendingRaceNumber = null; document.querySelector("#race-number-dialog").close(); });
+document.querySelector("#race-number-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault(); if (!pendingRaceNumber) return;
+  const registrationId = pendingRaceNumber; const value = event.currentTarget.elements.raceNumber.value;
+  const result = await prototype.assign(registrationId, value);
+  if (result.ok) { pendingRaceNumber = null; document.querySelector("#race-number-dialog").close(); }
+  showNotice(result.ok ? `Race number ${value} assigned.` : `Race number not changed: ${result.code}`, !result.ok);
+  await render();
+});
 document.querySelector("#organiser-transfer-form")?.addEventListener("submit", async (event) => {
   event.preventDefault(); if (!pendingTransfer || !window.confirm("Transfer this paid race place to the replacement runner? The previous runner's secure links and declaration will be revoked.")) return;
   const form = event.currentTarget; const data = Object.fromEntries(new FormData(form)); data.wfraMember = data.wfraMember === "yes"; const overrideCutoff = form.elements.overrideCutoff.checked; delete data.overrideCutoff;

@@ -49,7 +49,7 @@ const paymentReturnScript = fs.readFileSync("registration/payment-return.mjs", "
 for (const id of ["retry-payment", "refresh-payment"])
   if (!paymentReturnScript.includes(`\"#${id}\"`)) errors.push(`Payment-return button lacks a handler: ${id}`);
 const dashboardScript = fs.readFileSync("registration/dashboard.mjs", "utf8");
-for (const id of ["close-detail", "reset-test", "export-csv", "keep-entry", "confirm-cancel-entry"])
+for (const id of ["close-detail", "reset-test", "export-csv", "keep-entry", "confirm-cancel-entry", "close-race-number", "race-number-form"])
   if (!dashboardScript.includes(`\"#${id}\"`)) errors.push(`Organiser button lacks a handler: ${id}`);
 for (const required of ["Remove race number", "removeRaceNumber", "releaseRaceNumber"])
   if (!dashboardScript.includes(required)) errors.push(`Organiser race-number workflow is missing: ${required}`);
