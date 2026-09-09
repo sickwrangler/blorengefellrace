@@ -8,6 +8,7 @@ let markingViewed = false;
 let pendingCancellation = null;
 let pendingTransfer = null;
 let pendingRaceNumber = null;
+let pendingCorrection = null;
 let currentIntegrations = { paymentsAvailable: false, email: "captured-only" };
 if (canTest) await render();
 
@@ -130,10 +131,13 @@ function renderActions(item) {
     actions.append(actionButton("Record paper declaration", async () => { if (!window.confirm("Confirm that the named runner signed the current paper declaration in person? This records an audited organiser action, not a digital signature.")) return; const result = await prototype.recordPaperDeclaration(item.id); showNotice(result.ok ? "Paper declaration recorded. Runner is cleared from the declaration perspective." : `Declaration could not be recorded: ${result.code}`, !result.ok); await render(); }));
   }
   if (item.placeStatus === "confirmed") {
-    actions.append(actionButton("Edit phone / club", async () => {
-      const phone = window.prompt("Correct the runner's phone number", item.runner.phone ?? ""); if (phone === null) return;
-      const club = window.prompt("Correct the runner's club", item.runner.club ?? ""); if (club === null) return;
-      const result = await prototype.correctEntry(item.id, { phone, club }); showNotice(result.ok ? "Phone and club details updated without transferring the entry." : `Details could not be updated: ${result.code}`, !result.ok); await render();
+    actions.append(actionButton("Edit phone / club", () => {
+      pendingCorrection = item.id;
+      document.querySelector("#entry-correction-reference").textContent = item.testReference;
+      document.querySelector("#entry-correction-phone").value = item.runner.phone ?? "";
+      document.querySelector("#entry-correction-club").value = item.runner.club ?? "";
+      document.querySelector("#entry-correction-dialog").showModal();
+      document.querySelector("#entry-correction-phone").focus();
     }));
     actions.append(actionButton("Transfer entry", () => openTransferDialog(item)));
     actions.append(actionButton("Resend management link", async () => { const result = await prototype.resendManagementLink(item.id); showNotice(result.ok ? "A new management link was sent through the controlled development channel." : `Management link unavailable: ${result.code}`, !result.ok); await render(); }));
@@ -230,6 +234,15 @@ document.querySelector("#race-number-form")?.addEventListener("submit", async (e
   const result = await prototype.assign(registrationId, value);
   if (result.ok) { pendingRaceNumber = null; document.querySelector("#race-number-dialog").close(); }
   showNotice(result.ok ? `Race number ${value} assigned.` : `Race number not changed: ${result.code}`, !result.ok);
+  await render();
+});
+document.querySelector("#close-entry-correction")?.addEventListener("click", () => { pendingCorrection = null; document.querySelector("#entry-correction-dialog").close(); });
+document.querySelector("#entry-correction-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault(); if (!pendingCorrection) return;
+  const registrationId = pendingCorrection; const data = Object.fromEntries(new FormData(event.currentTarget));
+  const result = await prototype.correctEntry(registrationId, data);
+  if (result.ok) { pendingCorrection = null; document.querySelector("#entry-correction-dialog").close(); }
+  showNotice(result.ok ? "Phone and club details updated without transferring the entry." : `Details could not be updated: ${result.code}`, !result.ok);
   await render();
 });
 document.querySelector("#organiser-transfer-form")?.addEventListener("submit", async (event) => {

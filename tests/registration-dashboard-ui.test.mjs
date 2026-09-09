@@ -14,3 +14,13 @@ test("race-number assignment uses an accessible form dialog instead of a native 
   assert.match(script, /prototype\.assign\(registrationId, value\)/);
   assert.doesNotMatch(script, /window\.prompt\("Enter a synthetic race number"/);
 });
+
+test("routine correction uses an accessible form dialog instead of native prompts", () => {
+  const page = fs.readFileSync("registration/dashboard.html", "utf8");
+  const script = fs.readFileSync("registration/dashboard.mjs", "utf8");
+
+  assert.match(page, /<dialog id="entry-correction-dialog"[^>]+aria-labelledby="entry-correction-title"/);
+  assert.match(page, /<form id="entry-correction-form">/);
+  assert.match(script, /prototype\.correctEntry\(registrationId, data\)/);
+  assert.doesNotMatch(script, /window\.prompt/);
+});

@@ -91,5 +91,16 @@
       <div class="form-actions"><button id="close-race-number" class="button button--quiet" type="button">Cancel</button><button class="button" type="submit">Save race number</button></div>
     </form>
   </dialog>
+  <dialog id="entry-correction-dialog" class="confirmation-dialog" aria-labelledby="entry-correction-title">
+    <form id="entry-correction-form">
+      <h2 id="entry-correction-title">Edit phone / club</h2>
+      <p id="entry-correction-reference"></p>
+      <div class="form-grid">
+        <label>Phone<input id="entry-correction-phone" name="phone" required></label>
+        <label>Club<input id="entry-correction-club" name="club"></label>
+      </div>
+      <div class="form-actions"><button id="close-entry-correction" class="button button--quiet" type="button">Cancel</button><button class="button" type="submit">Save details</button></div>
+    </form>
+  </dialog>
 </body>
 </html>
