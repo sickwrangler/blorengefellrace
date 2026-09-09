@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>2026 start list | Blorenge Fell Race</title>
+  <meta name="description" content="Public start list for the 2026 Blorenge Fell Race.">
+  <link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="prototype.css">
+  <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+  <script type="module" src="start-list.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="prototype-header"><a href="../index.html">← Blorenge Fell Race</a><a href="index.html">Registration</a></header>
+  <main id="main-content" class="prototype-shell start-list-shell">
+    <section class="prototype-card prototype-intro">
+      <p class="eyebrow">2026 race</p>
+      <h1>Start list <span class="heading-translation" lang="cy">Rhestr gychwyn</span></h1>
+      <p>Check who currently has a confirmed place in the Blorenge Fell Race.</p>
+      <p id="start-list-summary" class="start-list-summary" aria-live="polite">Loading confirmed entries…</p>
+      <p id="start-list-updated" class="hint"></p>
+    </section>
+
+    <section class="prototype-card" aria-labelledby="entries-title">
+      <h2 id="entries-title">Confirmed runners</h2>
+      <div id="start-list-error" class="form-alert" role="alert" hidden>We could not load the start list. Please try again shortly.</div>
+      <p id="start-list-empty" hidden>No confirmed runners are listed yet.</p>
+      <div id="start-list-table-wrap" class="start-list-table-wrap" hidden>
+        <table class="start-list-table">
+          <thead><tr><th scope="col">Runner</th><th scope="col">Club</th><th scope="col">Category</th><th scope="col">Race no.</th></tr></thead>
+          <tbody id="start-list-body"></tbody>
+        </table>
+      </div>
+      <p id="start-list-full" class="start-list-full" hidden>Race full — waiting list available.</p>
+    </section>
+  </main>
+</body>
+</html>

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const files = ["registration/index.html", "registration/dashboard.html", "registration/payment-return.html", "registration/declaration.html", "registration/declaration.mjs", "registration/prototype.css", "registration/runner.mjs", "registration/runner-flow.mjs", "registration/runner-errors.mjs", "registration/payment-return.mjs", "registration/payment-state.mjs", "registration/dashboard.mjs", "registration/organiser-view.mjs", "registration/prototype-client.mjs", "registration/preview-repository.mjs", "registration/registration-core.mjs", "registration/fixtures.json", "registration/server/service.mjs", "registration/server/api.mjs", "registration/server/auth.mjs", "registration/server/adapters.mjs", "registration/server/phase3-domain.mjs", "registration/server/phase3-integrations.mjs", "registration/server/phase3-service.mjs", "registration/server/order-service.mjs", "registration/server/development-email.mjs", "registration/server/email-templates.mjs", "registration/server/repositories.mjs", "api/package.json", "api/src/storage.mjs", "api/src/providers.mjs", "api/src/functions/registration.mjs", "scripts/prepare-registration-api.mjs", "scripts/prepare-registration-development-routes.mjs", "scripts/start-registration-prototype.mjs", "scripts/start-registration-phase2.mjs", "scripts/reset-registration-phase2.mjs", "scripts/backup-registration-phase2.mjs", "scripts/restore-registration-phase2.mjs"];
-files.push("registration/declarations.mjs", "registration/localisation.cy.mjs", "registration/server/phase3-integrations.mjs", "registration/server/phase3-service.mjs", "registration/server/development-email.mjs", "registration/server/email-templates.mjs", "api/src/providers.mjs");
+files.push("registration/declarations.mjs", "registration/localisation.cy.mjs", "registration/start-list.html", "registration/start-list.mjs", "registration/server/phase3-integrations.mjs", "registration/server/phase3-service.mjs", "registration/server/development-email.mjs", "registration/server/email-templates.mjs", "api/src/providers.mjs");
 const errors = [];
 for (const file of files) if (!fs.existsSync(file)) errors.push(`Missing ${file}`);
 for (const file of files.filter((name) => name.endsWith(".mjs"))) {
@@ -63,8 +63,18 @@ const phase3b = fs.readFileSync("registration/server/phase3-integrations.mjs", "
 for (const required of ["CHECKOUT_RESERVATION_MINUTES = 30", "stripe_checkout_created", "verifyWebhook", "INVALID_WEBHOOK_SIGNATURE", "amount_or_currency_mismatch", "executeApprovedStripeRefund", "redirected_safe_recipient", "waiting_list_reminder"])
   if (!phase3b.includes(required)) errors.push(`Phase 3B integration boundary is missing: ${required}`);
 const phase3b3 = fs.readFileSync("registration/server/order-service.mjs", "utf8");
-for (const required of ["DEFAULT_MAX_RUNNERS_PER_ORDER = 5", "GROUP_CAPACITY_UNAVAILABLE", "digital_remote", "paper_in_person", "DUPLICATE_ORDER_EMAIL", "createOrderCheckoutSession", "declarationReminders"])
+for (const required of ["DEFAULT_MAX_RUNNERS_PER_ORDER = 5", "GROUP_CAPACITY_UNAVAILABLE", "digital_remote", "paper_in_person", "DUPLICATE_ORDER_EMAIL", "createOrderCheckoutSession", "declarationReminders", "buildPublicStartList", "publicStartList"])
   if (!phase3b3.includes(required)) errors.push(`Phase 3B.3 order boundary is missing: ${required}`);
+const startListPage = fs.readFileSync("registration/start-list.html", "utf8");
+const startListScript = fs.readFileSync("registration/start-list.mjs", "utf8");
+for (const required of ["Start list", "Rhestr gychwyn", "Confirmed runners", "Runner", "Club", "Category", "Race no."])
+  if (!startListPage.includes(required)) errors.push(`Public start list is missing: ${required}`);
+if (!startListScript.includes('fetch("/api/v4/start-list"') || !startListScript.includes("textContent")) errors.push("Public start list does not use the minimised read-only API safely");
+const publicFieldAllowlist = ["runnerName", "club", "category", "raceNumber"];
+if (publicFieldAllowlist.some((field) => /email|phone|address|postcode|birth|emergency|membership|payment|declaration|token|order/i.test(field))) errors.push("Public start-list field allowlist is invalid");
+const runnerAndPlan = `${runnerPage}\n${fs.readFileSync("docs/registration-phase3-plan.md", "utf8")}`;
+for (const forbidden of ["Email me about future races", "marketing consent checkbox", "future-contact consent"])
+  if (runnerAndPlan.includes(forbidden)) errors.push(`Future-marketing control remains in scope: ${forbidden}`);
 const staticConfig = fs.readFileSync("staticwebapp.config.json", "utf8");
 for (const blocked of ["/registration/server/*", "/registration/fixtures.json", "/api/src/*", "/api/package.json", "/api/package-lock.json", "/infrastructure/*", "/docs/internal/*", "/tests/*"])
   if (!staticConfig.includes(blocked)) errors.push(`Preview source route is not blocked: ${blocked}`);

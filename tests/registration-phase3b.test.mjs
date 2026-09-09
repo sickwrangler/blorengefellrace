@@ -194,7 +194,8 @@ test("waiting-list reminders and expiry are scheduled cheaply in domain logic", 
   assert.equal(reminded.reminders, 1); assert.equal(messages[0].template, "waiting_list_reminder");
   const expired = await processScheduledRegistrationWork(state, { email, at: new Date("2026-10-03T12:01:00Z"), actor: admin });
   assert.equal(expired.expiredOffers, 1); assert.equal(expired.nextOfferCreated, true); assert.equal(state.waitingListOffers[1].status, "offered");
-  assert.deepEqual(messages.slice(-2).map((message) => message.template), ["waiting_list_expired", "waiting_list_offer"]);
+  assert.deepEqual(messages.slice(-1).map((message) => message.template), ["waiting_list_offer"]);
+  assert.equal(messages.some((message) => message.template === "waiting_list_expired"), false);
 });
 
 test("capacity counts payment and offer reservations and never exceeds the final place", async () => {
@@ -338,7 +339,7 @@ test("management recovery is non-enumerating, rotates tokens and is rate limited
   assert.equal((await repository.read()).managementRecoveryAttempts.every((item) => /^[a-f0-9]{64}$/.test(item.emailHash)), true);
 });
 
-test("management amendments communicate once and expose refund lifecycle state", async () => {
+test("management amendments are audited without email and expose refund lifecycle state", async () => {
   const repository = createMemoryRepository(createDatabase({ environment: "development", registrationState: "test" })); const mail = controlledEmail();
   const service = new RegistrationService({ repository, paymentAdapter: createMockPaymentAdapter(), emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
   const created = await service.create(phase2Runner(3), { idempotencyKey: "phase3b-amendment-link-3" });
@@ -346,14 +347,17 @@ test("management amendments communicate once and expose refund lifecycle state",
   const amended = await phase3.amend(created.managementToken, { phone: "07700 900999", club: "Synthetic Fell Club" }, at);
   await phase3.amend(created.managementToken, { phone: "07700 900999", club: "Synthetic Fell Club" }, at);
   assert.equal(amended.registration.runner.club, "Synthetic Fell Club");
-  assert.equal(mail.sent.filter((message) => message.subject.includes("entry updated")).length, 1);
+  assert.equal(mail.sent.filter((message) => message.subject.includes("entry updated")).length, 0);
+  assert.equal((await repository.read()).auditEvents.filter((event) => event.action === "runner_details_amended").length, 2);
   await phase3.checkout(created.managementToken, at); const payment = (await repository.read()).payments[0];
   const event = stripeEvent("checkout.session.completed", payment, {}, "evt_management_paid"); const raw = JSON.stringify(event); const signature = crypto.createHmac("sha256", "whsec_example_only").update(raw).digest("hex");
   await phase3.webhook(raw, signature, at); await phase3.webhook(raw, signature, at);
   assert.equal(mail.sent.filter((message) => message.subject.includes("entry confirmed")).length, 1);
   const requested = await phase3.requestRefund(created.managementToken, at);
   assert.equal((await phase3.managementEntry(created.managementToken, at)).registration.payment.state, "refund_requested");
+  const messagesBeforeApproval = mail.sent.length;
   await phase3.decideRefund(admin, requested.request.id, "approved", at);
+  assert.equal(mail.sent.length, messagesBeforeApproval);
   assert.equal((await phase3.managementEntry(created.managementToken, at)).registration.payment.state, "refund_approved");
   await phase3.refund(admin, requested.request.id, at);
   assert.equal((await phase3.managementEntry(created.managementToken, at)).registration.payment.state, "refunded");
@@ -376,7 +380,7 @@ test("transfer resets declaration state, rotates ownership and invalidates the o
   assert.equal(state.communications.some((item) => item.template === "entry_transferred"), true);
 });
 
-test("development waiting-list communications cover join, offer, reminder, decline and expiry without duplicates", async () => {
+test("development waiting-list communications cover join, offer and one reminder without decline or expiry email", async () => {
   const state = createDatabase({ environment: "development", registrationState: "test" }); const repository = createMemoryRepository(state); const mail = controlledEmail();
   const phase3 = new Phase3IntegrationService({ repository, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
   const first = await phase3.joinWaitingList({ firstName: "Alys", lastName: "Example", email: "alys@example.com" }, at);
@@ -389,7 +393,7 @@ test("development waiting-list communications cover join, offer, reminder, decli
   await phase3.runScheduledWork(admin, new Date("2026-10-03T12:01:00Z"));
   const final = await repository.read();
   assert.equal(final.waitingListOffers[0].status, "expired"); assert.equal(final.waitingListOffers[1].status, "offered");
-  assert.ok(mail.sent.some((message) => message.subject.includes("expired")));
+  assert.equal(mail.sent.some((message) => message.subject.includes("expired")), false);
   assert.equal(final.communications.every((item) => !JSON.stringify(item).includes("#token=")), true);
 });
 

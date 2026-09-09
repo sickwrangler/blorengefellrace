@@ -6,12 +6,12 @@ The registration development system must use invented test entrants only. The Az
 
 | Field | Purpose | Visibility |
 |---|---|---|
-| First and last name | Identify the entrant and prepare race/result records | Private during registration; may later appear in approved public results |
+| First and last name | Identify the entrant and prepare race/start/result records | Private during registration; appears on the minimised public start list only after authoritative payment confirms a place and may later appear in approved public results |
 | Email and phone | Registration contact | Private |
 | Postal address | Entry administration and any confirmed eligibility/operational need | Private; final necessity and retention require organiser approval |
 | Date of birth | Verify minimum age and calculate the appropriate results category | Private; derived category may be public |
-| Gender/category | Produce result categories | Private during registration; approved category may be public |
-| Running club | Race administration and results | May be public in results |
+| Gender/category | Produce start and result categories | Approved category may be public on the paid start list and in results |
+| Running club | Race administration, start list and results | May be public on the paid start list and in results |
 | Self-declared WFRA membership, membership number and discount evidence | Apply and audit an approved member price without claiming verification | Private; excluded from public APIs, results and public exports; retention requires organiser approval |
 | Emergency-contact name and phone | Race-day incident contact | Private; race-day use only |
 | Terms and privacy versions/timestamp | Evidence of the agreed versions | Private |
@@ -22,7 +22,7 @@ The registration development system must use invented test entrants only. The Az
 | Refund request/decision and payment references | Administer refunds and reconcile finance | Private; accounting retention must be decided separately |
 | Stripe test Checkout/payment/refund identifiers and reconciliation state | Reconcile a sandbox payment without storing card data | Private; excluded from public APIs and logs |
 | Intended email address and safe-recipient delivery evidence | Prove communication routing without emailing arbitrary development addresses | Private; actual safe addresses remain runtime configuration |
-| Race number | Race administration and results | May be public in results |
+| Race number | Race administration, start list and results | May be public on the paid start list and in results |
 
 Medical information remains excluded; collecting it would require a specific race-day need, lawful basis, restricted access and retention decision.
 
@@ -33,6 +33,8 @@ UK Athletics affiliation, UK Athletics membership number and travel method are n
 WFRA membership and discount evidence needs an approved retention period before real registration opens; it must not be retained indefinitely by default.
 
 Prototype data should be reset after each review session and is not backed up. Final periods are deliberately not invented. The organiser must approve a production schedule covering incomplete attempts, waiting-list records, private invitations, active/cancelled entries, addresses and contact details, declarations/consent, audit records, payment/accounting metadata and public results before real collection starts. Emergency-contact data is short-lived operational information and should be deleted or anonymised soon after the event once incident needs have ended. Durable financial/accounting evidence must be separated from race-operation data and retained only for its approved purpose.
+
+Registration email addresses and other contact details are used only for operational communications about the current event. They are not future-marketing consent, must not be retained for promotional contact, and do not require a marketing subscription or unsubscribe subsystem. Address/location data may support a separately documented environmental or carbon-analysis purpose; it must not silently acquire a marketing purpose. Public race results remain historical records. The detailed production retention schedule remains a Phase 3C decision.
 
 The production design must provide documented processes to:
 

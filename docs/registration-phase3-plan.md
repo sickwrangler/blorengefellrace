@@ -10,6 +10,8 @@ The frontend, API, database, organiser authentication, payment configuration and
 
 Phase 3A implements provider-neutral domain and interface foundations only. It does not deploy a production registration service, open entries, call Stripe or deliver email.
 
+Registration contact details are for administering the current race only. Future marketing consent, promotional retention, marketing email and unsubscribe functionality are outside scope and must not be inferred from race entry.
+
 ## Phase 3A implementation status
 
 - The server domain defines `CLOSED`, `PRIVATE_LIVE`, `OPEN`, `PAUSED` and terminal `CLOSED_FINAL`. Capacity and waiting-list availability are derived, not manual states. A production state always initializes as `CLOSED`; state changes require an authenticated organiser, an expected-current-state check and an audit event.
@@ -71,7 +73,7 @@ These choices affect provider integration, production resources or final policy 
 These can be finalized after the core architecture and policies above are agreed, but must be resolved before the affected capability goes live:
 
 - exact wording and visual presentation of transactional email templates;
-- optional reminder schedules beyond the essential confirmation and operational messages;
+- optional communication refinements that remain within the approved single-reminder, operational-only policy;
 - organiser dashboard sorting, saved filters and nonessential reporting preferences;
 - optional additional export formats beyond the required private administration and reviewed public-results exports;
 - longer-term multi-event history and archive presentation after the first production event retention model is proven;

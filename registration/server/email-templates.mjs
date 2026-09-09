@@ -33,17 +33,21 @@ export function renderRegistrationEmail(template, data = {}) {
   if (data.intendedRecipientAddress) lines.push(`Intended recipient: ${data.intendedRecipientAddress}`);
   if (data.expiresAt) lines.push(`Expires: ${new Date(data.expiresAt).toLocaleString("en-GB", { timeZone: "Europe/London" })}`);
   if (data.runnerName) lines.push(`Runner: ${data.runnerName}`);
+  if (data.raceDate) lines.push(`Race date: ${new Date(`${data.raceDate}T12:00:00Z`).toLocaleDateString("en-GB", { dateStyle: "long", timeZone: "Europe/London" })}`);
   if (data.status) lines.push(`Status: ${data.status}`);
   if (data.runnerCount) lines.push(`Entries: ${data.runnerCount}`);
   if (Number.isInteger(data.amountPence)) lines.push(`Payment: £${(data.amountPence / 100).toFixed(2)}`);
   if (data.secureUrl) lines.push(`Secure entry link: ${data.secureUrl}`);
   if (data.managementUrl) lines.push(`Manage your entry: ${data.managementUrl}`);
+  if (data.raceInfoUrl) lines.push(`Race information: ${data.raceInfoUrl}`);
   const text = lines.join("\n\n");
   const html = lines.map((line) => line.startsWith("Secure entry link: ")
     ? `<p><a href="${escapeHtml(data.secureUrl)}">Open your secure entry page</a></p>`
     : line.startsWith("Manage your entry: ")
       ? `<p><a href="${escapeHtml(data.managementUrl)}">Manage your entry</a></p>`
-    : `<p>${escapeHtml(line)}</p>`).join("");
+    : line.startsWith("Race information: ")
+      ? `<p><a href="${escapeHtml(data.raceInfoUrl)}">Race information</a></p>`
+      : `<p>${escapeHtml(line)}</p>`).join("");
   return { subject: selected[0], text, html };
 }
 

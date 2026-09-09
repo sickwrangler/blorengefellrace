@@ -247,22 +247,11 @@ export async function processScheduledRegistrationWork(state, { email, at = new 
     await email.send({ template: "waiting_list_reminder", intendedRecipientAddress: waiting.email, data: { firstName: waiting.firstName, expiresAt: offer.expiresAt } });
     offer.reminderSentAt = iso(at); audit(state, "waiting_list_reminder_sent", offer.id, {}, at);
   }
-  const expiringOffers = state.waitingListOffers.filter((offer) => offer.status === "offered" && new Date(offer.expiresAt) <= new Date(at));
   const offers = expireWaitingListOffers(state, actor, at);
-  for (const offer of expiringOffers) {
-    const waiting = state.waitingList.find((item) => item.id === offer.waitingListId);
-    if (waiting) await email.send({ template: "waiting_list_expired", intendedRecipientAddress: waiting.email, data: { firstName: waiting.firstName } });
-  }
   if (offers.nextOffer) {
     const waiting = state.waitingList.find((item) => item.id === offers.nextOffer.offer.waitingListId);
     await email.send({ template: "waiting_list_offer", intendedRecipientAddress: waiting.email, data: { firstName: waiting.firstName, expiresAt: offers.nextOffer.offer.expiresAt, secureUrl: offerUrl(offers.nextOffer.token) } });
   }
-  const expiringPayments = state.payments.filter((payment) => payment.status === "checkout_pending" && new Date(payment.checkoutExpiresAt) <= new Date(at));
   const payments = expireStalePaymentReservations(state, at);
-  for (const payment of expiringPayments) {
-    const registration = state.registrations.find((item) => item.id === payment.registrationId);
-    const runner = state.runners.find((item) => item.id === registration?.runnerId);
-    if (runner) await email.send({ template: "payment_session_expired", intendedRecipientAddress: runner.email, data: { firstName: runner.firstName } });
-  }
   return { ok: true, reminders: reminders.length, expiredOffers: offers.expired, expiredPayments: payments.expired, nextOfferCreated: Boolean(offers.nextOffer) };
 }

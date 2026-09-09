@@ -3,7 +3,7 @@ import { authorize } from "./auth.mjs";
 import { ageOnRaceDate, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
-import { OrderRegistrationService } from "./order-service.mjs";
+import { OrderRegistrationService, issueDeclarationToken } from "./order-service.mjs";
 
 const hashToken = (value) => crypto.createHash("sha256").update(String(value ?? "")).digest("hex");
 const iso = (value = new Date()) => new Date(value).toISOString();
@@ -118,7 +118,6 @@ export class Phase3IntegrationService {
       if (runner.wfraMember !== true) runner.wfraMembershipNumber = null;
       registration.updatedAt = iso(at);
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: "runner", actorId: null, action: "runner_details_amended", subjectId: registration.id, before: null, after: { fields: changedFields }, environment: state.environment });
-      await this.communicate(state, { registrationId: registration.id, template: "entry_amended", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, `registration:${registration.id}:amended:${registration.updatedAt}`, at);
       return managementView(state, registration, at);
     });
   }
@@ -148,17 +147,12 @@ export class Phase3IntegrationService {
       if (emergency) { emergency.name = String(next.emergencyContactName).trim(); emergency.phone = String(next.emergencyContactPhone).trim(); }
       else state.emergencyContacts.push({ id: `emergency_${crypto.randomUUID()}`, registrationId: registration.id, name: String(next.emergencyContactName).trim(), phone: String(next.emergencyContactPhone).trim(), deleteAfterEvent: true });
       const issued = issueManagementToken(state, registration.id, actor, at);
+      const declarationToken = issueDeclarationToken(state, registration.id, at);
       const action = actor.actorType === "organiser" ? "organiser_entry_transferred" : "entry_transferred";
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType, actorId: actor.id ?? null, action, subjectId: registration.id, before: { runnerId: previous.id }, after: { runnerId: runner.id, declarationStatus: "pending", cutoffOverride: Boolean(afterCutoff && allowCutoffOverride) }, environment: state.environment });
       await this.communicate(state, { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} }, `registration:${registration.id}:transfer-old:${registration.updatedAt}`, at);
-      await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
-      return { ...managementView(state, registration, at), transferredRegistrationId: registration.id };
-    }).then(async (result) => {
-      if (result.ok) {
-        await this.orders.resendDeclaration({ authenticated: true, role: "administrator", actorType: "system", id: "transfer-declaration" }, result.transferredRegistrationId, at);
-        delete result.transferredRegistrationId;
-      }
-      return result;
+      await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, managementUrl: this.managementUrl(issued.token), secureUrl: this.orders.declarationUrl(declarationToken), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
+      return managementView(state, registration, at);
     });
   }
 
@@ -214,7 +208,7 @@ export class Phase3IntegrationService {
     return this.repository.transaction(async (state) => {
       const result = decideRefund(state, refundRequestId, decision, actor, at);
       const registration = state.registrations.find((item) => item.id === result.request?.registrationId); const runner = runnerFor(state, registration);
-      if (result.ok && runner) await this.communicate(state, { registrationId: registration.id, template: decision === "approved" ? "refund_approved" : "refund_rejected", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, `refund:${refundRequestId}:${decision}`, at);
+      if (result.ok && runner && decision === "rejected") await this.communicate(state, { registrationId: registration.id, template: "refund_rejected", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, `refund:${refundRequestId}:${decision}`, at);
       return result;
     });
   }
@@ -234,7 +228,7 @@ export class Phase3IntegrationService {
       const object = event?.data?.object ?? {};
       const payment = state.payments.find((item) => item.checkoutSessionId === object.id || (object.payment_intent && item.paymentIntentId === (object.payment_intent.id ?? object.payment_intent)));
       const registration = state.registrations.find((item) => item.id === payment?.registrationId); const runner = runnerFor(state, registration);
-      const template = result.paymentStatus === "paid" ? "entry_confirmed" : result.paymentStatus === "failed" ? "payment_unsuccessful" : result.paymentStatus === "expired" ? "payment_session_expired" : result.paymentStatus === "refunded" ? "refund_completed" : null;
+      const template = result.paymentStatus === "paid" ? "entry_confirmed" : result.paymentStatus === "failed" ? "payment_unsuccessful" : result.paymentStatus === "refunded" ? "refund_completed" : null;
       if (template && runner) await this.communicate(state, { registrationId: registration.id, template, intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, `stripe-event:${event.id}:${template}`, at);
       return result;
     });
@@ -304,7 +298,6 @@ export class Phase3IntegrationService {
       const waiting = state.waitingList.find((item) => item.id === offer?.waitingListId);
       const result = declineWaitingListOffer(state, offer?.id, { actorType: "runner" }, at);
       if (!result.ok) return result;
-      await this.communicate(state, { waitingListId: waiting.id, template: "waiting_list_declined", intendedRecipientAddress: waiting.email, data: { runnerName: `${waiting.firstName} ${waiting.lastName}` } }, `waiting-list:${offer.id}:declined`, at);
       if (result.nextOffer) {
         const next = state.waitingList.find((item) => item.id === result.nextOffer.offer.waitingListId);
         await this.communicate(state, { waitingListId: next.id, template: "waiting_list_offer", intendedRecipientAddress: next.email, data: { runnerName: `${next.firstName} ${next.lastName}`, expiresAt: result.nextOffer.offer.expiresAt, secureUrl: `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(result.nextOffer.token)}` } }, `waiting-list:${result.nextOffer.offer.id}:offered`, at);

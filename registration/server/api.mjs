@@ -10,6 +10,7 @@ export function createApi({ service, phase3Integrations = null, environment = "l
     const actor = actorForRequest({ environment, hostname, headers });
     if (method === "POST" && pathname !== "/api/v3/stripe/webhook" && !pathname.startsWith("/api/v2/organiser/") && !pathname.startsWith("/api/v3/organiser/") && !pathname.startsWith("/api/v4/organiser/")) { const key = `${hostname}:${pathname}`; const current = attempts.get(key) ?? { startedAt: Date.now(), count: 0 }; if (Date.now() - current.startedAt > 60_000) { current.startedAt = Date.now(); current.count = 0; } current.count += 1; attempts.set(key, current); if (current.count > 30) return response(429, { ok: false, code: "RATE_LIMITED" }, { "retry-after": "60" }); }
     if (pathname.startsWith("/api/v4/") && !phase3Integrations?.orders) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+    if (method === "GET" && pathname === "/api/v4/start-list") return response(200, await phase3Integrations.orders.publicStartList());
     if (method === "POST" && pathname === "/api/v4/orders") return resultResponse(await phase3Integrations.orders.createOrder(body), 201);
     if (method === "GET" && pathname === "/api/v4/orders/current") return resultResponse(await phase3Integrations.orders.getOrder(headers["x-order-token"]));
     if (method === "POST" && pathname === "/api/v4/orders/runners") return resultResponse(await phase3Integrations.orders.addRunner(headers["x-order-token"], body), 201);

@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { createAzureTableRepository, createMemoryRepository } from "../registration/server/repositories.mjs";
 import { createDatabase } from "../registration/server/service.mjs";
-import { OrderRegistrationService, DEFAULT_MAX_RUNNERS_PER_ORDER } from "../registration/server/order-service.mjs";
+import { OrderRegistrationService, DEFAULT_MAX_RUNNERS_PER_ORDER, buildPublicStartList } from "../registration/server/order-service.mjs";
 import { capacitySummary, decideRefund, requestRefund } from "../registration/server/phase3-domain.mjs";
 import { createStripeGateway, executeApprovedStripeRefund } from "../registration/server/phase3-integrations.mjs";
 import { createApi } from "../registration/server/api.mjs";
@@ -132,6 +133,73 @@ test("one webhook confirms both entries exactly once while preserving declaratio
   const replay = { id: "evt_group_paid", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 1200, currency: "gbp", payment_status: "paid", payment_intent: "pi_test_group", metadata: { orderId: created.order.id } } } }; assert.equal((await orders.webhook(replay, start)).duplicate, true);
 });
 
+test("normal single-runner payment sends one consolidated confirmation", async () => {
+  const { orders, sent } = setup(); const created = await createOrder(orders); await add(orders, created.orderToken, 1, "now"); await orders.checkout(created.orderToken, start);
+  await orders.webhook({ id: "evt_single_paid", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_test_single" } } }, start);
+  assert.deepEqual(sent.map((message) => message.template), ["entry_confirmed"]);
+});
+
+test("public start list is empty and excludes unpaid, reserved and waiting-list records", async () => {
+  const { orders, repository } = setup();
+  assert.deepEqual(buildPublicStartList(await repository.read()).entries, []);
+  const created = await createOrder(orders); await add(orders, created.orderToken, 1, "later");
+  assert.deepEqual(buildPublicStartList(await repository.read()).entries, []);
+  await orders.checkout(created.orderToken, start);
+  await repository.transaction((state) => { state.waitingList.push({ id: "waiting_test", firstName: "Waiting", lastName: "Person", email: "waiting@example.com", status: "waiting" }); return { ok: true }; });
+  assert.deepEqual(buildPublicStartList(await repository.read()).entries, []);
+});
+
+test("paid group runners appear regardless of declaration state using only public fields", async () => {
+  const { repository } = await paidTwo(); const state = await repository.read();
+  const result = buildPublicStartList(state);
+  assert.equal(result.confirmedCount, 2); assert.equal(result.capacity, 120);
+  assert.deepEqual(result.entries.map((entry) => entry.runnerName), ["Runner 1 Example", "Runner 2 Example"]);
+  assert.deepEqual(Object.keys(result.entries[0]).sort(), ["category", "club", "raceNumber", "runnerName"]);
+  for (const forbidden of ["email", "phone", "address", "postcode", "birth", "emergency", "membership", "payment", "declaration", "token", "order", "amount", "audit"]) assert.equal(JSON.stringify(result).toLowerCase().includes(`\"${forbidden}`), false);
+  assert.deepEqual(state.registrations.map((registration) => registration.declarationStatus), ["complete", "pending"]);
+});
+
+test("public start list reflects race numbers and deterministic number/name sorting", async () => {
+  const { repository } = await paidTwo();
+  await repository.transaction((state) => { state.registrations[1].raceNumber = 42; state.registrations[1].updatedAt = new Date("2026-09-02T12:00:00Z").toISOString(); return { ok: true }; });
+  const result = buildPublicStartList(await repository.read());
+  assert.deepEqual(result.entries.map((entry) => [entry.runnerName, entry.raceNumber]), [["Runner 2 Example", 42], ["Runner 1 Example", null]]);
+});
+
+test("individual refund removes only that runner from the public start list", async () => {
+  const paid = await paidTwo(); const state = await paid.repository.read(); const target = state.registrations[0];
+  const requested = requestRefund(state, target.id, { actorType: "runner" }, start); decideRefund(state, requested.request.id, "approved", admin, start);
+  assert.equal((await executeApprovedStripeRefund(state, requested.request.id, paid.stripeGateway, admin, start)).ok, true);
+  const result = buildPublicStartList(state);
+  assert.deepEqual(result.entries.map((entry) => entry.runnerName), ["Runner 2 Example"]);
+});
+
+test("cancellation removes a paid runner from the public start list", async () => {
+  const { repository } = await paidTwo();
+  await repository.transaction((state) => { state.registrations[0].entryStatus = "cancelled"; state.registrations[0].updatedAt = new Date("2026-09-02T12:00:00Z").toISOString(); return { ok: true }; });
+  assert.deepEqual(buildPublicStartList(await repository.read()).entries.map((entry) => entry.runnerName), ["Runner 2 Example"]);
+});
+
+test("transfer replaces the previous public identity without stale ownership", async () => {
+  const paid = await paidTwo(); const before = await paid.repository.read(); const target = before.registrations[1];
+  const phase3 = new Phase3IntegrationService({ repository: paid.repository, stripeGateway: paid.stripeGateway, emailAdapter: { kind: "test", async send(message) { paid.sent.push(message); return { delivery: "test", externalCall: false }; } }, publicBaseUrl: "https://development.example" });
+  assert.equal((await phase3.organiserTransfer(admin, target.id, { runner: runner(7, { firstName: "Replacement", lastName: "Runner" }) }, start)).ok, true);
+  const names = buildPublicStartList(await paid.repository.read()).entries.map((entry) => entry.runnerName);
+  assert.equal(names.includes("Runner 2 Example"), false); assert.equal(names.includes("Replacement Runner"), true);
+});
+
+test("public v4 start-list route is read-only and needs no organiser authentication", async () => {
+  const payload = { ok: true, confirmedCount: 1, capacity: 120, raceFull: false, lastUpdatedAt: null, entries: [{ runnerName: "Synthetic Runner", club: null, category: "Female", raceNumber: null }] };
+  const api = createApi({ service: {}, phase3Integrations: { orders: { async publicStartList() { return payload; } } }, environment: "development" });
+  const result = await api({ method: "GET", pathname: "/api/v4/start-list", hostname: "development.example" });
+  assert.equal(result.status, 200); assert.deepEqual(result.body, payload);
+});
+
+test("future-marketing consent and subscription controls are absent", () => {
+  const sources = ["registration/index.html", "registration/runner.mjs", "registration/server/order-service.mjs", "registration/server/service.mjs"].map((file) => fs.readFileSync(file, "utf8")).join("\n");
+  for (const pattern of [/name=["']marketing/i, /future[-_ ](?:race|event).*consent/i, /unsubscribe/i, /marketingSubscription/i]) assert.equal(pattern.test(sources), false);
+});
+
 test("secure declaration is registration-specific, idempotent and does not change payment or capacity", async () => {
   const { orders, repository, sent } = await paidTwo(); const message = sent.find((item) => item.template === "entry_confirmed_declaration_required"); const token = new URL(message.data.secureUrl).hash.split("token=")[1];
   const before = await repository.read(); const inspected = await orders.inspectDeclaration(token); assert.equal(inspected.registration.runner.firstName, "Runner 2");
@@ -191,12 +259,14 @@ test("Stripe refund and notification side effects are not repeated by Azure ETag
 });
 
 test("Checkout expiry releases every runner and scheduler reminders stop after completion", async () => {
-  const { orders, repository } = setup(); const created = await createOrder(orders); const added = await add(orders, created.orderToken, 1); await orders.checkout(created.orderToken, start);
+  const { orders, repository, sent } = setup(); const created = await createOrder(orders); const added = await add(orders, created.orderToken, 1); await orders.checkout(created.orderToken, start);
   const expired = await orders.runScheduledWork(new Date("2026-09-01T12:31:00Z")); assert.equal(expired.abandonedOrders, 1); assert.equal(capacitySummary(await repository.read()).remaining, 120);
+  assert.equal(sent.some((message) => message.template === "payment_session_expired"), false);
   const registrationId = added.order.registrations[0].id;
   assert.equal((await orders.updateRunner(created.orderToken, registrationId, { runner: runner(1, { club: "Edited after expiry" }), declarationMode: "later" }, new Date("2026-09-01T12:32:00Z"))).ok, true);
   assert.equal((await orders.removeRunner(created.orderToken, registrationId, new Date("2026-09-01T12:33:00Z"))).ok, true);
   const paid = await paidTwo(); const weekLater = await paid.orders.runScheduledWork(new Date("2026-09-08T12:01:00Z")); assert.equal(weekLater.declarationReminders, 1); assert.equal(paid.sent.filter((item) => item.template === "declaration_reminder").length, 1);
+  assert.equal((await paid.orders.runScheduledWork(new Date("2026-11-26T12:00:00Z"))).declarationReminders, 0);
   const reminder = paid.sent.find((item) => item.template === "declaration_reminder"); const declarationToken = new URL(reminder.data.secureUrl).hash.split("token=")[1]; await paid.orders.completeDeclaration(declarationToken, { accepted: true, typedFullName: "Runner 2 Example", completedByNamedRunner: true }, new Date("2026-09-08T12:02:00Z"));
   assert.equal((await paid.orders.runScheduledWork(new Date("2026-11-26T12:00:00Z"))).declarationReminders, 0);
 });
@@ -232,7 +302,8 @@ test("organiser transfer preserves payment/place, revokes old links and resets d
   const after = await paid.repository.read(); const registration = after.registrations.find((item) => item.id === target.id);
   assert.notEqual(registration.runnerId, oldRunnerId); assert.equal(registration.placeStatus, "confirmed"); assert.equal(registration.declarationStatus, "pending"); assert.equal(after.payments[0].id, paymentId); assert.equal(after.payments[0].status, "paid");
   assert.ok(after.auditEvents.find((item) => item.action === "runner_details_amended")); assert.ok(after.auditEvents.find((item) => item.action === "organiser_entry_transferred" && item.after.cutoffOverride === false));
-  const newDeclaration = [...paid.sent].reverse().find((item) => item.template === "declaration_reminder" && item.registrationId === target.id); const newDeclarationToken = new URL(newDeclaration.data.secureUrl).hash.split("token=")[1];
+  const transferMessages = paid.sent.filter((item) => ["entry_transferred_previous_runner", "entry_transferred"].includes(item.template)); assert.equal(transferMessages.length, 2);
+  const newDeclaration = [...paid.sent].reverse().find((item) => item.template === "entry_transferred" && item.registrationId === target.id); const newDeclarationToken = new URL(newDeclaration.data.secureUrl).hash.split("token=")[1];
   assert.equal((await paid.orders.completeDeclaration(newDeclarationToken, { accepted: true, typedFullName: "Runner 3 Example", completedByNamedRunner: true }, start)).ok, true);
   const complete = await paid.repository.read(); assert.equal(complete.registrations.find((item) => item.id === target.id).declarationStatus, "complete"); assert.equal(complete.payments[0].status, "paid");
 });

@@ -43,7 +43,7 @@ Runner request → organiser approval/rejection → Stripe refund request → se
 
 ## Controlled development email
 
-Twenty-three English templates cover saved orders, group and individual payment, declarations, entry management, amendments/transfers, refunds, cancellation and waiting-list events. Template data is provider-neutral and scoped to either an order or one individual registration.
+Twenty-three English templates retain the ability to explain normal and exceptional states, but automatic delivery is deliberately light-touch. Creating an unpaid order does not email the purchaser, routine amendments do not email, Checkout expiry does not email, waiting-list decline/expiry does not email, and internal refund approval does not email. A normal paid single-runner order produces one consolidated runner confirmation. A paid multi-runner order produces one message per runner plus one concise purchaser summary. Templates that are no longer automatic remain available for an explicitly justified future/manual use rather than driving messages for every state transition.
 
 The development adapter has two modes:
 
@@ -51,6 +51,19 @@ The development adapter has two modes:
 - Without complete safe delivery configuration, the adapter captures the message and makes no external call.
 
 Safe recipients and provider credentials are runtime configuration only. Actual addresses are neither committed nor returned in API responses. Management and offer tokens may appear in their intended email or one-time creation response, but not in logs or audit payloads.
+
+Expected automatic message counts are:
+
+| Journey | Automatic messages |
+|---|---:|
+| Single runner, declaration completed, paid | 1 runner confirmation |
+| Single runner, declaration deferred, paid | 1 combined confirmation/declaration request, plus at most 1 later reminder |
+| Two-runner paid order | 2 runner confirmations plus 1 purchaser summary |
+| Routine self-service amendment | 0 |
+| Transfer | 1 previous-runner confirmation plus 1 replacement-runner combined message |
+| Refund completed or rejected | 1 request acknowledgement plus 1 final outcome |
+| Waiting list through unused offer | 1 join, 1 offer and at most 1 reminder |
+| Checkout expiry, waiting-list decline or waiting-list expiry | 0 |
 
 The preferred production authentication is a managed identity with the minimum ACS email role. The current managed Static Web Apps Functions environment has not been proven to support that identity model. Phase 3B therefore supports either `DefaultAzureCredential` with an endpoint or an ACS connection string held only in isolated runtime secret configuration. No service-plan or hosting migration should be made solely for managed identity without a separate cost/architecture approval.
 
@@ -62,7 +75,7 @@ Order, registration, payment and declaration are separate states. One Stripe Che
 
 The named runner may accept the declaration during order entry when physically present, or defer it without blocking Checkout. After payment, each outstanding runner receives a purpose-bound, registration-specific declaration link; the raw token is carried in the URL fragment and only its hash is stored. Digital completion records the current declaration identifier/version, runner name, server timestamp and completion method. A race-day paper declaration is recorded as `paper_in_person` by an explicit audited organiser action and is never represented as a digital signature. Transfers reset the declaration and rotate individual management credentials.
 
-The initial configurable reminder policy is deliberately proportionate: send the declaration link immediately after payment, one follow-up seven days later if still outstanding, and one final reminder three days before the race if still outstanding. Persistent business keys make reminders idempotent, and completion suppresses all later reminders. These timings are configuration, not a final WFRA policy decision.
+The reminder policy is deliberately proportionate: the paid-entry confirmation includes the declaration link when required, followed by at most one automatic reminder after a configurable delay (seven days by default) if it is still outstanding. Persistent business keys make the reminder idempotent, and completion suppresses it. The organiser can manually resend a declaration link in an exceptional case.
 
 Checkout reservations are released by the scheduler after their existing 30-minute expiry. Stale draft cleanup is implemented as an optional configured retention period but remains disabled until the organiser approves a draft-retention duration; no long-term retention period is silently invented.
 
@@ -86,7 +99,13 @@ The organiser dashboard keeps ordinary phone/club correction separate from an ex
 
 Recovery accepts an email address but always returns the same generic response. Matching is server-side, attempts are stored as email hashes and limited to three successful rotations per address per hour. A successful match rotates the token and sends the replacement only through the controlled development recipient redirect. Stored communication receipts omit secure URLs and tokens.
 
-Lifecycle messages use persistent idempotency keys. Stripe event IDs prevent duplicate payment messages, refund actions reuse their refund-request identity, amendment/transfer messages use the persisted change timestamp, and scheduled reminder/expiry flags plus communication keys prevent repeat scheduler delivery.
+Lifecycle messages use persistent idempotency keys. Stripe event IDs prevent duplicate payment messages, refund actions reuse their refund-request identity, transfer messages use the persisted change timestamp, and scheduled reminder flags plus communication keys prevent repeat scheduler delivery. A transfer sends one message to the previous runner and one combined management/declaration message to the replacement runner. A refund sends request acknowledgement followed by its final completed or rejected outcome; approval is an internal state and does not send a separate email.
+
+## Public start list
+
+The development registration site exposes `/registration/start-list.html`, backed by the explicitly public, read-only `/api/v4/start-list` endpoint. The server constructs a new minimised projection rather than reusing an organiser response. It returns only runner name, optional club, race category, optional race number, confirmed count, capacity, race-full state and an aggregate last-updated time.
+
+An entry appears only when its place is confirmed and its authoritative payment is paid. Cancelled, deleted, place-released and individually refunded registrations are excluded, as are drafts, active Checkout reservations, abandoned orders, waiting-list records and offers. Declaration status has no bearing on inclusion and is never published. A transfer changes the registration's current runner, so only the replacement identity can appear. Assigned race numbers sort first in ascending order; unassigned runners then sort by surname and full name. Before numbers are assigned this naturally produces an alphabetical list.
 
 ## Runtime configuration names
 
@@ -102,7 +121,6 @@ Values belong only in isolated development runtime settings:
 - `ACS_EMAIL_ENDPOINT` or `ACS_EMAIL_CONNECTION_STRING`
 - `REGISTRATION_MAX_RUNNERS_PER_ORDER` — defaults to 5 and must not exceed the reviewed UI/domain limit
 - `REGISTRATION_DECLARATION_REMINDER_DAYS` — defaults to 7 days after payment
-- `REGISTRATION_DECLARATION_FINAL_DAYS` — defaults to 3 days before the race
 - `REGISTRATION_DRAFT_RETENTION_HOURS` — optional; stale draft cleanup remains disabled when absent
 
 The existing storage settings remain required. Stripe and ACS Email have independent controls, so configuring a credential alone cannot enable either provider. Development rejects Stripe live-mode server credentials without logging or returning their values. The browser has no live/test selector.

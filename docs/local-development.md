@@ -111,6 +111,8 @@ node scripts/start-registration-phase2.mjs
 
 The runner, organiser area, captured-email adapter, disabled Phase 3 payment integration and ignored persistent store are served together at <http://127.0.0.1:4173/registration/>. The payment-return page reads the authoritative server state and cannot mark an entry paid. Stop and restart the process to verify persistence. Reset explicitly with `node scripts/reset-registration-phase2.mjs`; backup and restore commands are documented in `registration-phase2.md`.
 
+The public development start list is available at <http://127.0.0.1:4173/registration/start-list.html>. It polls the read-only minimised endpoint at `/api/v4/start-list`; the production deployment allowlist continues to exclude both routes.
+
 To validate the managed development API package without using any Azure credential:
 
 ```sh

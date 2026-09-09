@@ -4,7 +4,7 @@ import { ageOnRaceDate, calculateEntryPrice, capacitySummary, issueManagementTok
 import { deliverRegistrationCommunication } from "./communications.mjs";
 
 export const DEFAULT_MAX_RUNNERS_PER_ORDER = 5;
-export const DECLARATION_REMINDER_POLICY = Object.freeze({ afterPaymentDays: 7, beforeRaceDays: 3 });
+export const DECLARATION_REMINDER_POLICY = Object.freeze({ afterPaymentDays: 7 });
 const SYNTHETIC_EMAIL = /@(example\.(?:com|org|net)|[^@]+\.invalid)$/i;
 const iso = (value = new Date()) => new Date(value).toISOString();
 const id = (prefix) => `${prefix}_${crypto.randomUUID()}`;
@@ -37,6 +37,50 @@ function registrationsFor(state, order) { return order.registrationIds.map((regi
 function orderPayment(state, order) { return state.payments.find((item) => item.orderId === order.id); }
 function fullName(runner) { return normalizeText(`${runner?.firstName ?? ""} ${runner?.lastName ?? ""}`); }
 function declarationFor(state, registrationId) { return [...state.declarations].reverse().find((item) => item.registrationId === registrationId && !item.revokedAt); }
+
+function paidRegistration(state, registration) {
+  if (!active(registration) || registration.placeStatus !== "confirmed") return false;
+  const payment = state.payments.find((item) => item.registrationId === registration.id || item.registrationIds?.includes(registration.id));
+  return payment?.status === "paid" && !payment.refundedRegistrationIds?.includes(registration.id);
+}
+
+function comparePublicEntries(left, right) {
+  const leftNumber = Number.isInteger(left.raceNumber) ? left.raceNumber : null;
+  const rightNumber = Number.isInteger(right.raceNumber) ? right.raceNumber : null;
+  if (leftNumber !== null || rightNumber !== null) {
+    if (leftNumber === null) return 1;
+    if (rightNumber === null) return -1;
+    if (leftNumber !== rightNumber) return leftNumber - rightNumber;
+  }
+  return left.sortLastName.localeCompare(right.sortLastName, "en-GB", { sensitivity: "base" })
+    || left.runnerName.localeCompare(right.runnerName, "en-GB", { sensitivity: "base" });
+}
+
+export function buildPublicStartList(state) {
+  const entries = state.registrations.filter((registration) => paidRegistration(state, registration)).map((registration) => {
+    const runner = runnerFor(state, registration);
+    return runner ? {
+      runnerName: fullName(runner),
+      club: normalizeText(runner.club) || null,
+      category: normalizeText(runner.raceCategory ?? runner.genderCategory),
+      raceNumber: Number.isInteger(registration.raceNumber) ? registration.raceNumber : null,
+      sortLastName: normalizeText(runner.lastName)
+    } : null;
+  }).filter(Boolean).sort(comparePublicEntries).map(({ sortLastName, ...entry }) => entry);
+  const lastUpdatedAt = state.registrations
+    .map((registration) => registration.updatedAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1) ?? null;
+  return {
+    ok: true,
+    confirmedCount: entries.length,
+    capacity: state.event.capacity,
+    raceFull: entries.length >= state.event.capacity,
+    lastUpdatedAt,
+    entries
+  };
+}
 
 function declarationView(state, registration) {
   const declaration = declarationFor(state, registration.id);
@@ -103,7 +147,7 @@ function issueOrderToken(state, orderId, at = new Date()) {
   return value;
 }
 
-function issueDeclarationToken(state, registrationId, at = new Date()) {
+export function issueDeclarationToken(state, registrationId, at = new Date()) {
   for (const token of state.declarationTokens.filter((item) => item.registrationId === registrationId && !item.revokedAt)) { token.revokedAt = iso(at); token.revokedReason = "superseded"; }
   const value = opaqueToken();
   state.declarationTokens.push({ id: id("declaration_token"), registrationId, purpose: "runner_declaration", tokenHash: hashToken(value), issuedAt: iso(at), revokedAt: null });
@@ -140,7 +184,6 @@ export class OrderRegistrationService {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(purchaserEmail) || !SYNTHETIC_EMAIL.test(purchaserEmail)) return { ok: false, code: "VALIDATION_ERROR", errors: { purchaserEmail: "Use a valid synthetic email address." } };
       const order = { id: id("order"), purchaserEmail, status: "draft", registrationIds: [], totalPence: 0, createdAt: iso(at), updatedAt: iso(at), checkoutExpiresAt: null, deletedAt: null };
       state.orders.push(order); const orderToken = issueOrderToken(state, order.id, at); audit(state, "order_created", order.id, {}, at, { actorType: "purchaser" });
-      await this.communicate(state, { orderId: order.id, template: "order_saved", intendedRecipientAddress: purchaserEmail, data: { secureUrl: this.orderUrl(orderToken) } }, `order:${order.id}:saved`, at);
       return { ok: true, order: orderView(state, order), orderToken };
     });
   }
@@ -277,11 +320,11 @@ export class OrderRegistrationService {
             const runner = runnerFor(state, registration); const management = issueManagementToken(state, registration.id, { actorType: "system" }, at);
             if (declarationView(state, registration).status === "pending") {
               const declarationToken = issueDeclarationToken(state, registration.id, at);
-              await this.communicate(state, { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), purchaserEmail: order.purchaserEmail, secureUrl: this.declarationUrl(declarationToken), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed-pending`, at);
+              await this.communicate(state, { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, secureUrl: this.declarationUrl(declarationToken), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed-pending`, at);
               registration.declarationInitialSentAt = iso(at);
-            } else await this.communicate(state, { registrationId: registration.id, template: "entry_confirmed", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), secureUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed`, at);
+            } else await this.communicate(state, { registrationId: registration.id, template: "entry_confirmed", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed`, at);
           }
-          await this.communicate(state, { orderId: order.id, template: "order_payment_confirmed", intendedRecipientAddress: order.purchaserEmail, data: { runnerCount: registrations.length, amountPence: order.totalPence } }, `order:${order.id}:purchaser-confirmed`, at);
+          if (registrations.length > 1) await this.communicate(state, { orderId: order.id, template: "order_payment_confirmed", intendedRecipientAddress: order.purchaserEmail, data: { runnerCount: registrations.length, amountPence: order.totalPence } }, `order:${order.id}:purchaser-confirmed`, at);
           audit(state, "order_payment_confirmed", order.id, { runnerCount: registrations.length, totalPence: order.totalPence }, at);
         }
       } else if (["checkout.session.expired", "checkout.session.async_payment_failed"].includes(event.type)) {
@@ -304,6 +347,12 @@ export class OrderRegistrationService {
     const state = await this.repository.read(); ensureCollections(state); const registration = registrationForDeclarationToken(state, token); const runner = runnerFor(state, registration);
     if (!registration || !runner) return { ok: false, code: "LINK_UNAVAILABLE" };
     return { ok: true, registration: { reference: registration.testReference, runner: { firstName: runner.firstName, lastName: runner.lastName, raceCategory: runner.raceCategory, club: runner.club }, declaration: declarationView(state, registration), declarationIdentifier: state.event.declarationIdentifier, declarationVersion: state.event.declarationVersion } };
+  }
+
+  async publicStartList() {
+    const state = await this.repository.read();
+    ensureCollections(state);
+    return buildPublicStartList(state);
   }
 
   recoverDeclarationLink(emailAddress, at = new Date()) {
@@ -362,15 +411,12 @@ export class OrderRegistrationService {
   runScheduledWork(at = new Date()) {
     return this.repository.transaction(async (state) => {
       ensureCollections(state); let declarationReminders = 0; let abandonedOrders = 0;
-      const raceFinalAt = new Date(`${state.event.raceDate}T00:00:00Z`); raceFinalAt.setUTCDate(raceFinalAt.getUTCDate() - this.reminderPolicy.beforeRaceDays);
       for (const registration of state.registrations.filter((item) => active(item) && item.placeStatus === "confirmed" && declarationView(state, item).status === "pending")) {
         const firstDue = registration.declarationInitialSentAt && new Date(at) >= new Date(new Date(registration.declarationInitialSentAt).getTime() + this.reminderPolicy.afterPaymentDays * 86_400_000);
-        const finalDue = new Date(at) >= raceFinalAt;
-        const kind = finalDue ? "final" : firstDue ? "followup" : null;
-        if (!kind || registration[`declaration${kind === "final" ? "Final" : "Followup"}ReminderSentAt`]) continue;
+        if (!firstDue || registration.declarationReminderSentAt) continue;
         const runner = runnerFor(state, registration); const token = issueDeclarationToken(state, registration.id, at);
-        await this.communicate(state, { registrationId: registration.id, template: "declaration_reminder", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), secureUrl: this.declarationUrl(token) } }, `registration:${registration.id}:declaration-reminder:${kind}`, at);
-        registration[`declaration${kind === "final" ? "Final" : "Followup"}ReminderSentAt`] = iso(at); declarationReminders += 1;
+        await this.communicate(state, { registrationId: registration.id, template: "declaration_reminder", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), secureUrl: this.declarationUrl(token) } }, `registration:${registration.id}:declaration-reminder`, at);
+        registration.declarationReminderSentAt = iso(at); declarationReminders += 1;
       }
       for (const order of state.orders.filter((item) => item.status === "checkout_pending" && new Date(item.checkoutExpiresAt) <= new Date(at))) {
         const payment = orderPayment(state, order); if (payment?.status === "paid") continue;

@@ -56,7 +56,9 @@ export const DEVELOPMENT_REGISTRATION_FILES = Object.freeze([
   "registration/registration-core.mjs",
   "registration/runner-flow.mjs",
   "registration/runner-errors.mjs",
-  "registration/runner.mjs"
+  "registration/runner.mjs",
+  "registration/start-list.html",
+  "registration/start-list.mjs"
 ]);
 
 const DEVELOPMENT_API_COPIES = Object.freeze([
