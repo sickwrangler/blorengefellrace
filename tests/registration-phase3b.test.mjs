@@ -93,12 +93,12 @@ test("duplicate Checkout attempts reuse one active reservation and one provider 
   assert.equal(duplicate.duplicate, true); assert.equal(duplicate.checkoutUrl, checkout.checkoutUrl); assert.equal(stripe.calls.checkout.length, 1); assert.equal(capacitySummary(state).reserved, 1);
 });
 
-test("under-18 entrants cannot reach Checkout", async () => {
+test("a validated 16- or 17-year-old entry can reach Checkout", async () => {
   const state = createPhase3State({ registrationState: "OPEN" });
   state.runners.push({ id: "runner_under18", ...runner(2, { dateOfBirth: "2009-12-01" }) });
   const registration = addPlaceRegistration(state, { runnerId: "runner_under18" }, admin, at).registration;
   state.payments.push({ id: "payment_under18", registrationId: registration.id, status: "not_configured", priceActuallyChargedPence: 600 });
-  assert.equal((await beginStripeCheckout(state, registration.id, gateway().gateway, { successUrl: "https://development.example/s", cancelUrl: "https://development.example/c", at })).code, "PARENTAL_CONSENT_REQUIREMENTS_PENDING");
+  assert.equal((await beginStripeCheckout(state, registration.id, gateway().gateway, { successUrl: "https://development.example/s", cancelUrl: "https://development.example/c", at })).ok, true);
 });
 
 test("verified successful webhooks confirm payment; browser return only reads server state", async () => {

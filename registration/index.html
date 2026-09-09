@@ -28,7 +28,7 @@
       <section id="test-landing" class="prototype-card prototype-intro">
         <p class="eyebrow">2026 race entry</p><h2>Enter the Blorenge Fell Race</h2>
         <p class="lede">In development, this journey accepts synthetic information only. It creates no real race entry, takes no money from a real payment method, and keeps payment sandboxed or disabled. Any enabled test email is redirected to an approved safe recipient.</p>
-        <div class="status-grid" aria-live="polite"><div><span>Places</span><strong id="status-places">0 of 120</strong></div><div><span>Waiting list</span><strong id="status-waiting">0</strong></div><div><span>Standard entry fee</span><strong id="status-price">£6.00</strong></div></div>
+        <div class="status-grid" aria-live="polite"><div><span>Places</span><strong id="status-places">0 of 120</strong></div><div><span>Waiting list</span><strong id="status-waiting">0</strong></div><div><span>Entry fee</span><strong id="status-price">£6 standard · £4 WFRA</strong></div></div>
         <div id="runner-recovery" class="form-alert" role="alert" hidden></div>
         <label>Purchaser email address <span class="hint">Used for the group payment summary; synthetic address only</span><input id="purchaser-email" type="email" value="alex.runner@example.com" required></label>
         <div class="form-actions"><button id="start-test" class="button" type="button">Start a test registration</button><a class="secondary-link" href="dashboard.html">View organiser test area</a></div>
@@ -54,7 +54,7 @@
               <label>Race category<select name="genderCategory" required><option value="">Select one</option><option value="Female">Female</option><option value="Male / Open" selected>Male / Open</option></select></label>
               <label>Date of birth <input name="dateOfBirth" type="date" autocomplete="bday" required value="1990-06-15"></label>
               <label>Club <span class="hint">Optional</span><input name="club" autocomplete="organization" value="Example Harriers"></label>
-              <label>WFRA member?<span class="hint">A member price is planned but has not yet been set.</span><select name="wfraMember" required><option value="no" selected>No</option><option value="yes">Yes</option></select></label>
+              <label>WFRA member?<span class="hint">£4 member price; £6 standard price.</span><select name="wfraMember" required><option value="no" selected>No</option><option value="yes">Yes</option></select></label>
               <label id="wfra-number-field" hidden>WFRA membership number <span class="hint">Not automatically verified</span><input name="wfraMembershipNumber" autocomplete="off" maxlength="80"></label>
             </div>
             <div class="form-actions"><button id="details-continue" class="button" type="button">Continue</button></div>
@@ -73,13 +73,19 @@
               <h3>WFRA competitor declaration</h3>
               <fieldset class="choice-group"><legend>When will this runner complete their declaration?</legend><label class="checkbox-field"><input name="declarationTiming" type="radio" value="now" checked> The named runner is here and will complete it now</label><label class="checkbox-field"><input name="declarationTiming" type="radio" value="later"> Runner will complete this later</label></fieldset>
               <div id="declaration-fields">
-              <p><strong>This declaration must be accepted by the runner named above.</strong> The purchaser must not sign for another adult.</p>
+              <p id="declaration-instruction"><strong>An adult runner must complete their own declaration. For a runner aged 16 or 17, a parent or legal guardian must complete it.</strong></p>
               <div id="declaration-content"></div>
               <p><a id="safety-requirements-link" href="https://www.welshfellrunnersassociation.org.uk/en/info-for-runners#safety-requirements-for-competitors" target="_blank" rel="noopener">WFRA Safety Requirements for Competitors</a></p>
-              <label>Who is signing?<select name="declarationSignatoryRole" required><option value="">Select one</option><option value="Competitor" selected>Competitor</option><option value="Parent / Legal Guardian">Parent / Legal Guardian</option></select></label>
-              <label>Enter your full name to sign the declaration <input name="declarationName" autocomplete="name" required value="Alex Example"></label>
+              <div id="adult-declaration-fields">
+                <label>Runner full name <input name="declarationName" autocomplete="name" value="Alex Example"></label>
+                <label class="checkbox-field"><input name="completedByNamedRunner" type="checkbox"> I confirm I am the runner named in this entry and I am completing this declaration myself.</label>
+              </div>
+              <div id="guardian-declaration-fields" hidden>
+                <p><strong>This runner is aged 16 or 17 on race day. Their parent or legal guardian must complete this declaration.</strong></p>
+                <label>Parent or legal guardian full name <input name="guardianDeclarationName" autocomplete="name"></label>
+                <label class="checkbox-field"><input name="completedByParentOrLegalGuardian" type="checkbox"> I confirm I am the parent or legal guardian of the runner named in this entry and I am completing this declaration.</label>
+              </div>
               <label class="checkbox-field"><input name="acceptDeclaration" type="checkbox" required> I accept the WFRA declaration above.</label>
-              <label class="checkbox-field"><input name="completedByNamedRunner" type="checkbox" required> I confirm I am the runner named in this entry and I am completing this declaration myself.</label>
               </div>
             </div>
             <div class="form-actions"><button id="race-back" class="button button--quiet" type="button">Back</button><button id="race-continue" class="button" type="button">Continue</button></div>

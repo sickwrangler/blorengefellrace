@@ -14,7 +14,7 @@ const admin = { authenticated: true, role: "administrator", actorType: "organise
 const runner = (number, overrides = {}) => ({ email: `runner-${number}@example.com`, firstName: `Runner ${number}`, lastName: "Example", phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", raceCategory: number % 2 ? "Female" : "Male / Open", dateOfBirth: "1990-06-15", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", acceptTerms: true, acceptPrivacy: true, ...overrides });
 const declaration = (number) => ({ declarationIdentifier: "WFRA_SENIOR_ENTRY", declarationVersion: "21/02/23", accepted: true, typedFullName: `Runner ${number} Example`, signatoryRole: "Competitor", completedByNamedRunner: true });
 
-function setup({ capacity = 120, memberPrice = null, draftRetentionHours = null } = {}) {
+function setup({ capacity = 120, memberPrice = 400, draftRetentionHours = null } = {}) {
   const state = createDatabase({ environment: "development", registrationState: "test", capacity }); state.event.capacity = capacity; state.event.wfraMemberPricePence = memberPrice;
   const sent = []; const stripeCalls = { checkout: [], refund: [] };
   const stripeGateway = {
@@ -62,9 +62,12 @@ test("adult emails are unique within an order and across active entries after no
   assert.equal((await add(orders, second.orderToken, 4, "later", { email: "another-purchaser@example.com" })).ok, true);
 });
 
-test("under-18 runners remain blocked pending an approved guardian policy", async () => {
+test("16- and 17-year-old runners require a parent or legal guardian declaration", async () => {
   const { orders } = setup(); const created = await createOrder(orders);
-  const result = await add(orders, created.orderToken, 1, "later", { dateOfBirth: "2009-12-01" }); assert.equal(result.code, "VALIDATION_ERROR"); assert.ok(result.errors.dateOfBirth);
+  const junior = runner(1, { dateOfBirth: "2009-12-01" });
+  const wrongSigner = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: declaration(1) }, start); assert.equal(wrongSigner.code, "GUARDIAN_MUST_COMPLETE_DECLARATION");
+  const guardian = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: { ...declaration(1), typedFullName: "Guardian Example", signatoryRole: "Parent / Legal Guardian", completedByNamedRunner: false, completedByParentOrLegalGuardian: true } }, start);
+  assert.equal(guardian.ok, true); assert.equal(guardian.order.registrations[0].declaration.status, "complete");
 });
 
 test("declaration may be completed now only by the named runner or deferred without blocking Checkout", async () => {
@@ -78,6 +81,21 @@ test("group pricing is server authoritative and supports a configured mixed pric
   const { orders } = setup({ memberPrice: 500 }); const created = await createOrder(orders);
   await add(orders, created.orderToken, 1, "later", { wfraMember: true, wfraMembershipNumber: "SYNTHETIC-1", priceActuallyChargedPence: 1 }); await add(orders, created.orderToken, 2);
   const checkout = await orders.checkout(created.orderToken, start); assert.equal(checkout.totalPence, 1100);
+});
+
+test("agreed £6/£4 prices produce authoritative single and group totals", async () => {
+  const scenarios = [
+    { members: [false], total: 600 },
+    { members: [true], total: 400 },
+    { members: [false, false], total: 1200 },
+    { members: [true, false], total: 1000 },
+    { members: [true, true], total: 800 }
+  ];
+  for (const scenario of scenarios) {
+    const current = setup(); const created = await createOrder(current.orders);
+    for (const [index, member] of scenario.members.entries()) await add(current.orders, created.orderToken, index + 1, "later", member ? { wfraMember: true, wfraMembershipNumber: `WFRA-${index + 1}`, priceActuallyChargedPence: 1 } : { priceActuallyChargedPence: 1 });
+    const checkout = await current.orders.checkout(created.orderToken, start); assert.equal(checkout.totalPence, scenario.total);
+  }
 });
 
 test("Stripe group Checkout contains server prices and minimal non-personal metadata", async () => {
@@ -206,6 +224,15 @@ test("secure declaration is registration-specific, idempotent and does not chang
   assert.equal((await orders.completeDeclaration(token, { accepted: true, typedFullName: "Runner 2 Example", completedByNamedRunner: true }, start)).ok, true);
   assert.equal((await orders.completeDeclaration(token, { accepted: true, typedFullName: "Runner 2 Example", completedByNamedRunner: true }, start)).duplicate, true);
   const after = await repository.read(); assert.equal(after.payments[0].status, before.payments[0].status); assert.equal(capacitySummary(after).remaining, capacitySummary(before).remaining); assert.equal(after.registrations[1].declarationCompletionMethod, "digital_remote");
+});
+
+test("a deferred junior declaration records parent or legal guardian evidence", async () => {
+  const current = setup(); const created = await createOrder(current.orders); await add(current.orders, created.orderToken, 1, "later", { dateOfBirth: "2009-12-01" }); await current.orders.checkout(created.orderToken, start);
+  await current.orders.webhook({ id: "evt_junior_paid", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_test_junior", metadata: { orderId: created.order.id } } } }, start);
+  const message = current.sent.find((item) => item.template === "entry_confirmed_declaration_required"); const token = new URL(message.data.secureUrl).hash.split("token=")[1];
+  const inspected = await current.orders.inspectDeclaration(token); assert.equal(inspected.registration.runner.requiresGuardianDeclaration, true);
+  const completed = await current.orders.completeDeclaration(token, { accepted: true, typedFullName: "Guardian Example", completedByNamedRunner: false, completedByParentOrLegalGuardian: true }, start); assert.equal(completed.ok, true);
+  const state = await current.repository.read(); assert.equal(state.declarations[0].signatoryRole, "Parent / Legal Guardian"); assert.equal(state.declarations[0].typedFullName, "Guardian Example");
 });
 
 test("order, management and declaration credentials remain isolated and hashed at rest", async () => {

@@ -12,6 +12,16 @@ let currentOrder = null;
 let submitting = false;
 let editingRegistrationId = null;
 
+function runnerAgeOnRaceDay(dateOfBirth) {
+  const birth = new Date(`${dateOfBirth}T00:00:00Z`); const race = new Date("2026-11-28T00:00:00Z");
+  if (Number.isNaN(birth.valueOf())) return NaN;
+  let age = race.getUTCFullYear() - birth.getUTCFullYear();
+  if (race.getUTCMonth() < birth.getUTCMonth() || (race.getUTCMonth() === birth.getUTCMonth() && race.getUTCDate() < birth.getUTCDate())) age -= 1;
+  return age;
+}
+
+function guardianRequired() { const age = runnerAgeOnRaceDay(form.elements.dateOfBirth.value); return Number.isFinite(age) && age < 18; }
+
 const declarationContainer = document.querySelector("#declaration-content");
 declarationContainer.replaceChildren(...WFRA_SENIOR_ENTRY_DECLARATION.paragraphs.map((text) => { const paragraph = document.createElement("p"); paragraph.textContent = text; return paragraph; }));
 document.querySelector("#safety-requirements-link").href = WFRA_SENIOR_ENTRY_DECLARATION.safetyRequirementsUrl;
@@ -23,6 +33,9 @@ function payload() {
   data.acceptPrivacy = form.elements.acceptPrivacy.checked;
   data.acceptDeclaration = form.elements.acceptDeclaration.checked;
   data.completedByNamedRunner = form.elements.completedByNamedRunner.checked;
+  data.completedByParentOrLegalGuardian = form.elements.completedByParentOrLegalGuardian.checked;
+  if (guardianRequired()) { data.declarationName = form.elements.guardianDeclarationName.value; data.declarationSignatoryRole = "Parent / Legal Guardian"; }
+  else data.declarationSignatoryRole = "Competitor";
   return data;
 }
 
@@ -31,7 +44,7 @@ function apiRunnerInput() {
   return {
     runner: { ...data, raceCategory: data.genderCategory, emergencyContactName: data.emergencyName, emergencyContactPhone: data.emergencyPhone },
     declarationMode: data.declarationTiming,
-    declaration: data.declarationTiming === "now" ? { declarationIdentifier: WFRA_SENIOR_ENTRY_DECLARATION.identifier, declarationVersion: WFRA_SENIOR_ENTRY_DECLARATION.version, accepted: data.acceptDeclaration, typedFullName: data.declarationName, signatoryRole: data.declarationSignatoryRole, completedByNamedRunner: data.completedByNamedRunner } : null
+    declaration: data.declarationTiming === "now" ? { declarationIdentifier: WFRA_SENIOR_ENTRY_DECLARATION.identifier, declarationVersion: WFRA_SENIOR_ENTRY_DECLARATION.version, accepted: data.acceptDeclaration, typedFullName: data.declarationName, signatoryRole: data.declarationSignatoryRole, completedByNamedRunner: data.completedByNamedRunner, completedByParentOrLegalGuardian: data.completedByParentOrLegalGuardian } : null
   };
 }
 
@@ -54,14 +67,17 @@ function showErrors(errors) {
 
 function validationErrors() {
   const data = payload(); const errors = validateRunner(data);
-  if (data.declarationTiming === "later") for (const key of ["declarationName", "declarationSignatoryRole", "acceptDeclaration"]) delete errors[key];
-  if (data.declarationTiming === "now" && !data.completedByNamedRunner) errors.completedByNamedRunner = "The named runner must confirm they are completing this declaration themselves.";
+  if (data.declarationTiming === "later") for (const key of ["declarationName", "declarationSignatoryRole", "acceptDeclaration", "completedByNamedRunner", "completedByParentOrLegalGuardian"]) delete errors[key];
+  if (data.declarationTiming === "now" && guardianRequired()) {
+    if (errors.declarationName) { errors.guardianDeclarationName = errors.declarationName; delete errors.declarationName; }
+    if (!data.completedByParentOrLegalGuardian) errors.completedByParentOrLegalGuardian = "A parent or legal guardian must confirm they are completing this declaration.";
+  } else if (data.declarationTiming === "now" && !data.completedByNamedRunner) errors.completedByNamedRunner = "The named runner must confirm they are completing this declaration themselves.";
   return errors;
 }
 
 function validateStage(target) {
   const errors = validationErrors();
-  const fields = target === 1 ? ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "wfraMembershipNumber"] : ["emergencyName", "emergencyPhone", "declarationName", "declarationSignatoryRole", "acceptDeclaration", "completedByNamedRunner", "acceptTerms", "acceptPrivacy"];
+  const fields = target === 1 ? ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "wfraMembershipNumber"] : ["emergencyName", "emergencyPhone", "declarationName", "guardianDeclarationName", "acceptDeclaration", "completedByNamedRunner", "completedByParentOrLegalGuardian", "acceptTerms", "acceptPrivacy"];
   const relevant = Object.fromEntries(Object.entries(errors).filter(([name]) => fields.includes(name)));
   if (Object.keys(relevant).length) { showErrors(relevant); return false; } clearErrors(); return true;
 }
@@ -73,8 +89,8 @@ function showStage(number) {
 }
 
 function renderReview() {
-  const data = payload(); const declaration = data.declarationTiming === "later" ? "Declaration to be completed after entry" : `Complete — ${data.declarationName}`;
-  const fields = { Name: `${data.firstName} ${data.lastName}`, Email: data.email, Category: data.genderCategory, Club: data.club || "Unattached", "WFRA member": data.wfraMember ? "Yes" : "No", Price: "£6.00", Declaration: declaration };
+  const data = payload(); const declaration = data.declarationTiming === "later" ? "Declaration to be completed after entry" : `Complete — ${data.declarationName} (${data.declarationSignatoryRole})`;
+  const fields = { Name: `${data.firstName} ${data.lastName}`, Email: data.email, Category: data.genderCategory, Club: data.club || "Unattached", "WFRA member": data.wfraMember ? "Yes" : "No", Price: data.wfraMember ? "£4.00" : "£6.00", Declaration: declaration };
   document.querySelector("#review-list").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
 }
 
@@ -100,17 +116,22 @@ function renderOrder() {
 }
 
 function showApiError(result) {
-  const messages = { DUPLICATE_ORDER_EMAIL: "Each adult runner needs their own email address so we can send their declaration and entry-management link directly to them.", DUPLICATE_ACTIVE_ENTRY: "An active entry may already exist for this email address.", ORDER_RUNNER_LIMIT: "An order can contain up to five runners.", GROUP_CAPACITY_UNAVAILABLE: `This whole group cannot currently fit. ${result.availablePlaces ?? 0} place(s) remain; remove runner(s) to continue.`, RUNNER_MUST_COMPLETE_DECLARATION: "The named runner must personally complete the declaration, or choose to complete it later." };
+  const messages = { DUPLICATE_ORDER_EMAIL: "Each runner needs a unique email address so we can send their declaration and entry-management link directly.", DUPLICATE_ACTIVE_ENTRY: "An active entry may already exist for this email address.", ORDER_RUNNER_LIMIT: "An order can contain up to five runners.", GROUP_CAPACITY_UNAVAILABLE: `This whole group cannot currently fit. ${result.availablePlaces ?? 0} place(s) remain; remove runner(s) to continue.`, RUNNER_MUST_COMPLETE_DECLARATION: "The named runner must personally complete the declaration, or choose to complete it later." };
   alert.textContent = result.message ?? messages[result.code] ?? runnerMessageForCode(result.code); alert.hidden = false; alert.focus(); if (result.errors) showErrors(result.errors);
 }
 
 async function refreshStatus() {
-  const status = await prototype.status(); document.querySelector("#status-places").textContent = `${status.accepted} / ${status.capacity}`; document.querySelector("#status-waiting").textContent = status.waiting; document.querySelector("#status-price").textContent = `£${((status.pricing?.standardPricePence ?? 600) / 100).toFixed(2)}`;
+  const status = await prototype.status(); document.querySelector("#status-places").textContent = `${status.accepted} / ${status.capacity}`; document.querySelector("#status-waiting").textContent = status.waiting; const standard = (status.pricing?.standardPricePence ?? 600) / 100; const member = (status.pricing?.wfraMemberPricePence ?? 400) / 100; document.querySelector("#status-price").textContent = `£${standard.toFixed(0)} standard · £${member.toFixed(0)} WFRA`;
   const recovery = document.querySelector("#runner-recovery"); recovery.hidden = !status.recovery; recovery.textContent = status.recovery?.message || ""; document.querySelector("#start-test").disabled = Boolean(status.recovery);
 }
 
 function updateMembershipFields() { const member = form.elements.wfraMember.value === "yes"; document.querySelector("#wfra-number-field").hidden = !member; form.elements.wfraMembershipNumber.required = member; }
-function updateDeclarationFields() { const now = form.elements.declarationTiming.value === "now"; document.querySelector("#declaration-fields").hidden = !now; for (const control of [form.elements.declarationName, form.elements.declarationSignatoryRole, form.elements.acceptDeclaration, form.elements.completedByNamedRunner]) control.required = now; }
+function updateDeclarationFields() {
+  const now = form.elements.declarationTiming.value === "now"; const guardian = guardianRequired();
+  document.querySelector("#declaration-fields").hidden = !now; document.querySelector("#adult-declaration-fields").hidden = guardian; document.querySelector("#guardian-declaration-fields").hidden = !guardian;
+  form.elements.declarationName.required = now && !guardian; form.elements.completedByNamedRunner.required = now && !guardian;
+  form.elements.guardianDeclarationName.required = now && guardian; form.elements.completedByParentOrLegalGuardian.required = now && guardian; form.elements.acceptDeclaration.required = now;
+}
 
 async function beginOrRecover() {
   const recovered = await prototype.currentOrder();
@@ -126,7 +147,7 @@ document.querySelector("#details-continue")?.addEventListener("click", () => { i
 document.querySelector("#race-back")?.addEventListener("click", () => showStage(1));
 document.querySelector("#race-continue")?.addEventListener("click", () => { if (validateStage(2)) showStage(3); });
 document.querySelector("#review-back")?.addEventListener("click", () => showStage(2));
-form.elements.wfraMember.addEventListener("change", updateMembershipFields); for (const choice of form.elements.declarationTiming) choice.addEventListener("change", updateDeclarationFields); updateMembershipFields(); updateDeclarationFields();
+form.elements.wfraMember.addEventListener("change", updateMembershipFields); form.elements.dateOfBirth.addEventListener("change", updateDeclarationFields); for (const choice of form.elements.declarationTiming) choice.addEventListener("change", updateDeclarationFields); updateMembershipFields(); updateDeclarationFields();
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault(); if (submitting || !validateStage(2)) return; submitting = true; let result;

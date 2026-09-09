@@ -120,12 +120,10 @@ function orderView(state, order) {
   };
 }
 
-function validateAdultRunner(state, input) {
+function validateOrderRunner(state, input) {
   const runner = { ...input, email: normalizeEmail(input.email), raceCategory: input.raceCategory ?? input.genderCategory, emergencyContactName: input.emergencyContactName ?? input.emergencyName, emergencyContactPhone: input.emergencyContactPhone ?? input.emergencyPhone };
   const errors = validateProductionRunner(runner);
   if (["local", "development"].includes(state.environment) && runner.email && !SYNTHETIC_EMAIL.test(runner.email)) errors.email = "Use synthetic information only in development.";
-  const age = ageOnRaceDate(runner.dateOfBirth, state.event.raceDate);
-  if (Number.isFinite(age) && age < 18) errors.dateOfBirth = "The approved under-18 consent process is not yet available.";
   if (input.acceptTerms !== true) errors.acceptTerms = "Accept the race terms.";
   if (input.acceptPrivacy !== true) errors.acceptPrivacy = "Acknowledge the privacy notice.";
   return { runner, errors };
@@ -134,9 +132,15 @@ function validateAdultRunner(state, input) {
 function validateDeclaration(state, runner, mode, declaration) {
   if (mode === "later") return { ok: true };
   if (mode !== "now") return { ok: false, code: "DECLARATION_CHOICE_REQUIRED" };
-  if (declaration?.completedByNamedRunner !== true) return { ok: false, code: "RUNNER_MUST_COMPLETE_DECLARATION" };
-  if (declaration?.declarationIdentifier !== state.event.declarationIdentifier || declaration?.declarationVersion !== state.event.declarationVersion || declaration?.accepted !== true || declaration?.signatoryRole !== "Competitor") return { ok: false, code: "DECLARATION_NOT_ACCEPTED" };
-  if (normalizeText(declaration.typedFullName).toLowerCase() !== fullName(runner).toLowerCase()) return { ok: false, code: "DECLARATION_NAME_MISMATCH" };
+  if (declaration?.declarationIdentifier !== state.event.declarationIdentifier || declaration?.declarationVersion !== state.event.declarationVersion || declaration?.accepted !== true) return { ok: false, code: "DECLARATION_NOT_ACCEPTED" };
+  const age = ageOnRaceDate(runner.dateOfBirth, state.event.raceDate);
+  if (age < 18) {
+    if (declaration.signatoryRole !== "Parent / Legal Guardian" || declaration.completedByParentOrLegalGuardian !== true) return { ok: false, code: "GUARDIAN_MUST_COMPLETE_DECLARATION" };
+    if (!normalizeText(declaration.typedFullName)) return { ok: false, code: "DECLARATION_NAME_REQUIRED" };
+  } else {
+    if (declaration.signatoryRole !== "Competitor" || declaration.completedByNamedRunner !== true) return { ok: false, code: "RUNNER_MUST_COMPLETE_DECLARATION" };
+    if (normalizeText(declaration.typedFullName).toLowerCase() !== fullName(runner).toLowerCase()) return { ok: false, code: "DECLARATION_NAME_MISMATCH" };
+  }
   return { ok: true };
 }
 
@@ -159,7 +163,7 @@ function recordDigitalDeclaration(state, registration, runner, input, completion
   if (declarationFor(state, registration.id)) return { ok: true, duplicate: true, declaration: declarationFor(state, registration.id) };
   const checked = validateDeclaration(state, runner, "now", input);
   if (!checked.ok) return checked;
-  const declaration = { id: id("declaration"), registrationId: registration.id, runnerId: runner.id, declarationIdentifier: state.event.declarationIdentifier, declarationVersion: state.event.declarationVersion, accepted: true, typedFullName: normalizeText(input.typedFullName), signatoryRole: "Competitor", completedAt: iso(at), completionMethod };
+  const declaration = { id: id("declaration"), registrationId: registration.id, runnerId: runner.id, declarationIdentifier: state.event.declarationIdentifier, declarationVersion: state.event.declarationVersion, accepted: true, typedFullName: normalizeText(input.typedFullName), signatoryRole: input.signatoryRole, completedAt: iso(at), completionMethod };
   state.declarations.push(declaration);
   registration.declarationStatus = "complete"; registration.declarationCompletionMethod = completionMethod; registration.updatedAt = iso(at);
   for (const token of state.declarationTokens.filter((item) => item.registrationId === registration.id && !item.revokedAt)) { token.revokedAt = iso(at); token.revokedReason = "completed"; }
@@ -198,10 +202,10 @@ export class OrderRegistrationService {
       ensureCollections(state); const order = orderForToken(state, token);
       if (!order || !["draft", "checkout_expired"].includes(order.status)) return { ok: false, code: "ORDER_TOKEN_INVALID" };
       if (order.registrationIds.length >= this.maxRunnersPerOrder) return { ok: false, code: "ORDER_RUNNER_LIMIT" };
-      const { runner: normalized, errors } = validateAdultRunner(state, input.runner ?? input);
+      const { runner: normalized, errors } = validateOrderRunner(state, input.runner ?? input);
       if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
       const existingOrderEmails = registrationsFor(state, order).map((registration) => normalizeEmail(runnerFor(state, registration)?.email));
-      if (existingOrderEmails.includes(normalized.email)) return { ok: false, code: "DUPLICATE_ORDER_EMAIL", message: "Each adult runner needs their own email address so we can send their declaration and entry-management link directly to them." };
+      if (existingOrderEmails.includes(normalized.email)) return { ok: false, code: "DUPLICATE_ORDER_EMAIL", message: "Each runner needs a unique email address so we can send their declaration and entry-management link directly." };
       const alreadyActive = state.registrations.some((registration) => active(registration) && ["payment_reserved", "confirmed"].includes(registration.placeStatus) && normalizeEmail(runnerFor(state, registration)?.email) === normalized.email);
       if (alreadyActive) return { ok: false, code: "DUPLICATE_ACTIVE_ENTRY", message: "An active entry may already exist for this email address." };
       const declarationMode = input.declarationMode;
@@ -236,7 +240,7 @@ export class OrderRegistrationService {
     return this.repository.transaction((state) => {
       ensureCollections(state); const order = orderForToken(state, token); const registration = state.registrations.find((item) => item.id === registrationId && !item.deletedAt);
       if (!order || !["draft", "checkout_expired"].includes(order.status) || !order.registrationIds.includes(registrationId) || !registration) return { ok: false, code: "ORDER_NOT_EDITABLE" };
-      const { runner: normalized, errors } = validateAdultRunner(state, input.runner ?? input); if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
+      const { runner: normalized, errors } = validateOrderRunner(state, input.runner ?? input); if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
       const duplicate = registrationsFor(state, order).some((item) => item.id !== registrationId && normalizeEmail(runnerFor(state, item)?.email) === normalized.email);
       if (duplicate) return { ok: false, code: "DUPLICATE_ORDER_EMAIL" };
       const declarationCheck = validateDeclaration(state, normalized, input.declarationMode, input.declaration); if (!declarationCheck.ok) return declarationCheck;
@@ -276,7 +280,7 @@ export class OrderRegistrationService {
       let recalculatedTotal = 0;
       for (const registration of registrations) {
         const runner = runnerFor(state, registration);
-        const checked = validateAdultRunner(state, { ...runner, emergencyContactName: state.emergencyContacts.find((item) => item.registrationId === registration.id)?.name, emergencyContactPhone: state.emergencyContacts.find((item) => item.registrationId === registration.id)?.phone, acceptTerms: true, acceptPrivacy: true });
+        const checked = validateOrderRunner(state, { ...runner, emergencyContactName: state.emergencyContacts.find((item) => item.registrationId === registration.id)?.name, emergencyContactPhone: state.emergencyContacts.find((item) => item.registrationId === registration.id)?.phone, acceptTerms: true, acceptPrivacy: true });
         if (Object.keys(checked.errors).length) return reject({ ok: false, code: "VALIDATION_ERROR", errors: checked.errors });
         const pricing = calculateEntryPrice(state.event, runner); registration.pricing = pricing; registration.priceActuallyChargedPence = pricing.priceActuallyChargedPence; recalculatedTotal += pricing.priceActuallyChargedPence;
       }
@@ -346,7 +350,7 @@ export class OrderRegistrationService {
   async inspectDeclaration(token) {
     const state = await this.repository.read(); ensureCollections(state); const registration = registrationForDeclarationToken(state, token); const runner = runnerFor(state, registration);
     if (!registration || !runner) return { ok: false, code: "LINK_UNAVAILABLE" };
-    return { ok: true, registration: { reference: registration.testReference, runner: { firstName: runner.firstName, lastName: runner.lastName, raceCategory: runner.raceCategory, club: runner.club }, declaration: declarationView(state, registration), declarationIdentifier: state.event.declarationIdentifier, declarationVersion: state.event.declarationVersion } };
+    return { ok: true, registration: { reference: registration.testReference, runner: { firstName: runner.firstName, lastName: runner.lastName, raceCategory: runner.raceCategory, club: runner.club, requiresGuardianDeclaration: ageOnRaceDate(runner.dateOfBirth, state.event.raceDate) < 18 }, declaration: declarationView(state, registration), declarationIdentifier: state.event.declarationIdentifier, declarationVersion: state.event.declarationVersion } };
   }
 
   async publicStartList() {
@@ -376,7 +380,8 @@ export class OrderRegistrationService {
     return this.repository.transaction((state) => {
       ensureCollections(state); const registration = registrationForDeclarationToken(state, token); const runner = runnerFor(state, registration);
       if (!registration || !runner) return { ok: false, code: "LINK_UNAVAILABLE" };
-      const result = recordDigitalDeclaration(state, registration, runner, { ...input, declarationIdentifier: state.event.declarationIdentifier, declarationVersion: state.event.declarationVersion, signatoryRole: "Competitor" }, "digital_remote", at);
+      const signatoryRole = ageOnRaceDate(runner.dateOfBirth, state.event.raceDate) < 18 ? "Parent / Legal Guardian" : "Competitor";
+      const result = recordDigitalDeclaration(state, registration, runner, { ...input, declarationIdentifier: state.event.declarationIdentifier, declarationVersion: state.event.declarationVersion, signatoryRole }, "digital_remote", at);
       return result.ok ? { ok: true, duplicate: result.duplicate === true, declaration: declarationView(state, registration) } : result;
     });
   }
@@ -400,7 +405,7 @@ export class OrderRegistrationService {
       ensureCollections(state); const registration = state.registrations.find((item) => item.id === registrationId && active(item)); const runner = runnerFor(state, registration);
       if (!registration || !runner) return { ok: false, code: "NOT_FOUND" };
       if (declarationFor(state, registration.id)) return { ok: true, duplicate: true, declaration: declarationView(state, registration) };
-      const declaration = { id: id("declaration"), registrationId, runnerId: runner.id, declarationIdentifier: state.event.declarationIdentifier, declarationVersion: state.event.declarationVersion, accepted: true, typedFullName: null, signatoryRole: "Competitor", completedAt: iso(at), completionMethod: "paper_in_person", recordedByActorId: actor.id ?? null };
+      const declaration = { id: id("declaration"), registrationId, runnerId: runner.id, declarationIdentifier: state.event.declarationIdentifier, declarationVersion: state.event.declarationVersion, accepted: true, typedFullName: null, signatoryRole: ageOnRaceDate(runner.dateOfBirth, state.event.raceDate) < 18 ? "Parent / Legal Guardian" : "Competitor", completedAt: iso(at), completionMethod: "paper_in_person", recordedByActorId: actor.id ?? null };
       state.declarations.push(declaration); registration.declarationStatus = "complete"; registration.declarationCompletionMethod = "paper_in_person"; registration.updatedAt = iso(at);
       for (const token of state.declarationTokens.filter((item) => item.registrationId === registrationId && !item.revokedAt)) { token.revokedAt = iso(at); token.revokedReason = "paper_completed"; }
       audit(state, "paper_declaration_received", registration.id, { completionMethod: "paper_in_person", declarationVersion: declaration.declarationVersion }, at, actor);

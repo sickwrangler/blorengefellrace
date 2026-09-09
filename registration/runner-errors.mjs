@@ -12,7 +12,8 @@ export const RUNNER_FIELD_STAGES = Object.freeze({
   city: 1, postcode: 1, genderCategory: 1, dateOfBirth: 1, club: 1,
   wfraMember: 1, wfraMembershipNumber: 1,
   emergencyName: 2, emergencyPhone: 2, acceptTerms: 2, acceptPrivacy: 2,
-  declarationSignatoryRole: 2, declarationName: 2, acceptDeclaration: 2
+  declarationSignatoryRole: 2, declarationName: 2, guardianDeclarationName: 2,
+  completedByNamedRunner: 2, completedByParentOrLegalGuardian: 2, acceptDeclaration: 2
 });
 
 export function normalizeRunnerErrors(errors = {}) {
@@ -31,7 +32,8 @@ export function runnerMessageForCode(code) {
     DUPLICATE: "An active test entry already uses this email address.",
     LINK_UNAVAILABLE: "This private link is no longer available.",
     REGISTRATION_NOT_ACCEPTING: "Registration is not currently accepting entries.",
-    PARENTAL_CONSENT_REQUIREMENTS_PENDING: "Entries for runners aged 16 or 17 are paused while the parental-consent process is confirmed.",
+    GUARDIAN_DECLARATION_REQUIRED: "A parent or legal guardian must complete the declaration for a runner aged 16 or 17.",
+    GUARDIAN_MUST_COMPLETE_DECLARATION: "A parent or legal guardian must provide their full name and confirm the declaration.",
     PAYMENTS_UNAVAILABLE: "Online payment is not available yet. Your synthetic entry details have been retained.",
     MANAGEMENT_TOKEN_INVALID: "This secure entry link is no longer available.",
     CAPACITY_FULL: "There are currently no entry places available.",

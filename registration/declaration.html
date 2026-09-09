@@ -17,10 +17,10 @@
       <div id="declaration-alert" class="form-alert" role="alert" tabindex="-1" hidden></div>
       <p class="eyebrow">Confirmed race entry</p><h2 id="declaration-runner"></h2>
       <dl id="declaration-entry" class="review-list"></dl>
-      <p><strong>This declaration must be completed by the named runner.</strong></p>
+      <p id="remote-declaration-instruction"><strong>This declaration must be completed by the named runner.</strong></p>
       <div id="remote-declaration-content"></div>
-      <label>Type your full name <input name="typedFullName" autocomplete="name" required></label>
-      <label class="checkbox-field"><input name="accepted" type="checkbox" required> I am the runner named above and I accept the WFRA declaration.</label>
+      <label id="remote-declaration-name-label">Runner full name <input name="typedFullName" autocomplete="name" required></label>
+      <label class="checkbox-field"><input name="accepted" type="checkbox" required> <span id="remote-declaration-acceptance">I am the runner named above and I accept the WFRA declaration.</span></label>
       <div class="form-actions"><button class="button" type="submit">Complete declaration</button></div>
     </form>
     <section id="declaration-complete" class="prototype-card" hidden><h2>Declaration complete</h2><p>Your paid race place remains confirmed and your declaration is now recorded. No payment or capacity status was changed.</p></section>

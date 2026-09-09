@@ -172,7 +172,7 @@ test("server calculates standard and configured WFRA prices and ignores browser 
   const standard = calculateEntryPrice(unconfigured.event, { wfraMember: false, priceActuallyChargedPence: 1, amount: 1 });
   assert.equal(standard.priceActuallyChargedPence, 600);
   const pending = calculateEntryPrice(unconfigured.event, { wfraMember: true, wfraMembershipNumber: "WFRA A-12", amount: 1 });
-  assert.equal(pending.priceActuallyChargedPence, 600); assert.equal(pending.adjustmentReason, "WFRA_MEMBER_PRICE_NOT_CONFIGURED"); assert.equal(pending.wfraDiscountApplied, false);
+  assert.equal(pending.priceActuallyChargedPence, 400); assert.equal(pending.adjustmentReason, "WFRA_MEMBER_SELF_DECLARED"); assert.equal(pending.wfraDiscountApplied, true);
   const configured = createPhase3State({ registrationState: "OPEN", wfraMemberPricePence: 500 });
   const member = calculateEntryPrice(configured.event, { wfraMember: true, wfraMembershipNumber: "WFRA A-12", priceActuallyChargedPence: 1 });
   assert.equal(member.priceActuallyChargedPence, 500); assert.equal(member.wfraDiscountApplied, true);
@@ -190,12 +190,12 @@ test("official declaration content and version load from one source", () => {
   assert.equal(PHASE3_EVENT.declaration.identifier, WFRA_SENIOR_ENTRY_DECLARATION.identifier);
 });
 
-test("under-18 entries cannot falsely complete pending the parental-consent decision", () => {
-  for (const signatoryRole of ["Competitor", "Parent / Legal Guardian"]) {
-    const state = createPhase3State({ registrationState: "OPEN" });
-    const result = beginProductionRegistration(state, { runner: runner(16, { dateOfBirth: "2009-12-01" }), declaration: declaration({ signatoryRole }) }, { at: beforeCutoff });
-    assert.equal(result.code, "PARENTAL_CONSENT_REQUIREMENTS_PENDING"); assert.equal(state.registrations.length, 0);
-  }
+test("16- and 17-year-old entries require distinguishable parent or legal guardian evidence", () => {
+  const rejected = createPhase3State({ registrationState: "OPEN" });
+  assert.equal(beginProductionRegistration(rejected, { runner: runner(16, { dateOfBirth: "2009-12-01" }), declaration: declaration() }, { at: beforeCutoff }).code, "GUARDIAN_DECLARATION_REQUIRED");
+  const accepted = createPhase3State({ registrationState: "OPEN" });
+  const result = beginProductionRegistration(accepted, { runner: runner(16, { dateOfBirth: "2009-12-01" }), declaration: declaration({ typedFullName: "Guardian Example", signatoryRole: "Parent / Legal Guardian" }) }, { at: beforeCutoff });
+  assert.equal(result.ok, true); assert.equal(accepted.declarations[0].signatoryRole, "Parent / Legal Guardian"); assert.equal(accepted.declarations[0].typedFullName, "Guardian Example");
   const state = createPhase3State({ registrationState: "OPEN" });
   assert.equal(beginProductionRegistration(state, { runner: runner(), declaration: declaration({ accepted: false }) }, { at: beforeCutoff }).code, "DECLARATION_NOT_ACCEPTED");
 });
@@ -205,12 +205,13 @@ test("runner UI is English-only, contains the approved fields and has no languag
   for (const label of [
     "Email address", "First name", "Last name", "Phone number", "Address line 1", "Address line 2", "City", "Postcode",
     "Race category", "Date of birth", "Club", "WFRA member?", "WFRA membership number",
-    "Emergency contact name", "Emergency contact phone number", "Enter your full name to sign the declaration"
+    "Emergency contact name", "Emergency contact phone number", "Runner full name", "Parent or legal guardian full name"
   ]) assert.ok(html.includes(label), `missing English label: ${label}`);
   assert.ok(html.includes('<option value="Female">Female</option>'));
   assert.ok(html.includes('<option value="Male / Open" selected>Male / Open</option>'));
   for (const absent of ["Affiliated with UK Athletics?", "UK Athletics membership number", "name=\"affiliated\"", "name=\"membershipNumber\"", "name=\"travelMethod\"", "Cymraeg", " / Cyfeiriad", " / Enw", " / Rhif", "language-toggle"])
     assert.equal(html.includes(absent), false, `unexpected runner UI content: ${absent}`);
+  assert.equal(html.includes('name="declarationSignatoryRole"'), false);
 });
 
 test("selective Welsh headings do not add bilingual navigation or form labels", () => {

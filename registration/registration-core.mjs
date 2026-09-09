@@ -6,7 +6,7 @@ export const EVENT = Object.freeze({
   date: "2026-11-28",
   capacity: 120,
   entryFeePence: 600,
-  wfraMemberPricePence: null,
+  wfraMemberPricePence: 400,
   timezone: "Europe/London",
   transferRefundCutoff: "2026-10-28T23:59:00.000Z",
   waitingListOfferHours: 48,
@@ -43,7 +43,7 @@ export function ageOnDate(dateOfBirth, eventDate = EVENT.date) {
 
 export function validateRunner(input, { requireSynthetic = true } = {}) {
   const errors = {};
-  const required = ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "emergencyName", "emergencyPhone", "declarationName"];
+  const required = ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "emergencyName", "emergencyPhone"];
   for (const field of required) if (!String(input[field] ?? "").trim()) errors[field] = "This field is required.";
   const email = String(input.email ?? "").trim().toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Enter a valid email address.";
@@ -55,12 +55,13 @@ export function validateRunner(input, { requireSynthetic = true } = {}) {
   const age = ageOnDate(String(input.dateOfBirth ?? ""));
   if (!Number.isFinite(age)) errors.dateOfBirth = "Enter a valid date of birth.";
   else if (age < EVENT.minimumAge) errors.dateOfBirth = `Entrants must be at least ${EVENT.minimumAge} on ${EVENT.date}.`;
-  else if (age < 18) errors.declarationSignatoryRole = "Registration for runners aged 16 or 17 is paused until the organiser confirms the WFRA parental-consent process.";
   if (input.wfraMember && !String(input.wfraMembershipNumber ?? "").trim()) errors.wfraMembershipNumber = "Enter a WFRA membership number or select No.";
   if (String(input.wfraMembershipNumber ?? "").length > 80 || /[\u0000-\u001f\u007f]/.test(String(input.wfraMembershipNumber ?? ""))) errors.wfraMembershipNumber = "Use no more than 80 ordinary text characters.";
   if (input.genderCategory && !EVENT.raceCategories.includes(input.genderCategory)) errors.genderCategory = "Select Female or Male / Open.";
-  if (!input.declarationSignatoryRole) errors.declarationSignatoryRole = "Select who is signing.";
-  else if (age >= 18 && input.declarationSignatoryRole !== "Competitor") errors.declarationSignatoryRole = "An adult entrant must sign as the competitor.";
+  if (!input.declarationSignatoryRole) errors.declarationSignatoryRole = "A declaration signatory is required.";
+  else if (age >= 18 && input.declarationSignatoryRole !== "Competitor") errors.declarationSignatoryRole = "The adult runner must sign their own declaration.";
+  else if (age >= EVENT.minimumAge && age < 18 && input.declarationSignatoryRole !== "Parent / Legal Guardian") errors.declarationSignatoryRole = "A parent or legal guardian must sign for a runner aged 16 or 17.";
+  if (!String(input.declarationName ?? "").trim()) errors.declarationName = age < 18 ? "Enter the parent or legal guardian's full name." : "Enter the runner's full name.";
   if (!input.acceptDeclaration) errors.acceptDeclaration = "Accept the declaration to continue.";
   if (!input.acceptTerms) errors.acceptTerms = "You must accept the prototype race terms.";
   if (!input.acceptPrivacy) errors.acceptPrivacy = "You must acknowledge the prototype privacy notice.";
@@ -152,7 +153,7 @@ export function submitRegistration(state, input, { source = "runner" } = {}) {
     },
     entryStatus, waitingListPosition: null, raceNumber: null,
     paymentStatus: "not_started", termsVersion: EVENT.termsVersion, privacyVersion: EVENT.privacyVersion,
-    pricing: { standardPricePence: EVENT.entryFeePence, wfraMemberPricePence: EVENT.wfraMemberPricePence, priceActuallyChargedPence: EVENT.entryFeePence, adjustmentReason: input.wfraMember ? "WFRA_MEMBER_PRICE_NOT_CONFIGURED" : "STANDARD_ENTRY", wfraDiscountApplied: false },
+    pricing: { standardPricePence: EVENT.entryFeePence, wfraMemberPricePence: EVENT.wfraMemberPricePence, priceActuallyChargedPence: input.wfraMember ? EVENT.wfraMemberPricePence : EVENT.entryFeePence, adjustmentReason: input.wfraMember ? "WFRA_MEMBER_SELF_DECLARED" : "STANDARD_ENTRY", wfraDiscountApplied: Boolean(input.wfraMember) },
     declaration: { identifier: EVENT.declarationIdentifier, version: EVENT.declarationVersion, accepted: true, typedFullName: String(input.declarationName).trim(), signatoryRole: input.declarationSignatoryRole, acceptedAt: new Date().toISOString() },
     consentRecordedAt: new Date().toISOString()
   };

@@ -38,6 +38,7 @@ export function migrateDevelopmentDatabase(input) {
     raceDate: db.event?.raceDate ?? db.event?.date ?? EVENT.date,
     transferRefundCutoffUtc: db.event?.transferRefundCutoffUtc ?? db.event?.transferRefundCutoff ?? EVENT.transferRefundCutoff
   };
+  if (!Number.isInteger(db.event.wfraMemberPricePence) || db.event.wfraMemberPricePence < 0) db.event.wfraMemberPricePence = EVENT.wfraMemberPricePence;
   for (const name of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests", "privateInvitations", "waitingList", "waitingListOffers", "refundRequests", "managementTokens", "managementRecoveryAttempts", "processedPaymentEvents", "orders", "orderTokens", "declarations", "declarationTokens", "declarationRecoveryAttempts"]) db[name] ??= [];
   db.phase3RegistrationState ??= "CLOSED";
   db.testProgress ??= { submittedReference: null, organiserViewed: false, resetCompleted: false };

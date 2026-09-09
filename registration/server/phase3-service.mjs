@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { ageOnRaceDate, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
+import { createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken } from "./order-service.mjs";
@@ -132,7 +132,6 @@ export class Phase3IntegrationService {
       const errors = validateProductionRunner(next);
       if (!syntheticEmail.test(normalizeEmail(next.email))) errors.email = "Use synthetic information only in development.";
       if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
-      if (ageOnRaceDate(next.dateOfBirth, state.event.raceDate) < 18) return { ok: false, code: "PARENTAL_CONSENT_REQUIREMENTS_PENDING" };
       if (state.registrations.some((item) => item.id !== registration.id && activeRegistration(item) && ["payment_reserved", "confirmed"].includes(item.placeStatus) && normalizeEmail(runnerFor(state, item)?.email) === normalizeEmail(next.email))) return { ok: false, code: "DUPLICATE_ACTIVE_ENTRY" };
       const previous = runnerFor(state, registration);
       const runner = { ...next, id: `runner_${crypto.randomUUID()}`, email: normalizeEmail(next.email), firstName: String(next.firstName).trim(), lastName: String(next.lastName).trim(), wfraMembershipNumber: next.wfraMember === true ? String(next.wfraMembershipNumber ?? "").trim() || null : null, wfraMembershipVerified: false, wfraDiscountApplied: false, transferredAt: iso(at) };

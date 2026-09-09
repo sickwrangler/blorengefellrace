@@ -94,7 +94,7 @@ Progression remains: `Phase 3B — controlled integrations` → `Phase 3C — pr
 
 Multi-runner registration is an approved pre-production feature and is the next intended phase after Phase 3B.2. It is not implemented in Phase 3B.2. The intended journey allows a purchaser to add several runners, review them together and pay one server-calculated total in one Stripe Checkout.
 
-The design must keep a registration/runner distinct from an order/checkout. Personal details, category, date of birth, WFRA evidence, server-calculated price, declaration acceptance, amendment/transfer/refund state, race number and secure management identity remain per runner. Each adult entrant supplies their own declaration; a future approved parent/legal-guardian process applies separately to every under-18 entrant. One signature must never cover unrelated adults.
+The design keeps a registration/runner distinct from an order/checkout. Personal details, category, date of birth, WFRA evidence, server-calculated price, declaration acceptance, amendment/transfer/refund state, race number and secure management identity remain per runner. Each adult entrant supplies their own declaration; a parent or legal guardian signs separately for every runner aged 16 or 17. One signature must never cover unrelated entrants. The precise WFRA junior-consent requirements remain an external pre-launch confirmation.
 
 Phase 3B.3 must address these decisions and constraints explicitly:
 

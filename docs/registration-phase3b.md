@@ -8,7 +8,7 @@ No Stripe live key is accepted in development. No email is delivered to a runner
 
 ## Payment architecture
 
-The server calculates the expected price and creates a Stripe-hosted Checkout Session. Card data remains on Stripe. Standard entry is £6 GBP. The configurable WFRA member price remains unset, so members and non-members both pay £6 until the organiser approves a discount. Tests inject a member price to prove that browser-supplied amounts are ignored and the adjustment is auditable.
+The server calculates the expected price and creates a Stripe-hosted Checkout Session. Card data remains on Stripe. Standard entry is £6 GBP and the self-declared WFRA member price is £4 GBP. Browser-supplied amounts are ignored and the applied price is persisted per runner.
 
 ```mermaid
 sequenceDiagram
@@ -69,11 +69,11 @@ The preferred production authentication is a managed identity with the minimum A
 
 ## Multi-runner orders and declarations
 
-One purchaser may save an unpaid order containing one to five adult registrations, edit or remove its runners, and recover it through an opaque secure order link. The link works independently of the browser session. While a Checkout is still valid, continuing payment reuses that session and never creates a second active reservation. If it has expired, the reservation is released, the unpaid order remains recoverable, and a retry revalidates every runner, recalculates all prices and atomically rechecks group capacity before creating a replacement Checkout. Places are not promised after expiry. Each adult must have a unique normalized email address within the order and across active entries. The unresolved approved parent/legal-guardian route means entrants aged 16 or 17 remain blocked in this phase.
+One purchaser may save an unpaid order containing one to five registrations, edit or remove its runners, and recover it through an opaque secure order link. The link works independently of the browser session. While a Checkout is still valid, continuing payment reuses that session and never creates a second active reservation. If it has expired, the reservation is released, the unpaid order remains recoverable, and a retry revalidates every runner, recalculates all prices and atomically rechecks group capacity before creating a replacement Checkout. Places are not promised after expiry. Each runner must have a unique normalized email address within the order and across active entries. An adult signs their own declaration. For a runner aged 16 or 17, the UI requires a parent or legal guardian's full name and records that signatory role separately; the exact WFRA junior-consent requirement remains an external launch confirmation.
 
 Order, registration, payment and declaration are separate states. One Stripe Checkout covers the sum of the server-calculated prices for every registration in the order. Capacity is not reserved while an order is a draft; Checkout atomically reserves all requested places or none. Checkout success confirms every registration exactly once. It is valid for a runner to have a paid, confirmed race place while their declaration remains outstanding. Every runner must complete the required declaration before being permitted to start the race.
 
-The named runner may accept the declaration during order entry when physically present, or defer it without blocking Checkout. After payment, each outstanding runner receives a purpose-bound, registration-specific declaration link; the raw token is carried in the URL fragment and only its hash is stored. Digital completion records the current declaration identifier/version, runner name, server timestamp and completion method. A race-day paper declaration is recorded as `paper_in_person` by an explicit audited organiser action and is never represented as a digital signature. Transfers reset the declaration and rotate individual management credentials.
+The adult runner, or a parent/legal guardian for a runner aged 16 or 17, may accept the declaration during order entry when present, or defer it without blocking Checkout. After payment, each outstanding runner receives a purpose-bound, registration-specific declaration link; the raw token is carried in the URL fragment and only its hash is stored. Digital completion records the current declaration identifier/version, signatory full name, signatory role, server timestamp and completion method. A race-day paper declaration is recorded as `paper_in_person` by an explicit audited organiser action and is never represented as a digital signature. Transfers reset the declaration and rotate individual management credentials.
 
 The reminder policy is deliberately proportionate: the paid-entry confirmation includes the declaration link when required, followed by at most one automatic reminder after a configurable delay (seven days by default) if it is still outstanding. Persistent business keys make the reminder idempotent, and completion suppresses it. The organiser can manually resend a declaration link in an exceptional case.
 
@@ -135,4 +135,4 @@ The planned progression is:
 
 `Phase 3B — controlled integrations` → `Phase 3C — production infrastructure/application deployed CLOSED` → `Phase 3D — private live pilot with real Stripe and real email` → `Public OPEN`
 
-The WFRA member price and the WFRA parental-consent process for entrants aged 16 or 17 remain unresolved launch decisions. Under-18 entrants remain blocked before Checkout.
+The agreed prices are £6 standard and £4 for a self-declared WFRA member. The parent/legal-guardian declaration UX for entrants aged 16 or 17 is implemented; precise WFRA junior-consent requirements remain an external pre-launch confirmation.

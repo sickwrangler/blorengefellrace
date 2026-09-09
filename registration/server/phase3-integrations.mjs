@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { ageOnRaceDate, capacitySummary, createNextWaitingListOffer, expireWaitingListOffers } from "./phase3-domain.mjs";
+import { capacitySummary, createNextWaitingListOffer, expireWaitingListOffers } from "./phase3-domain.mjs";
 
 export const CHECKOUT_RESERVATION_MINUTES = 30;
 export const PAYMENT_CURRENCY = "gbp";
@@ -86,7 +86,6 @@ export async function beginStripeCheckout(state, registrationId, gateway, { succ
   const runner = state.runners.find((item) => item.id === registration?.runnerId);
   const payment = paymentFor(state, registrationId);
   if (!registration || !runner || !payment) return { ok: false, code: "NOT_FOUND" };
-  if (ageOnRaceDate(runner.dateOfBirth, state.event.raceDate) < 18) return { ok: false, code: "PARENTAL_CONSENT_REQUIREMENTS_PENDING" };
   if (payment.status === "paid") return { ok: false, code: "ALREADY_PAID" };
   if (payment.status === "checkout_pending" && new Date(payment.checkoutExpiresAt) > new Date(at)) return { ok: true, duplicate: true, checkoutUrl: payment.checkoutUrl, expiresAt: payment.checkoutExpiresAt };
   if (registration.placeStatus === "none") {

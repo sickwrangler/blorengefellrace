@@ -39,7 +39,7 @@ test("an eligible entry consumes capacity only when Checkout reserves its place"
 
 test("persistent development migration retains entries and adds Phase 3 payment metadata", async () => {
   const legacy = createDatabase({ environment: "development", registrationState: "test", capacity: 110 });
-  legacy.schemaVersion = 2; legacy.event.capacity = 110; delete legacy.processedPaymentEvents; delete legacy.managementTokens;
+  legacy.schemaVersion = 2; legacy.event.capacity = 110; legacy.event.wfraMemberPricePence = null; delete legacy.processedPaymentEvents; delete legacy.managementTokens;
   const migratedInitial = migrateDevelopmentDatabase(legacy);
   const repository = createJsonFileRepository(path.join(fs.mkdtempSync(path.join(os.tmpdir(), "blorenge-phase3-migration-")), "state.json"), migratedInitial);
   const service = new RegistrationService({ repository, paymentAdapter: createMockPaymentAdapter(), emailAdapter: createCapturedEmailAdapter() });
@@ -48,6 +48,7 @@ test("persistent development migration retains entries and adds Phase 3 payment 
   const afterRestart = await restarted.read();
   const payment = afterRestart.payments.find((item) => item.registrationId === created.registration.id);
   assert.equal(afterRestart.event.capacity, 120);
+  assert.equal(afterRestart.event.wfraMemberPricePence, 400);
   assert.equal(payment.status, "not_configured");
   assert.equal(payment.expectedAmountPence, 600);
   assert.equal(payment.currency, "gbp");
@@ -103,8 +104,8 @@ test("WFRA membership evidence stays private and the development API exposes onl
   const { service, repository } = setup();
   const suppliedNumber = "South Wales WFRA A-12";
   const created = await service.create(runner(28, { wfraMember: true, wfraMembershipNumber: suppliedNumber, amount: 1, priceActuallyChargedPence: 1 }), { idempotencyKey: "wfra-private-price-key" });
-  assert.equal(created.ok, true); assert.equal(created.registration.pricing.priceActuallyChargedPence, 600);
-  assert.equal(created.registration.pricing.adjustmentReason, "WFRA_MEMBER_PRICE_NOT_CONFIGURED");
+  assert.equal(created.ok, true); assert.equal(created.registration.pricing.priceActuallyChargedPence, 400);
+  assert.equal(created.registration.pricing.adjustmentReason, "WFRA_MEMBER_SELF_DECLARED");
   assert.equal(JSON.stringify(created).includes(suppliedNumber), false);
   const stored = await repository.read(); assert.equal(stored.runners[0].wfraMembershipNumber, suppliedNumber); assert.equal(stored.runners[0].wfraMembershipVerified, false);
   const exported = await service.exportPublic(admin); assert.equal(exported.csv.includes(suppliedNumber), false);

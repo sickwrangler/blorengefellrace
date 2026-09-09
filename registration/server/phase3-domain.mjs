@@ -13,7 +13,7 @@ export const PHASE3_EVENT = Object.freeze({
   timezone: "Europe/London",
   capacity: 120,
   entryFeePence: 600,
-  wfraMemberPricePence: null,
+  wfraMemberPricePence: 400,
   transferRefundCutoffLocal: "2026-10-28T23:59:00",
   transferRefundCutoffUtc: "2026-10-28T23:59:00.000Z",
   waitingListOfferHours: 48,
@@ -48,7 +48,7 @@ function recordAudit(state, actor, action, subjectId = null, before = null, afte
   });
 }
 
-export function createPhase3State({ environment = "development", registrationState, declarationVersion = WFRA_SENIOR_ENTRY_DECLARATION.version, wfraMemberPricePence = null } = {}) {
+export function createPhase3State({ environment = "development", registrationState, declarationVersion = WFRA_SENIOR_ENTRY_DECLARATION.version, wfraMemberPricePence = PHASE3_EVENT.wfraMemberPricePence } = {}) {
   const requested = PHASE3_REGISTRATION_STATES.includes(registrationState) ? registrationState : "CLOSED";
   return {
     schemaVersion: 3,
@@ -56,7 +56,7 @@ export function createPhase3State({ environment = "development", registrationSta
     registrationState: environment === "production" ? "CLOSED" : requested,
     event: {
       ...PHASE3_EVENT,
-      wfraMemberPricePence: Number.isInteger(wfraMemberPricePence) && wfraMemberPricePence >= 0 ? wfraMemberPricePence : null,
+      wfraMemberPricePence: Number.isInteger(wfraMemberPricePence) && wfraMemberPricePence >= 0 ? wfraMemberPricePence : PHASE3_EVENT.wfraMemberPricePence,
       declaration: { ...PHASE3_EVENT.declaration, version: declarationVersion }
     },
     runners: [], registrations: [], payments: [], declarations: [], managementTokens: [],
@@ -223,8 +223,9 @@ function validateDeclarationInput(state, declaration) {
 
 function validateUnder18Declaration(state, runner, declaration) {
   const age = ageOnRaceDate(runner.dateOfBirth, state.event.raceDate);
-  if (age < 18) return { ok: false, code: "PARENTAL_CONSENT_REQUIREMENTS_PENDING" };
-  if (declaration.signatoryRole !== "Competitor") return { ok: false, code: "INVALID_SIGNATORY_ROLE" };
+  if (age < state.event.minimumAge) return { ok: false, code: "MINIMUM_AGE" };
+  if (age < 18 && declaration.signatoryRole !== "Parent / Legal Guardian") return { ok: false, code: "GUARDIAN_DECLARATION_REQUIRED" };
+  if (age >= 18 && declaration.signatoryRole !== "Competitor") return { ok: false, code: "INVALID_SIGNATORY_ROLE" };
   return { ok: true };
 }
 
