@@ -1,4 +1,5 @@
 export const ROLE_PERMISSIONS = Object.freeze({
+  organiser: ["read", "manage", "race_number", "export_private", "erase", "audit"],
   Organiser: ["read", "manage", "race_number", "export_private", "erase", "audit"],
   administrator: ["read", "manage", "race_number", "export_private", "erase", "audit"],
   registration_manager: ["read", "manage", "race_number", "export_private", "audit"],
@@ -28,7 +29,7 @@ export function staticWebAppActor(headers = {}) {
     if (!roles.includes("authenticated") || !roles.includes("organiser")) {
       return { authenticated: roles.includes("authenticated"), role: null, actorType: "entra_user", id: principal.userId ?? null };
     }
-    return { authenticated: true, role: "Organiser", actorType: "entra_organiser", id: principal.userId ?? null };
+    return { authenticated: true, role: "organiser", actorType: "entra_organiser", id: principal.userId ?? null };
   } catch {
     return { authenticated: false, role: null, actorType: "anonymous" };
   }

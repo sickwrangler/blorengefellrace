@@ -37,7 +37,7 @@ const shortId = (prefix) => `${prefix}_${crypto.randomUUID()}`;
 const hashToken = (token) => crypto.createHash("sha256").update(String(token)).digest("hex");
 const opaqueToken = () => crypto.randomBytes(32).toString("base64url");
 const iso = (value = new Date()) => new Date(value).toISOString();
-const organiser = (actor) => Boolean(actor?.authenticated && ["Organiser", "administrator"].includes(actor.role));
+const organiser = (actor) => Boolean(actor?.authenticated && ["organiser", "Organiser", "administrator"].includes(actor.role));
 const systemActor = Object.freeze({ authenticated: true, role: "administrator", actorType: "system", id: "waiting-list-progression" });
 const activeRegistration = (entry) => !entry.deletedAt && !["cancelled", "place_released"].includes(entry.entryStatus);
 
@@ -48,7 +48,7 @@ function recordAudit(state, actor, action, subjectId = null, before = null, afte
   });
 }
 
-export function createPhase3State({ environment = "development", registrationState, declarationVersion = WFRA_SENIOR_ENTRY_DECLARATION.version, wfraMemberPricePence = PHASE3_EVENT.wfraMemberPricePence } = {}) {
+export function createPhase3State({ environment = "development", registrationState, declarationVersion = WFRA_SENIOR_ENTRY_DECLARATION.version, wfraMemberPricePence = PHASE3_EVENT.wfraMemberPricePence, under18EntriesEnabled = environment !== "production" } = {}) {
   const requested = PHASE3_REGISTRATION_STATES.includes(registrationState) ? registrationState : "CLOSED";
   return {
     schemaVersion: 3,
@@ -57,6 +57,7 @@ export function createPhase3State({ environment = "development", registrationSta
     event: {
       ...PHASE3_EVENT,
       wfraMemberPricePence: Number.isInteger(wfraMemberPricePence) && wfraMemberPricePence >= 0 ? wfraMemberPricePence : PHASE3_EVENT.wfraMemberPricePence,
+      under18EntriesEnabled: under18EntriesEnabled === true,
       declaration: { ...PHASE3_EVENT.declaration, version: declarationVersion }
     },
     runners: [], registrations: [], payments: [], declarations: [], managementTokens: [],
@@ -72,6 +73,7 @@ export function transitionRegistrationState(state, nextState, actor, { expectedS
   if (!transitions[state.registrationState]?.includes(nextState)) return { ok: false, code: "FORBIDDEN_TRANSITION" };
   const before = state.registrationState;
   state.registrationState = nextState;
+  if (state.environment === "production") state.phase3RegistrationState = nextState;
   recordAudit(state, actor, "registration_state_changed", state.event.id, { state: before }, { state: nextState }, at);
   return { ok: true, state: nextState };
 }
@@ -160,15 +162,16 @@ export function canUsePublicRegistration(state, { invitationToken = null, kind =
   return invitation.ok ? { ok: true, access: "private", invitation: invitation.invitation } : invitation;
 }
 
-export function validateProductionRunner(input) {
+export function validateProductionRunner(input, { raceDate = PHASE3_EVENT.raceDate, under18EntriesEnabled = true } = {}) {
   const errors = {};
   const required = ["email", "firstName", "lastName", "phone", "addressLine1", "city", "postcode", "raceCategory", "dateOfBirth", "emergencyContactName", "emergencyContactPhone"];
   for (const field of required) if (!String(input[field] ?? "").trim()) errors[field] = "This field is required.";
   if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(input.email).trim())) errors.email = "Enter a valid email address.";
   if (input.raceCategory && !RACE_CATEGORIES.includes(input.raceCategory)) errors.raceCategory = "Select Female or Male / Open.";
-  const age = ageOnRaceDate(input.dateOfBirth);
+  const age = ageOnRaceDate(input.dateOfBirth, raceDate);
   if (!Number.isFinite(age)) errors.dateOfBirth = "Enter a valid date of birth.";
   else if (age < 16) errors.dateOfBirth = "Entrants must be at least 16 on race day.";
+  else if (age < 18 && under18EntriesEnabled !== true) errors.dateOfBirth = "Entries for runners aged 16 or 17 are not currently enabled.";
   if (input.wfraMember && !String(input.wfraMembershipNumber ?? "").trim()) errors.wfraMembershipNumber = "Enter the WFRA membership number.";
   if (String(input.wfraMembershipNumber ?? "").length > 80 || /[\u0000-\u001f\u007f]/.test(String(input.wfraMembershipNumber ?? ""))) errors.wfraMembershipNumber = "Use no more than 80 ordinary text characters.";
   return errors;
@@ -241,7 +244,7 @@ function storeRunner(state, input) {
 export function beginProductionRegistration(state, input, { invitationToken = null, at = new Date() } = {}) {
   const access = canUsePublicRegistration(state, { invitationToken, kind: "registration", at });
   if (!access.ok) return access;
-  const errors = validateProductionRunner(input.runner ?? {});
+  const errors = validateProductionRunner(input.runner ?? {}, { raceDate: state.event.raceDate, under18EntriesEnabled: state.event.under18EntriesEnabled !== false });
   if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
   const declarationCheck = validateDeclarationInput(state, input.declaration);
   if (!declarationCheck.ok) return declarationCheck;
@@ -325,7 +328,7 @@ export function acceptWaitingListOffer(state, invitationToken, input, at = new D
   if (!checked.ok) return checked;
   const offer = state.waitingListOffers.find((item) => item.invitationId === checked.invitation.id && item.status === "offered");
   if (!offer || new Date(offer.expiresAt) <= new Date(at)) return { ok: false, code: "OFFER_NOT_ACTIVE" };
-  const errors = validateProductionRunner(input.runner ?? {});
+  const errors = validateProductionRunner(input.runner ?? {}, { raceDate: state.event.raceDate, under18EntriesEnabled: state.event.under18EntriesEnabled !== false });
   if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
   const declarationCheck = validateDeclarationInput(state, input.declaration);
   if (!declarationCheck.ok) return declarationCheck;

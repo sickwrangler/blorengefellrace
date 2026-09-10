@@ -1,0 +1,48 @@
+name: Production registration CLOSED deployment
+
+# REVIEW-ONLY proposed workflow. Keep outside .github/workflows until the
+# Phase 3C.1B deployment gate is explicitly approved.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registration-production
+  cancel-in-progress: false
+
+jobs:
+  validate_and_deploy_closed:
+    runs-on: ubuntu-latest
+    environment: registration-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate and build exact production registration artifacts
+        run: |
+          npm ci --prefix api --ignore-scripts
+          npm ci --prefix scheduler --ignore-scripts
+          node scripts/validate-site.mjs
+          node scripts/validate-registration.mjs
+          node --test tests/*.test.mjs
+          node scripts/validate-route.mjs
+          node scripts/validate-photos.mjs
+          node scripts/validate-public-results.mjs
+          node scripts/simulate-registration-production.mjs
+          node scripts/stage-deployment-artifacts.mjs production-registration
+          node scripts/stage-registration-production-scheduler.mjs
+      - name: Deploy reviewed CLOSED application artifact
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_BAY_0339ED203 }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: ".deployment/production-registration/app"
+          api_location: ".deployment/production-registration/api"
+          output_location: ""
+          skip_app_build: true

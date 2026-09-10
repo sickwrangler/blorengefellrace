@@ -28,12 +28,23 @@ export function assertStripeDevelopmentConfiguration({ environment, secretKey, w
   return { mode: "test" };
 }
 
+export function assertStripeProductionConfiguration({ environment, secretKey, webhookSecret }) {
+  if (environment !== "production") throw new Error("Stripe live integration is restricted to production.");
+  if (!/^(?:sk|rk)_live_/i.test(String(secretKey ?? ""))) throw new Error("A Stripe live secret or restricted key is required.");
+  if (/^(?:sk|rk)_test_/i.test(String(secretKey ?? ""))) throw new Error("Stripe sandbox credentials are forbidden in production.");
+  if (!/^whsec_[A-Za-z0-9_]+$/.test(String(webhookSecret ?? ""))) throw new Error("A Stripe webhook signing secret is required.");
+  return { mode: "live" };
+}
+
 export function createStripeGateway({ stripe, environment = "development", secretKey, webhookSecret, reservationMinutes = CHECKOUT_RESERVATION_MINUTES }) {
-  assertStripeDevelopmentConfiguration({ environment, secretKey, webhookSecret });
+  const { mode } = environment === "production"
+    ? assertStripeProductionConfiguration({ environment, secretKey, webhookSecret })
+    : assertStripeDevelopmentConfiguration({ environment, secretKey, webhookSecret });
   if (!stripe?.checkout?.sessions?.create || !stripe?.webhooks?.constructEvent || !stripe?.refunds?.create) throw new Error("Stripe SDK client is incomplete.");
-  if (reservationMinutes !== CHECKOUT_RESERVATION_MINUTES) throw new Error("Development Checkout reservations must be 30 minutes.");
+  if (reservationMinutes !== CHECKOUT_RESERVATION_MINUTES) throw new Error("Checkout reservations must be 30 minutes.");
   return Object.freeze({
-    kind: "stripe-test",
+    kind: `stripe-${mode}`,
+    mode,
     reservationMinutes,
     async createCheckoutSession({ registrationId, paymentId, amountPence, currency = PAYMENT_CURRENCY, successUrl, cancelUrl, at = new Date() }) {
       if (!Number.isInteger(amountPence) || amountPence < 1 || currency !== PAYMENT_CURRENCY) throw new Error("Invalid server-calculated Checkout price.");
@@ -95,7 +106,7 @@ export async function beginStripeCheckout(state, registrationId, gateway, { succ
   const created = await gateway.createCheckoutSession({ registrationId, paymentId: payment.id, amountPence: payment.priceActuallyChargedPence, currency: PAYMENT_CURRENCY, successUrl, cancelUrl, at });
   if (!created?.id || !created?.url || !created?.expiresAt) return { ok: false, code: "CHECKOUT_CREATE_FAILED" };
   Object.assign(payment, {
-    provider: "stripe", providerMode: "test", status: "checkout_pending", checkoutSessionId: created.id,
+    provider: "stripe", providerMode: gateway.mode, status: "checkout_pending", checkoutSessionId: created.id,
     checkoutUrl: created.url, checkoutExpiresAt: created.expiresAt, expectedAmountPence: payment.priceActuallyChargedPence,
     actualPaidAmountPence: null, currency: PAYMENT_CURRENCY, paymentIntentId: null, completedAt: null,
     refundState: "not_requested", webhookReconciliationState: "awaiting_event", updatedAt: iso(at), externalCall: true

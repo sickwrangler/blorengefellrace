@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { ageOnRaceDate, calculateEntryPrice, capacitySummary, issueManagementToken, validateProductionRunner } from "./phase3-domain.mjs";
+import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, validateProductionRunner } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 
 export const DEFAULT_MAX_RUNNERS_PER_ORDER = 5;
@@ -122,7 +122,7 @@ function orderView(state, order) {
 
 function validateOrderRunner(state, input) {
   const runner = { ...input, email: normalizeEmail(input.email), raceCategory: input.raceCategory ?? input.genderCategory, emergencyContactName: input.emergencyContactName ?? input.emergencyName, emergencyContactPhone: input.emergencyContactPhone ?? input.emergencyPhone };
-  const errors = validateProductionRunner(runner);
+  const errors = validateProductionRunner(runner, { raceDate: state.event.raceDate, under18EntriesEnabled: state.event.under18EntriesEnabled !== false });
   if (["local", "development"].includes(state.environment) && runner.email && !SYNTHETIC_EMAIL.test(runner.email)) errors.email = "Use synthetic information only in development.";
   if (input.acceptTerms !== true) errors.acceptTerms = "Accept the race terms.";
   if (input.acceptPrivacy !== true) errors.acceptPrivacy = "Acknowledge the privacy notice.";
@@ -180,12 +180,22 @@ export class OrderRegistrationService {
   orderUrl(token) { return `${this.publicBaseUrl}/registration/#order=${encodeURIComponent(token)}`; }
   communicate(state, message, key, at) { return deliverRegistrationCommunication(state, this.emailAdapter, message, { idempotencyKey: key, at }); }
 
-  createOrder(input, at = new Date()) {
+  createOrder(input, at = new Date(), invitationToken = null) {
     return this.repository.transaction(async (state) => {
       ensureCollections(state);
       const purchaserEmail = normalizeEmail(input.purchaserEmail);
-      if (!["local", "development"].includes(state.environment) || state.registrationState !== "test") return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(purchaserEmail) || !SYNTHETIC_EMAIL.test(purchaserEmail)) return { ok: false, code: "VALIDATION_ERROR", errors: { purchaserEmail: "Use a valid synthetic email address." } };
+      const developmentAccepting = ["local", "development"].includes(state.environment) && state.registrationState === "test";
+      const productionAccepting = state.environment === "production" && ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState);
+      if (!developmentAccepting && !productionAccepting) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
+      if (state.environment === "production" && state.registrationState === "PRIVATE_LIVE") {
+        const access = authorizePrivateInvitation(state, invitationToken, { kind: "registration", at });
+        if (!access.ok) return { ok: false, code: "LINK_UNAVAILABLE" };
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(purchaserEmail) || (developmentAccepting && !SYNTHETIC_EMAIL.test(purchaserEmail))) return { ok: false, code: "VALIDATION_ERROR", errors: { purchaserEmail: developmentAccepting ? "Use a valid synthetic email address." : "Enter a valid email address." } };
+      if (state.environment === "production" && state.registrationState === "PRIVATE_LIVE") {
+        const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "registration", at, consume: true });
+        if (!consumed.ok) return { ok: false, code: "LINK_UNAVAILABLE" };
+      }
       const order = { id: id("order"), purchaserEmail, status: "draft", registrationIds: [], totalPence: 0, createdAt: iso(at), updatedAt: iso(at), checkoutExpiresAt: null, deletedAt: null };
       state.orders.push(order); const orderToken = issueOrderToken(state, order.id, at); audit(state, "order_created", order.id, {}, at, { actorType: "purchaser" });
       return { ok: true, order: orderView(state, order), orderToken };
@@ -214,7 +224,7 @@ export class OrderRegistrationService {
       const runner = { id: id("runner"), email: normalized.email, firstName: normalizeText(normalized.firstName), lastName: normalizeText(normalized.lastName), phone: normalizeText(normalized.phone), addressLine1: normalizeText(normalized.addressLine1), addressLine2: normalizeText(normalized.addressLine2), city: normalizeText(normalized.city), postcode: normalizeText(normalized.postcode).toUpperCase(), raceCategory: normalized.raceCategory, genderCategory: normalized.raceCategory, dateOfBirth: normalized.dateOfBirth, club: normalizeText(normalized.club), wfraMember: normalized.wfraMember === true, wfraMembershipNumber: normalized.wfraMember === true ? normalizeText(normalized.wfraMembershipNumber) || null : null, wfraMembershipVerified: false, anonymisedAt: null };
       state.runners.push(runner);
       const pricing = calculateEntryPrice(state.event, runner);
-      const registration = { id: id("registration"), orderId: order.id, testReference: `TEST-${crypto.randomBytes(4).toString("hex").toUpperCase()}`, eventId: state.event.id, runnerId: runner.id, environment: state.environment, entryStatus: "draft", placeStatus: "none", raceNumber: null, declarationStatus: declarationMode === "now" ? "complete" : "pending", declarationCompletionMethod: declarationMode === "now" ? "digital_during_entry" : null, priceActuallyChargedPence: pricing.priceActuallyChargedPence, pricing, createdAt: iso(at), updatedAt: iso(at), deletedAt: null };
+      const registration = { id: id("registration"), orderId: order.id, testReference: `${state.environment === "production" ? "BFR" : "TEST"}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`, eventId: state.event.id, runnerId: runner.id, environment: state.environment, entryStatus: "draft", placeStatus: "none", raceNumber: null, declarationStatus: declarationMode === "now" ? "complete" : "pending", declarationCompletionMethod: declarationMode === "now" ? "digital_during_entry" : null, priceActuallyChargedPence: pricing.priceActuallyChargedPence, pricing, createdAt: iso(at), updatedAt: iso(at), deletedAt: null };
       state.registrations.push(registration); order.registrationIds.push(registration.id); order.totalPence += pricing.priceActuallyChargedPence; order.updatedAt = iso(at);
       state.emergencyContacts.push({ id: id("emergency"), registrationId: registration.id, name: normalizeText(normalized.emergencyContactName), phone: normalizeText(normalized.emergencyContactPhone), deleteAfterEvent: true });
       state.consents.push({ id: id("consent"), registrationId: registration.id, termsVersion: state.event.termsVersion, privacyVersion: state.event.privacyVersion, recordedAt: iso(at), declaration: null });
@@ -290,7 +300,7 @@ export class OrderRegistrationService {
       if (new Set(emails).size !== emails.length) return reject({ ok: false, code: "DUPLICATE_ORDER_EMAIL" });
       const conflicts = state.registrations.some((candidate) => !order.registrationIds.includes(candidate.id) && active(candidate) && ["payment_reserved", "confirmed"].includes(candidate.placeStatus) && emails.includes(normalizeEmail(runnerFor(state, candidate)?.email)));
       if (conflicts) return reject({ ok: false, code: "DUPLICATE_ACTIVE_ENTRY" });
-      if (!payment) { payment = { id: id("payment"), orderId: order.id, registrationIds: [...order.registrationIds], status: "created", expectedAmountPence: order.totalPence, actualPaidAmountPence: null, refundedAmountPence: 0, refundedRegistrationIds: [], checkoutAttempts: [], currency: "gbp", provider: "stripe", providerMode: "test", createdAt: iso(at), updatedAt: iso(at) }; state.payments.push(payment); }
+      if (!payment) { payment = { id: id("payment"), orderId: order.id, registrationIds: [...order.registrationIds], status: "created", expectedAmountPence: order.totalPence, actualPaidAmountPence: null, refundedAmountPence: 0, refundedRegistrationIds: [], checkoutAttempts: [], currency: "gbp", provider: "stripe", providerMode: this.stripeGateway.mode, createdAt: iso(at), updatedAt: iso(at) }; state.payments.push(payment); }
       payment.checkoutAttempts ??= [];
       if (payment.checkoutSessionId) payment.checkoutAttempts = payment.checkoutAttempts.map((attempt) => attempt.sessionId === payment.checkoutSessionId && attempt.status === "active" ? { ...attempt, status: "expired", expiredAt: iso(at) } : attempt);
       payment.expectedAmountPence = order.totalPence; payment.registrationIds = [...order.registrationIds];

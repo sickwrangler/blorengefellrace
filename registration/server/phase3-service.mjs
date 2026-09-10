@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
+import { authorizePrivateInvitation, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken } from "./order-service.mjs";
@@ -49,10 +49,11 @@ function managementView(state, registration, at = new Date()) {
 }
 
 export class Phase3IntegrationService {
-  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "", orderConfiguration = {} }) {
+  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "", orderConfiguration = {}, environment = "development" }) {
     this.repository = repository;
     this.stripeGateway = stripeGateway;
     this.emailAdapter = emailAdapter;
+    this.environment = environment;
     this.publicBaseUrl = String(publicBaseUrl ?? "").replace(/\/$/, "");
     this.orders = new OrderRegistrationService({ repository, stripeGateway, emailAdapter, publicBaseUrl, ...orderConfiguration });
   }
@@ -61,13 +62,14 @@ export class Phase3IntegrationService {
   communicate(state, message, key, at = new Date()) { return deliverRegistrationCommunication(state, this.emailAdapter, message, { idempotencyKey: key, at }); }
 
   integrationStatus() {
-    return { ok: true, environment: "development", stripe: this.stripeGateway ? "sandbox" : "disabled", paymentsAvailable: Boolean(this.stripeGateway), email: this.emailAdapter?.kind ?? "captured-only", externalEmailAvailable: this.emailAdapter?.kind === "acs-controlled-development" };
+    return { ok: true, environment: this.environment, stripe: this.stripeGateway?.mode ?? "disabled", paymentsAvailable: Boolean(this.stripeGateway), email: this.emailAdapter?.kind ?? "disabled", externalEmailAvailable: this.emailAdapter?.externalDelivery === true || this.emailAdapter?.kind === "acs-controlled-development" };
   }
 
   checkout(managementToken, at = new Date()) {
     if (!this.stripeGateway) return Promise.resolve({ ok: false, code: "PAYMENTS_UNAVAILABLE" });
     return this.repository.transaction(async (state) => {
-      if (state.environment !== "development" || !(state.registrationState === "test" || ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState))) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
+      const accepting = (["local", "development"].includes(state.environment) && (state.registrationState === "test" || ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState))) || (state.environment === "production" && ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState));
+      if (!accepting) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
       const registration = registrationForToken(state, managementToken);
       if (!registration) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
       return beginStripeCheckout(state, registration.id, this.stripeGateway, { successUrl: `${this.publicBaseUrl}/registration/payment-return.html`, cancelUrl: `${this.publicBaseUrl}/registration/payment-return.html?cancelled=1`, at });
@@ -129,8 +131,8 @@ export class Phase3IntegrationService {
       const afterCutoff = new Date(at) > new Date(state.event.transferRefundCutoffUtc);
       if (afterCutoff && !allowCutoffOverride) return { ok: false, code: managementToken ? "TRANSFER_CUTOFF_PASSED" : "ORGANISER_OVERRIDE_REQUIRED" };
       const next = input.runner ?? {};
-      const errors = validateProductionRunner(next);
-      if (!syntheticEmail.test(normalizeEmail(next.email))) errors.email = "Use synthetic information only in development.";
+      const errors = validateProductionRunner(next, { raceDate: state.event.raceDate, under18EntriesEnabled: state.event.under18EntriesEnabled !== false });
+      if (["local", "development"].includes(state.environment) && !syntheticEmail.test(normalizeEmail(next.email))) errors.email = "Use synthetic information only in development.";
       if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
       if (state.registrations.some((item) => item.id !== registration.id && activeRegistration(item) && ["payment_reserved", "confirmed"].includes(item.placeStatus) && normalizeEmail(runnerFor(state, item)?.email) === normalizeEmail(next.email))) return { ok: false, code: "DUPLICATE_ACTIVE_ENTRY" };
       const previous = runnerFor(state, registration);
@@ -263,13 +265,22 @@ export class Phase3IntegrationService {
     return result;
   }
 
-  joinWaitingList(input, at = new Date()) {
+  joinWaitingList(input, at = new Date(), invitationToken = null) {
     return this.repository.transaction(async (state) => {
-      if (state.environment !== "development" || state.registrationState !== "test") return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
+      const accepting = (["local", "development"].includes(state.environment) && (state.registrationState === "test" || ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState))) || (state.environment === "production" && ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState));
+      if (!accepting) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
+      if (state.environment === "production" && state.registrationState === "PRIVATE_LIVE") {
+        const access = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_join", at });
+        if (!access.ok) return { ok: false, code: "LINK_UNAVAILABLE" };
+      }
       const firstName = String(input.firstName ?? "").trim(), lastName = String(input.lastName ?? "").trim(), email = normalizeEmail(input.email);
       if (!firstName || !lastName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, code: "VALIDATION_ERROR" };
       const existing = state.waitingList.find((item) => item.status === "waiting" && item.email === email);
       if (existing) return { ok: true, duplicate: true, waitingListEntry: { id: existing.id, status: existing.status } };
+      if (state.environment === "production" && state.registrationState === "PRIVATE_LIVE") {
+        const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_join", at, consume: true });
+        if (!consumed.ok) return { ok: false, code: "LINK_UNAVAILABLE" };
+      }
       const item = { id: `waiting_${crypto.randomUUID()}`, firstName, lastName, email, sequence: state.waitingList.length + 1, status: "waiting", joinedAt: iso(at) };
       state.waitingList.push(item);
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: "runner", actorId: null, action: "waiting_list_join", subjectId: item.id, before: null, after: { sequence: item.sequence }, environment: state.environment });
