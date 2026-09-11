@@ -3,7 +3,10 @@ import { createApi } from "../shared/server/api.mjs";
 import { createAzureTableRepository } from "../shared/server/repositories.mjs";
 import { createMockPaymentAdapter, createCapturedEmailAdapter, assertSafeAdapters } from "../shared/server/adapters.mjs";
 import { RegistrationService } from "../shared/server/service.mjs";
+import { Phase3IntegrationService } from "../shared/server/phase3-service.mjs";
 import { createAzureTableTransport } from "../storage.mjs";
+import { createDevelopmentEmailAdapter, createDevelopmentStripeGateway } from "../providers.mjs";
+import { createControlledDevelopmentEmail } from "../shared/server/development-email.mjs";
 
 const required = (name) => {
   const value = process.env[name];
@@ -14,6 +17,7 @@ const required = (name) => {
 if (required("REGISTRATION_ENVIRONMENT") !== "development" || required("REGISTRATION_STATE") !== "test") {
   throw new Error("The registration API is restricted to development test mode.");
 }
+if (/^(?:sk|rk)_live_/i.test(String(process.env.STRIPE_SECRET_KEY ?? ""))) throw new Error("Stripe live credentials are forbidden in development.");
 
 const transport = createAzureTableTransport({
   accountName: required("REGISTRATION_STORAGE_ACCOUNT"),
@@ -23,32 +27,53 @@ const transport = createAzureTableTransport({
 });
 const repository = createAzureTableRepository(transport);
 const paymentAdapter = createMockPaymentAdapter();
-const emailAdapter = createCapturedEmailAdapter();
-assertSafeAdapters({ payment: paymentAdapter, email: emailAdapter }, "development");
-const handle = createApi({ service: new RegistrationService({ repository, paymentAdapter, emailAdapter }), environment: "development" });
+const capturedEmailAdapter = createCapturedEmailAdapter();
+assertSafeAdapters({ payment: paymentAdapter, email: capturedEmailAdapter }, "development");
+const stripeEnabled = process.env.STRIPE_ENABLED === "true";
+const emailEnabled = process.env.ACS_EMAIL_ENABLED === "true";
+const publicBaseUrl = stripeEnabled || emailEnabled ? required("REGISTRATION_PUBLIC_BASE_URL") : "";
+const lifecycleEmailAdapter = emailEnabled ? createDevelopmentEmailAdapter() : createControlledDevelopmentEmail();
+const positiveInteger = (name, fallback = null) => { const value = Number(process.env[name]); return Number.isInteger(value) && value > 0 ? value : fallback; };
+const phase3Integrations = new Phase3IntegrationService({
+  repository,
+  stripeGateway: stripeEnabled ? createDevelopmentStripeGateway() : null,
+  emailAdapter: lifecycleEmailAdapter,
+  publicBaseUrl,
+  orderConfiguration: {
+    maxRunnersPerOrder: positiveInteger("REGISTRATION_MAX_RUNNERS_PER_ORDER", 5),
+    reminderPolicy: { afterPaymentDays: positiveInteger("REGISTRATION_DECLARATION_REMINDER_DAYS", 7) },
+    draftRetentionHours: positiveInteger("REGISTRATION_DRAFT_RETENTION_HOURS")
+  }
+});
+const handle = createApi({ service: new RegistrationService({ repository, paymentAdapter, emailAdapter: lifecycleEmailAdapter, publicBaseUrl }), phase3Integrations, environment: "development" });
 
-app.http("registration-v2", {
-  methods: ["GET", "POST"],
-  authLevel: "anonymous",
-  route: "v2/{*path}",
-  handler: async (request, context) => {
-    try {
-      const contentLength = Number(request.headers.get("content-length") || 0);
-      if (contentLength > 65_536) return { status: 413, jsonBody: { ok: false, code: "PAYLOAD_TOO_LARGE" } };
-      const headers = Object.fromEntries(request.headers.entries());
-      let body = {};
-      if (request.method === "POST") {
-        const raw = await request.text();
-        if (Buffer.byteLength(raw, "utf8") > 65_536) return { status: 413, jsonBody: { ok: false, code: "PAYLOAD_TOO_LARGE" } };
-        try { body = raw ? JSON.parse(raw) : {}; }
+const handler = async (request, context) => {
+  try {
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (contentLength > 65_536) return { status: 413, jsonBody: { ok: false, code: "PAYLOAD_TOO_LARGE" } };
+    const headers = Object.fromEntries(request.headers.entries());
+    const url = new URL(request.url);
+    let body = {};
+    if (request.method === "POST") {
+      const rawBody = await request.text();
+      if (Buffer.byteLength(rawBody, "utf8") > 65_536) return { status: 413, jsonBody: { ok: false, code: "PAYLOAD_TOO_LARGE" } };
+      if (url.pathname === "/api/v3/stripe/webhook") body = { rawBody };
+      else {
+        try { body = rawBody ? JSON.parse(rawBody) : {}; }
         catch { return { status: 400, jsonBody: { ok: false, code: "INVALID_JSON" } }; }
       }
-      const url = new URL(request.url);
-      const result = await handle({ method: request.method, pathname: url.pathname, headers, body, hostname: url.hostname, query: Object.fromEntries(url.searchParams) });
-      return { status: result.status, headers: result.headers, body: JSON.stringify(result.body) };
-    } catch (error) {
-      context.error("Registration request failed", { category: error?.name ?? "Error" });
-      return { status: 500, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }, body: JSON.stringify({ ok: false, code: "INTERNAL_ERROR" }) };
     }
+    const result = await handle({ method: request.method, pathname: url.pathname, headers, body, hostname: url.hostname, query: Object.fromEntries(url.searchParams) });
+    return { status: result.status, headers: result.headers, body: JSON.stringify(result.body) };
+  } catch (error) {
+    context.error("Registration request failed", { category: error?.name ?? "Error" });
+    return { status: 500, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }, body: JSON.stringify({ ok: false, code: "INTERNAL_ERROR" }) };
   }
+};
+
+for (const version of ["v2", "v3", "v4"]) app.http(`registration-${version}`, {
+  methods: ["GET", "POST"],
+  authLevel: "anonymous",
+  route: `${version}/{*path}`,
+  handler
 });

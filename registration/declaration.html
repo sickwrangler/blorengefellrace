@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Complete your declaration | Blorenge Fell Race</title>
+  <link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="prototype.css">
+  <script type="module" src="declaration.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="prototype-header"><a href="../enter.html">← Race information</a><span class="environment-status">Development test</span></header>
+  <main id="main-content" class="prototype-shell">
+    <h1>Complete your WFRA declaration</h1>
+    <section id="declaration-loading" class="prototype-card"><p>Checking your secure link…</p></section>
+    <section id="declaration-unavailable" class="prototype-card" hidden><h2>This secure link is unavailable</h2><p>Ask the race organiser to resend your declaration email, or request a replacement below.</p><form id="declaration-recovery-form"><label>Your runner email address <input name="email" type="email" autocomplete="email" required></label><button class="button button--quiet" type="submit">Email a replacement link</button></form><p id="declaration-recovery-message" aria-live="polite"></p></section>
+    <form id="remote-declaration-form" class="prototype-card" hidden novalidate>
+      <div id="declaration-alert" class="form-alert" role="alert" tabindex="-1" hidden></div>
+      <p class="eyebrow">Confirmed race entry</p><h2 id="declaration-runner"></h2>
+      <dl id="declaration-entry" class="review-list"></dl>
+      <p id="remote-declaration-instruction"><strong>This declaration must be completed by the named runner.</strong></p>
+      <div id="remote-declaration-content"></div>
+      <label id="remote-declaration-name-label">Runner full name <input name="typedFullName" autocomplete="name" required></label>
+      <label class="checkbox-field"><input name="accepted" type="checkbox" required> <span id="remote-declaration-acceptance">I am the runner named above and I accept the WFRA declaration.</span></label>
+      <div class="form-actions"><button class="button" type="submit">Complete declaration</button></div>
+    </form>
+    <section id="declaration-complete" class="prototype-card" hidden><h2>Declaration complete</h2><p>Your paid race place remains confirmed and your declaration is now recorded. No payment or capacity status was changed.</p></section>
+  </main>
+</body>
+</html>

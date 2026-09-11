@@ -7,7 +7,8 @@ const target = path.join(root, "api", "src", "shared");
 fs.rmSync(target, { recursive: true, force: true });
 fs.mkdirSync(path.join(target, "server"), { recursive: true });
 fs.copyFileSync(path.join(root, "registration", "registration-core.mjs"), path.join(target, "registration-core.mjs"));
-for (const name of ["adapters.mjs", "api.mjs", "auth.mjs", "repositories.mjs", "service.mjs"]) {
+fs.copyFileSync(path.join(root, "registration", "declarations.mjs"), path.join(target, "declarations.mjs"));
+for (const name of ["adapters.mjs", "api.mjs", "auth.mjs", "repositories.mjs", "service.mjs", "phase3-domain.mjs", "phase3-integrations.mjs", "phase3-service.mjs", "order-service.mjs", "development-email.mjs", "email-templates.mjs", "communications.mjs"]) {
   fs.copyFileSync(path.join(root, "registration", "server", name), path.join(target, "server", name));
 }
 console.log("Prepared the managed API from the validated registration server sources.");

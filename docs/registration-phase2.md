@@ -1,6 +1,8 @@
 # Registration Phase 2 development system
 
-Phase 2 remains synthetic, closed and isolated on PR #8. Its approved development environment persists synthetic test data across devices, uses mock payments and captures message previews without delivery. It does not accept real entrants or change production.
+Phase 2 is complete. PR #8 was merged after automated validation and manual two-device testing, and the post-merge verification passed. Production remained limited to the allowlisted public website: registration pages and APIs are unavailable there. The separate stable development environment remains isolated, server-side `development` / `test`, and synthetic-only; it persists test data across devices, uses mock payments and captures message previews without delivery.
+
+Phase 3 production-readiness work is planned separately in `registration-phase3-plan.md`. Completing Phase 2 did not open registration or make the development environment suitable for real entrant data.
 
 ## Components
 

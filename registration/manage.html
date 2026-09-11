@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manage entry | Blorenge Fell Race</title>
+  <meta name="description" content="Securely review and manage one Blorenge Fell Race entry.">
+  <link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="prototype.css">
+  <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+  <script type="module" src="manage.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="prototype-header"><a href="index.html">← Registration</a><span class="environment-status">Development · Synthetic test information only</span></header>
+  <main id="main-content" class="prototype-shell">
+    <h1>Manage race entry</h1>
+    <section id="access-panel" class="prototype-card" aria-labelledby="access-title">
+      <h2 id="access-title">Secure entry link required</h2>
+      <p id="access-message" aria-live="polite">Open the private link from your registration email, or request a replacement below.</p>
+      <form id="recovery-form"><label>Email address <input name="email" type="email" autocomplete="email" required></label><button class="button" type="submit">Email a new secure link</button></form>
+    </section>
+    <section id="entry-panel" class="prototype-card" hidden aria-labelledby="entry-title">
+      <p class="eyebrow">Individual runner entry</p><h2 id="entry-title">Entry details</h2>
+      <dl id="entry-summary" class="summary-list"></dl>
+      <div class="form-actions"><button id="continue-payment" class="button" type="button" hidden>Continue to payment</button><button id="request-refund" class="button button--quiet" type="button" hidden>Request refund for this entry</button><button id="refresh-entry" class="button button--quiet" type="button">Refresh status</button></div>
+    </section>
+    <section id="amend-panel" class="prototype-card" hidden aria-labelledby="amend-title">
+      <h2 id="amend-title">Update entry details</h2>
+      <p>Name and email changes are transfers and use the separate transfer process.</p>
+      <form id="amend-form" class="prototype-form"><label>Phone number <input name="phone" type="tel" required></label><label>Club <input name="club" autocomplete="organization"></label><button class="button" type="submit">Save changes</button></form>
+      <p id="amend-message" aria-live="polite"></p>
+    </section>
+    <section id="transfer-panel" class="prototype-card" hidden aria-labelledby="transfer-title">
+      <h2 id="transfer-title">Transfer this entry</h2>
+      <p>A transfer invalidates this management link. The new adult runner receives their own secure links and must complete their own declaration before racing.</p>
+      <form id="transfer-form" class="prototype-form">
+        <label>New runner email <input name="email" type="email" required></label><label>First name <input name="firstName" required></label><label>Last name <input name="lastName" required></label>
+        <label>Phone number <input name="phone" type="tel" required></label><label>Address line 1 <input name="addressLine1" required></label><label>City <input name="city" required></label><label>Postcode <input name="postcode" required></label>
+        <label>Date of birth <input name="dateOfBirth" type="date" required></label><label>Race category <select name="raceCategory" required><option value="Female">Female</option><option value="Male / Open">Male / Open</option></select></label>
+        <label>Emergency contact name <input name="emergencyContactName" required></label><label>Emergency contact phone number <input name="emergencyContactPhone" type="tel" required></label>
+        <label>Club <input name="club"></label>
+        <button class="button" type="submit">Transfer entry</button>
+      </form><p id="transfer-message" aria-live="polite"></p>
+    </section>
+  </main>
+</body>
+</html>

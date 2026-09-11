@@ -1,6 +1,6 @@
 import { gzipSync, gunzipSync } from "node:zlib";
 import { AzureSASCredential, TableClient } from "@azure/data-tables";
-import { createDatabase } from "./shared/server/service.mjs";
+import { createDatabase, migrateDevelopmentDatabase } from "./shared/server/service.mjs";
 
 const ROW_KEY = "registration-state";
 const CHUNK_SIZE = 60_000;
@@ -17,7 +17,7 @@ export function decodeState(entity) {
   const count = Number(entity.chunkCount);
   if (!Number.isInteger(count) || count < 1 || count > 200) throw new Error("Stored synthetic registration state is invalid.");
   const encoded = Array.from({ length: count }, (_, index) => entity[`chunk${String(index).padStart(3, "0")}`]).join("");
-  return JSON.parse(gunzipSync(Buffer.from(encoded, "base64")).toString("utf8"));
+  return migrateDevelopmentDatabase(JSON.parse(gunzipSync(Buffer.from(encoded, "base64")).toString("utf8")));
 }
 
 function entityFor(partitionKey, state) {
@@ -27,10 +27,10 @@ function entityFor(partitionKey, state) {
   return entity;
 }
 
-export function createAzureTableTransport({ accountName, tableName, sasToken, partitionKey }) {
-  if (!/^[a-z0-9]{3,24}$/.test(accountName) || !tableName || !sasToken || !partitionKey) throw new Error("Registration storage settings are incomplete.");
-  const token = sasToken.startsWith("?") ? sasToken.slice(1) : sasToken;
-  const client = new TableClient(`https://${accountName}.table.core.windows.net`, tableName, new AzureSASCredential(token));
+export function createAzureTableTransport({ accountName, tableName, sasToken = "", credential = null, partitionKey }) {
+  if (!/^[a-z0-9]{3,24}$/.test(accountName) || !tableName || !partitionKey || (!sasToken && !credential)) throw new Error("Registration storage settings are incomplete.");
+  const authentication = credential ?? new AzureSASCredential(sasToken.startsWith("?") ? sasToken.slice(1) : sasToken);
+  const client = new TableClient(`https://${accountName}.table.core.windows.net`, tableName, authentication);
   const baseline = () => createDatabase({ environment: "development", registrationState: "test" });
 
   async function loadPartition() {

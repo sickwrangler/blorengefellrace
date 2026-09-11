@@ -32,6 +32,8 @@ const checks = [
   ["docs/registration-test-checklist.md", null],
   ["docs/registration-opening-runbook.md", null],
   ["registration/index.html", "text/html"],
+  ["registration/start-list.html", "text/html"],
+  ["registration/start-list.mjs", "javascript"],
   ["registration/dashboard.html", "text/html"],
   ["registration/prototype.css", "text/css"],
   ["registration/runner.mjs", "javascript"],

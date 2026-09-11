@@ -4,6 +4,15 @@
   "parameters": {
     "staticWebAppName": { "value": "swa-blorenge-registration-dev" },
     "storageAccountName": { "value": "stblorengeregdev2026" },
+    "communicationServiceName": { "value": "acs-blorenge-registration-dev" },
+    "emailServiceName": { "value": "ecs-blorenge-registration-dev" },
+    "schedulerFunctionName": { "value": "func-blorenge-registration-scheduler-dev" },
+    "schedulerPlanName": { "value": "asp-blorenge-registration-scheduler-dev" },
+    "schedulerLogAnalyticsName": { "value": "log-blorenge-registration-scheduler-dev" },
+    "schedulerApplicationInsightsName": { "value": "appi-blorenge-registration-scheduler-dev" },
+    "registrationEmailSafeRecipients": { "value": "supply-securely-at-deployment" },
+    "registrationEmailSender": { "value": "supply-securely-at-deployment" },
+    "registrationEventPartition": { "value": "blorenge-2026-test" },
     "location": { "value": "westeurope" },
     "tags": {
       "value": {

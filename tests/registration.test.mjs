@@ -4,6 +4,8 @@ import fs from "node:fs";
 import { ageOnDate, initialState, safeRegistrationState, submitRegistration, applyMockPayment, cancelRegistration, updateTestSettings, assignRaceNumber, removeRaceNumber, markOrganiserViewed, statusSummary, sanitizedCsv } from "../registration/registration-core.mjs";
 import { createPreviewRepository, STORAGE_KEY, SCHEMA_VERSION, LEGACY_STORAGE_KEYS, isRepositoryStorageEvent, queryRegistrations, environmentForHostname } from "../registration/preview-repository.mjs";
 import { RUNNER_STAGE_ACTIONS, isRunnerActionAvailable, organiserHandoverUrl } from "../registration/runner-flow.mjs";
+import { normalizeRunnerErrors, runnerMessageForCode } from "../registration/runner-errors.mjs";
+import { paymentPresentation } from "../registration/payment-state.mjs";
 import { availableOrganiserActions } from "../registration/organiser-view.mjs";
 
 const fixtures = JSON.parse(fs.readFileSync(new URL("../registration/fixtures.json", import.meta.url), "utf8"));
@@ -15,9 +17,10 @@ function previewRepository(storage = memoryStorage()) { return createPreviewRepo
 
 const runner = (number = 1, overrides = {}) => ({
   firstName: `Runner${number}`, lastName: "Example", email: `runner${number}@example.com`, phone: "07700 900123",
+  addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA",
   dateOfBirth: "1990-06-15", genderCategory: "Female", club: number % 2 ? "Example Harriers" : "",
-  affiliated: false, membershipNumber: "", emergencyName: "Contact Example", emergencyPhone: "07700 900456",
-  travelMethod: "Shared car", acceptTerms: true, acceptPrivacy: true, ...overrides
+  wfraMember: false, wfraMembershipNumber: "", emergencyName: "Contact Example", emergencyPhone: "07700 900456",
+  declarationName: `Runner${number} Example`, declarationSignatoryRole: "Competitor", acceptDeclaration: true, acceptTerms: true, acceptPrivacy: true, ...overrides
 });
 
 test("production and invalid configurations fail closed", () => {
@@ -60,11 +63,11 @@ test("open behaviour exists behind the server state model but cannot be selected
   assert.equal(submitRegistration(production, runner(2)).ok, false);
 });
 
-test("minimum age is calculated on race day", () => {
+test("minimum age is calculated on race day and 16/17-year-old completion is blocked pending parental consent", () => {
   assert.equal(ageOnDate("2010-11-28"), 16);
   assert.equal(ageOnDate("2010-11-29"), 15);
   const state = initialState();
-  assert.equal(submitRegistration(state, runner(1, { dateOfBirth: "2010-11-28" })).ok, true);
+  assert.equal(submitRegistration(state, runner(1, { dateOfBirth: "2010-11-28" })).code, "VALIDATION_ERROR");
   assert.equal(submitRegistration(state, runner(2, { dateOfBirth: "2010-11-29" })).code, "VALIDATION_ERROR");
 });
 
@@ -88,12 +91,12 @@ test("repeated Stage 3 submission cannot create two records", () => {
   assert.equal(state.registrations.length, 1);
 });
 
-test("capacity accepts entries 109 and 110 then wait-lists entry 111", () => {
-  const state = initialState({ capacity: 110 });
-  for (let number = 1; number <= 108; number += 1) assert.equal(submitRegistration(state, runner(number)).registration.entryStatus, "accepted");
-  assert.equal(submitRegistration(state, runner(109)).registration.entryStatus, "accepted");
-  assert.equal(submitRegistration(state, runner(110)).registration.entryStatus, "accepted");
-  const final = submitRegistration(state, runner(111)).registration;
+test("capacity accepts entries 119 and 120 then wait-lists entry 121", () => {
+  const state = initialState({ capacity: 120 });
+  for (let number = 1; number <= 118; number += 1) assert.equal(submitRegistration(state, runner(number)).registration.entryStatus, "accepted");
+  assert.equal(submitRegistration(state, runner(119)).registration.entryStatus, "accepted");
+  assert.equal(submitRegistration(state, runner(120)).registration.entryStatus, "accepted");
+  const final = submitRegistration(state, runner(121)).registration;
   assert.equal(final.entryStatus, "waiting_list");
   assert.equal(final.waitingListPosition, 1);
 });
@@ -204,7 +207,28 @@ test("runner and dashboard share one versioned storage contract", () => {
   assert.equal(SCHEMA_VERSION, 3);
   const source = fs.readFileSync(new URL("../registration/prototype-client.mjs", import.meta.url), "utf8");
   assert.match(source, /createPreviewRepository/);
-  assert.doesNotMatch(source, /sessionStorage/);
+  assert.match(source, /sessionStorage/);
+  assert.doesNotMatch(source, /localStorage\.setItem\([^)]*management/i);
+});
+
+test("server validation names map to visible runner fields and unknown schema errors stay actionable", () => {
+  const normalized = normalizeRunnerErrors({ raceCategory: "Choose a category.", emergencyContactName: "Enter a contact.", travelMethod: "Retired field." });
+  assert.deepEqual(normalized.mapped, { genderCategory: "Choose a category.", emergencyName: "Enter a contact." });
+  assert.deepEqual(normalized.unmapped, ["Some details could not be accepted. Refresh the page and try again."]);
+  assert.equal(runnerMessageForCode("PAYMENTS_UNAVAILABLE"), "Online payment is not available yet. Your synthetic entry details have been retained.");
+  assert.doesNotMatch(runnerMessageForCode("UNEXPECTED_INTERNAL_DETAIL"), /UNEXPECTED_INTERNAL_DETAIL/);
+});
+
+test("payment return presentation is server-state driven and makes retry states explicit", () => {
+  assert.deepEqual(paymentPresentation("not_configured"), {
+    title: "Payments unavailable",
+    message: "Online payment is not available yet in this development environment.",
+    canRetry: false,
+    unavailable: true
+  });
+  assert.equal(paymentPresentation("paid", { paymentsAvailable: true }).title, "Entry confirmed");
+  assert.equal(paymentPresentation("failed", { paymentsAvailable: true }).canRetry, true);
+  assert.equal(paymentPresentation("expired", { paymentsAvailable: true }).canRetry, true);
 });
 
 test("production hosts remain closed and are not classified for preview persistence", () => {
@@ -294,9 +318,10 @@ test("runner stages expose only their relevant actions and block later actions e
   assert.deepEqual(RUNNER_STAGE_ACTIONS[2], ["race-back", "race-continue"]);
   assert.deepEqual(RUNNER_STAGE_ACTIONS[3], ["review-back", "submit-test"]);
   assert.equal(isRunnerActionAvailable(1, "submit-test"), false);
-  assert.equal(isRunnerActionAvailable(2, "payment-successful", true), false);
-  assert.equal(isRunnerActionAvailable(4, "payment-successful", false), false);
-  assert.equal(isRunnerActionAvailable(4, "payment-successful", true), true);
+  assert.equal(isRunnerActionAvailable(2, "continue-payment", true), false);
+  assert.equal(isRunnerActionAvailable(4, "continue-payment", false), false);
+  assert.equal(isRunnerActionAvailable(4, "continue-payment", true), true);
+  assert.equal(isRunnerActionAvailable(4, "payment-successful", true), false);
 });
 
 test("organiser handover focuses the exact encoded test reference", () => {
