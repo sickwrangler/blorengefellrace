@@ -38,13 +38,15 @@ test("production staging contains only allowlisted public website files", () => 
   const outputRoot = temporaryDirectory("production-artifact");
   try {
     const files = stageProduction({ outputRoot });
-    for (const required of ["index.html", "404.html", "data/public/results/2025.json", "downloads/blorenge-fell-race-2026.gpx", "staticwebapp.config.json"]) {
+    for (const required of ["index.html", "recce.html", "kit-swap.html", "images/generated/photos/kit-swap-2024.jpg", "404.html", "data/public/results/2025.json", "downloads/blorenge-fell-race-2026.gpx", "staticwebapp.config.json"]) {
       assert.ok(files.includes(required), `missing ${required}`);
     }
     for (const forbidden of ["registration/", "api/", "docs/", "infrastructure/", "scripts/", "tests/", ".github/"]) {
       assert.equal(files.some((file) => file.startsWith(forbidden)), false, `unexpected ${forbidden}`);
     }
     assert.equal(files.some((file) => /(?:fixtures|package-lock|\.DS_Store|\.xcf|\.xlsx)$/i.test(file)), false);
+    for (const illustration of ["images/kitswap.png", "images/litterpickwalk.png"]) assert.equal(files.includes(illustration), false);
+    assert.equal(files.includes("docs/internal/image-catalogue.html"), false);
     const configuration = JSON.parse(fs.readFileSync(path.join(outputRoot, "staticwebapp.config.json"), "utf8"));
     assert.equal(configuration.routes, undefined);
     assert.equal(configuration.responseOverrides["404"].rewrite, "/404.html");

@@ -24,6 +24,12 @@ html, body { margin:0; color:var(--paper); background:var(--forest); font-family
 }
 .nav-links a:hover, .nav-links a[aria-current="page"] { border-bottom-color:var(--bracken); }
 a:focus-visible, button:focus-visible { outline:.2rem solid var(--focus); outline-offset:.15rem; }
+@media (min-width:48rem) and (max-width:68rem) {
+  .logo_navbar { width:4.5rem; }
+  .brand { gap:.5rem; }
+  .brand__name { font-size:1.08rem; }
+  .nav-links a { padding-inline:.55rem; font-size:.84rem; }
+}
 @media (max-width:47.99rem) {
   .navbar { align-content:start; width:calc(100% - 1.25rem); min-height:4.5rem; padding-top:.35rem; }
   .logo_navbar { width:4.75rem; height:auto; }

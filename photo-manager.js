@@ -14,8 +14,10 @@
   function applyPhoto(image, photo) {
     image.src = photo.optimizedFilename;
     image.alt = photo.alt;
-    image.style.objectPosition = photo.objectPosition;
+    image.style.setProperty("--image-focal-point", photo.focalPoint);
+    image.style.objectPosition = "var(--image-focal-point)";
     image.dataset.photoId = photo.id;
+    image.dataset.imageRole = photo.role;
   }
 
   function createFigure(photo) {
@@ -46,7 +48,7 @@
       return response.json();
     })
     .then((manifest) => {
-      const photos = manifest.photos.filter((photo) => photo.page === page);
+      const photos = manifest.photos.filter((photo) => photo.usedOn.includes(page));
       const byId = new Map(photos.map((photo) => [photo.id, photo]));
 
       document.querySelectorAll("img[data-photo-id]").forEach((image) => {

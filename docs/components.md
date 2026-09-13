@@ -8,13 +8,15 @@
 | `enter.html` | Confirmed 2026 entry facts and publication status | Global CSS, analytics |
 | `result.html` | Current and historical race results | Global/results CSS, OpenSheet, published Google Sheet |
 | `route.html` | Confirmed 2026 facts, interactive/static maps, GPX download and route guide | Global/route CSS, Leaflet, `route-map.js`, GPX and photographs |
+| `recce.html` | Public details for the pre-race route walk and litter pick | Global CSS and the central image catalogue |
+| `kit-swap.html` | Public guidance for the informal race-day kit swap | Global CSS and the central image catalogue |
 | `info.html` | Travel, full kit guidance, historical report, statistics and winner information in tabs | Global/info/winners CSS, tab JavaScript and images |
 | `privacy.html` | Privacy policy | Global CSS |
 | `404.html` | Branded not-found page | Global CSS |
 
 ## Shared components
 
-`components/navbar/navbar.html` contains the logo, primary links and compact mobile menu. Every top-level page embeds it in an iframe with class `nav-iframe`. The component posts its open or closed height to the parent page; `script.js` safely applies that height to the iframe.
+`components/navbar/navbar.html` contains the logo, primary links—including dedicated Recce and Kit Swap destinations—and compact two-column mobile menu. Every top-level page embeds it in an iframe with class `nav-iframe`. The component posts its open or closed height to the parent page; `script.js` safely applies that height to the iframe.
 
 `components/footer/footer.html` contains the contact address, privacy link and WFRA banner. Every top-level page embeds it in an iframe with class `footer-iframe`.
 

@@ -47,6 +47,7 @@ body {
 }
 main { min-height: 55vh; }
 img, svg, video { display: block; max-width: 100%; }
+[data-image-role] { object-fit: cover; object-position: var(--image-focal-point, 50% 50%); }
 iframe { max-width: 100%; }
 h1, h2, h3, h4 {
   margin: 0 0 var(--space-4);
@@ -222,6 +223,21 @@ hr { height: 1px; margin: var(--space-7) 0; border: 0; background: var(--colour-
 .not-found { display: grid; min-height: 55vh; place-content: center; text-align: center; }
 .not-found h1 { max-width: none; }
 
+/* Public event feature pages and centrally managed image roles */
+.public-feature-page { display: grid; gap: clamp(2rem,5vw,4rem); }
+.managed-image { margin: 0; }
+.managed-image img { width: 100%; background: var(--colour-stone); }
+.managed-image--hero img { aspect-ratio: 16 / 9; object-fit: cover; }
+[data-image-role="feature"] { aspect-ratio: 3 / 2; }
+[data-image-role="card"] { aspect-ratio: 4 / 3; }
+.event-facts { display: grid; margin-block: var(--space-6); border-top: 2px solid var(--colour-forest); }
+.event-facts div { display: grid; grid-template-columns: minmax(6rem,.5fr) 1.5fr; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: var(--border); }
+.event-facts dt { font-weight: 750; }
+.event-facts dd { margin: 0; }
+.information-link { max-width: var(--reading-width); margin-top: var(--space-7); padding: var(--space-5); border: var(--border); background: rgba(255,253,248,.78); }
+.information-link h3 { margin-top: 0; }
+.information-link > :last-child { margin-bottom: 0; }
+
 @media (min-width: 48rem) {
   .space, .page-shell, .section-shell, .tab-container { width: min(100% - 4rem, var(--content-width)); }
   .race-facts { grid-template-columns: repeat(3,minmax(0,1fr)); }
@@ -242,6 +258,8 @@ hr { height: 1px; margin: var(--space-7) 0; border: 0; background: var(--colour-
   .detail-list div { grid-template-columns: 1fr; gap: 0; }
   .content-list li { display: grid; gap: .3rem; }
   .content-list li span { display: block; }
+  .managed-image--hero img { aspect-ratio: 4 / 3; }
+  .event-facts div { grid-template-columns: 1fr; gap: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
