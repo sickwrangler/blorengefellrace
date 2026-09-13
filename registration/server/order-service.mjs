@@ -336,7 +336,7 @@ export class OrderRegistrationService {
           payment.status = "paid"; payment.actualPaidAmountPence = paid; payment.paymentIntentId = typeof object.payment_intent === "string" ? object.payment_intent : object.payment_intent?.id; payment.completedAt = iso(at); payment.webhookReconciliationState = "reconciled"; order.status = "paid"; order.paidAt = iso(at);
           for (const registration of registrations) {
             registration.placeStatus = "confirmed"; registration.entryStatus = "accepted"; registration.updatedAt = iso(at);
-            const runner = runnerFor(state, registration); const management = issueManagementToken(state, registration.id, { actorType: "system" }, at);
+            const runner = runnerFor(state, registration); const management = issueManagementToken(state, registration.id, { actorType: "system" }, at, { replaceExisting: false });
             if (declarationView(state, registration).status === "pending") {
               const declarationToken = issueDeclarationToken(state, registration.id, at);
               await this.communicate(state, { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, secureUrl: this.declarationUrl(declarationToken, management.token), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed-pending`, at);

@@ -367,14 +367,15 @@ export function recordDeclaration(state, input, at = new Date()) {
   return { ok: true, declaration };
 }
 
-export function issueManagementToken(state, registrationId, actor = { actorType: "system" }, at = new Date()) {
+export function issueManagementToken(state, registrationId, actor = { actorType: "system" }, at = new Date(), { replaceExisting = true } = {}) {
   const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
   if (!registration) return { ok: false, code: "NOT_FOUND" };
-  for (const token of state.managementTokens.filter((item) => item.registrationId === registrationId && !item.invalidatedAt)) token.invalidatedAt = iso(at);
+  const existingTokens = state.managementTokens.filter((item) => item.registrationId === registrationId && !item.invalidatedAt);
+  if (replaceExisting) for (const token of existingTokens) token.invalidatedAt = iso(at);
   const value = opaqueToken();
   const token = { id: shortId("management"), registrationId, tokenHash: hashToken(value), issuedAt: iso(at), invalidatedAt: null };
   state.managementTokens.push(token);
-  recordAudit(state, actor, "management_token_issued", registrationId, null, { replacedPriorToken: state.managementTokens.some((item) => item.registrationId === registrationId && item.id !== token.id) }, at);
+  recordAudit(state, actor, "management_token_issued", registrationId, null, { replacedPriorToken: replaceExisting && existingTokens.length > 0, preservedPriorToken: !replaceExisting && existingTokens.length > 0 }, at);
   return { ok: true, token: value };
 }
 
