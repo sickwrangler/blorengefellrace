@@ -116,6 +116,21 @@ function setFormFromRunner(item) {
   updateMembershipFields(); updateDeclarationFields();
 }
 
+function restartEmptyOrder() {
+  editingRegistrationId = null;
+  form.reset();
+  document.querySelector("#order-runner-list").replaceChildren();
+  document.querySelector("#order-total").textContent = "£0.00";
+  document.querySelector("#order-review").hidden = true;
+  document.querySelector("#submit-test").textContent = "Add runner to order";
+  document.querySelector("#submit-test").closest(".form-actions").hidden = false;
+  updateMembershipFields();
+  updateDeclarationFields();
+  showStage(1);
+  alert.textContent = "Your basket is empty. Add a runner to start again.";
+  alert.hidden = false;
+}
+
 function renderOrder() {
   if (!currentOrder) return; const list = document.querySelector("#order-runner-list"); list.replaceChildren();
   for (const item of currentOrder.registrations) {
@@ -124,7 +139,7 @@ function renderOrder() {
     const edit = document.createElement("button"); edit.type = "button"; edit.className = "text-button"; edit.textContent = "Edit";
     edit.addEventListener("click", () => { editingRegistrationId = item.id; setFormFromRunner(item); document.querySelector("#order-review").hidden = true; document.querySelector("#submit-test").textContent = "Save runner changes"; document.querySelector("#submit-test").closest(".form-actions").hidden = false; showStage(1); });
     const remove = document.createElement("button"); remove.type = "button"; remove.className = "text-button danger-link"; remove.textContent = "Remove";
-    remove.addEventListener("click", async () => { if (!window.confirm(`Remove ${heading.textContent} from this unpaid order?`)) return; const result = await prototype.removeOrderRunner(item.id); if (!result.ok) return showApiError(result); currentOrder = result.order; renderOrder(); });
+    remove.addEventListener("click", async () => { if (!window.confirm(`Remove ${heading.textContent} from this unpaid order?`)) return; const result = await prototype.removeOrderRunner(item.id); if (!result.ok) return showApiError(result); currentOrder = result.order; if (currentOrder.runnerCount === 0) restartEmptyOrder(); else renderOrder(); });
     card.append(heading, facts, edit, remove); list.append(card);
   }
   document.querySelector("#order-total").textContent = `£${(currentOrder.totalPence / 100).toFixed(2)}`; document.querySelector("#add-another-runner").disabled = currentOrder.runnerCount >= 5; document.querySelector("#continue-order-payment").disabled = currentOrder.runnerCount < 1; document.querySelector("#order-review").hidden = false;

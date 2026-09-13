@@ -34,6 +34,16 @@ test("runner registration removes prototype and internal operational wording", a
   assert.doesNotMatch(runner, /form\.elements\.declarationTiming/);
 });
 
+test("removing the final basket runner clears review and restarts runner details", async () => {
+  const runner = await read("registration/runner.mjs");
+  assert.match(runner, /function restartEmptyOrder\(\)/);
+  assert.match(runner, /order-runner-list"\)\.replaceChildren\(\)/);
+  assert.match(runner, /order-total"\)\.textContent = "£0\.00"/);
+  assert.match(runner, /order-review"\)\.hidden = true/);
+  assert.match(runner, /currentOrder\.runnerCount === 0\) restartEmptyOrder\(\)/);
+  assert.match(runner, /Your basket is empty\. Add a runner to start again\./);
+});
+
 test("declaration wording hides its version while retaining audit metadata", async () => {
   const [runner, declaration] = await Promise.all([
     read("registration/runner.mjs"),
