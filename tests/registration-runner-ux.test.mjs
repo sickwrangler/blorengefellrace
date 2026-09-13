@@ -30,6 +30,7 @@ test("runner registration removes prototype and internal operational wording", a
   assert.doesNotMatch(runner, /Outstanding declarations do not prevent payment/i);
   assert.match(runner, /You are paying for/);
   assert.match(runner, /function declarationMode\(/);
+  assert.match(runner, /function refreshSyntheticDeclarationName\(/);
   assert.doesNotMatch(runner, /form\.elements\.declarationTiming/);
 });
 

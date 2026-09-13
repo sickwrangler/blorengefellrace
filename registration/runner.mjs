@@ -144,6 +144,9 @@ async function refreshStatus() {
 }
 
 function updateMembershipFields() { const member = form.elements.wfraMember.value === "yes"; document.querySelector("#wfra-number-field").hidden = !member; form.elements.wfraMembershipNumber.required = member; }
+function refreshSyntheticDeclarationName() {
+  if (form.elements.declarationName.value === "Alex Example") form.elements.declarationName.value = `${form.elements.firstName.value} ${form.elements.lastName.value}`.trim();
+}
 function updateDeclarationFields() {
   const guardian = guardianRequired();
   document.querySelector("#declaration-fields").hidden = false; document.querySelector("#adult-declaration-fields").hidden = guardian; document.querySelector("#guardian-declaration-fields").hidden = !guardian;
@@ -161,7 +164,7 @@ else if (prototype.hasPrivateInvitation && !(await prototype.inspectPrivateAcces
 else { const status = await refreshStatus(); if (status.unavailable || (status.environment === "production" && !["OPEN", "PRIVATE_LIVE"].includes(status.operationalState))) document.querySelector("#closed-panel").hidden = false; else { document.querySelector("#test-experience").hidden = false; await beginOrRecover(); } }
 
 document.querySelector("#start-test")?.addEventListener("click", () => { const purchaser = document.querySelector("#purchaser-email"); if (!purchaser.checkValidity()) return purchaser.reportValidity(); document.querySelector("#test-landing").hidden = true; document.querySelector("#runner-flow").hidden = false; showStage(1); });
-document.querySelector("#details-continue")?.addEventListener("click", () => { if (validateStage(1)) showStage(2); });
+document.querySelector("#details-continue")?.addEventListener("click", () => { if (validateStage(1)) { refreshSyntheticDeclarationName(); showStage(2); } });
 document.querySelector("#race-back")?.addEventListener("click", () => showStage(1));
 document.querySelector("#race-continue")?.addEventListener("click", () => { if (validateStage(2)) showStage(3); });
 document.querySelector("#review-back")?.addEventListener("click", () => showStage(2));
