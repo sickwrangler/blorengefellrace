@@ -11,6 +11,7 @@ test("central image manifest uses stable IDs, standard roles and valid focal poi
   assert.deepEqual(validateManifest(manifest), []);
   assert.deepEqual(Object.keys(manifest.roles).sort(), ["card", "feature", "hero"]);
   assert.equal(manifest.photos.find((photo) => photo.id === "route-ascent").usedOn.includes("recce"), true);
+  assert.equal(manifest.photos.find((photo) => photo.id === "route-muddy-descent").usedOn.includes("route"), true);
   assert.equal(manifest.photos.find((photo) => photo.id === "kit-swap-2024").sourceFilename, "images/source-approved/kit-swap-2024.jpg");
 });
 
@@ -21,7 +22,7 @@ test("internal visual catalogue is generated from every managed image", () => {
     const result = generateImageCatalogue({ output });
     const html = fs.readFileSync(output, "utf8");
     assert.equal(result.count, readManifest().photos.length);
-    for (const id of ["route-steep-climb", "route-tramroad", "kit-swap-2024", "route-ascent"]) assert.ok(html.includes(id));
+    for (const id of ["route-steep-climb", "route-tramroad", "route-muddy-descent", "kit-swap-2024", "route-ascent"]) assert.ok(html.includes(id));
     for (const label of ["Dimensions", "Used on", "Role", "Focal point", "Alt text", "Status"]) assert.ok(html.includes(label));
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });

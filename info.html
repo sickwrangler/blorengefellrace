@@ -30,14 +30,16 @@
       <p class="eyebrow">Blorenge Fell Race</p>
       <h1>Race information <span class="heading-translation" lang="cy">Gwybodaeth y ras</span></h1>
     </div>
-    <div class="tab-container">
-      <ul class="tabs" role="tablist" aria-label="Information sections">
-        <li><button type="button" class="tab active" id="tab-travel" role="tab" aria-controls="travel" aria-selected="true" tabindex="0" onclick="showTab('travel')">Travel</button></li>
-        <li><button type="button" class="tab" id="tab-kit" role="tab" aria-controls="kit" aria-selected="false" tabindex="-1" onclick="showTab('kit')">Kit list</button></li>
-        <li><button type="button" class="tab" id="tab-race-report" role="tab" aria-controls="race-report" aria-selected="false" tabindex="-1" onclick="showTab('race-report')">2025 Race Report</button></li>
-        <li><button type="button" class="tab" id="tab-stats" role="tab" aria-controls="stats" aria-selected="false" tabindex="-1" onclick="showTab('stats')">2025 statistics</button></li>
+    <nav class="tab-container" aria-label="Information sections">
+      <ul class="tabs">
+        <li><a class="tab active" id="tab-travel" href="info.html#travel" aria-current="location">Travel</a></li>
+        <li><a class="tab" id="tab-kit" href="info.html#kit">Kit list</a></li>
+        <li><a class="tab" href="recce.html">Recce</a></li>
+        <li><a class="tab" href="kit-swap.html">Kit Swap</a></li>
+        <li><a class="tab" id="tab-race-report" href="info.html#race-report">2025 Race Report</a></li>
+        <li><a class="tab" id="tab-stats" href="info.html#stats">2025 statistics</a></li>
       </ul>
-    </div>
+    </nav>
   </header>
 
   <main id="main-content">
@@ -189,60 +191,28 @@
   <script src="photo-manager.js"></script>
   <script>
     function showTab(tabId) {
-      document.querySelectorAll('.tab').forEach(tab => {
+      const selectedTab = document.getElementById(`tab-${tabId}`);
+      const selectedContent = document.getElementById(tabId);
+      if (!selectedTab || !selectedContent) return;
+
+      document.querySelectorAll('.tab[id]').forEach(tab => {
         tab.classList.remove('active');
-        tab.setAttribute('aria-selected', 'false');
-        tab.setAttribute('tabindex', '-1');
+        tab.removeAttribute('aria-current');
       });
       document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
-      const selectedTab = document.getElementById(`tab-${tabId}`);
       selectedTab.classList.add('active');
-      selectedTab.setAttribute('aria-selected', 'true');
-      selectedTab.setAttribute('tabindex', '0');
-      document.getElementById(tabId).classList.add('active');
+      selectedTab.setAttribute('aria-current', 'location');
+      selectedContent.classList.add('active');
     }
 
     function activateTabFromHash() {
       const hash = window.location.hash.substring(1);
-      if (!hash) return;
-
-      const tab = document.getElementById(`tab-${hash}`);
-      const content = document.getElementById(hash);
-      if (!tab || !content) return;
-
-      document.querySelectorAll('.tab').forEach(item => {
-        item.classList.remove('active');
-        item.setAttribute('aria-selected', 'false');
-        item.setAttribute('tabindex', '-1');
-      });
-      document.querySelectorAll('.tab-content').forEach(item => item.classList.remove('active'));
-
-      tab.classList.add('active');
-      tab.setAttribute('aria-selected', 'true');
-      tab.setAttribute('tabindex', '0');
-      content.classList.add('active');
+      showTab(hash || 'travel');
     }
 
     window.addEventListener('DOMContentLoaded', activateTabFromHash);
-
-    document.querySelector('.tabs').addEventListener('keydown', (event) => {
-      const tabs = [...document.querySelectorAll('.tab')];
-      const currentIndex = tabs.indexOf(document.activeElement);
-      if (currentIndex < 0) return;
-
-      let nextIndex;
-      if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
-      if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-      if (event.key === 'Home') nextIndex = 0;
-      if (event.key === 'End') nextIndex = tabs.length - 1;
-      if (nextIndex === undefined) return;
-
-      event.preventDefault();
-      const tabId = tabs[nextIndex].id.replace('tab-', '');
-      showTab(tabId);
-      tabs[nextIndex].focus();
-    });
+    window.addEventListener('hashchange', activateTabFromHash);
   </script>
 </body>
 </html>

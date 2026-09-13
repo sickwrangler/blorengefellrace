@@ -2,11 +2,11 @@
 
 Status: deployed in CLOSED production, with the public-content allowlist updated through the normal reviewed deployment process.
 
-The Static Web Apps artifact contains 87 files: 69 web files and 18 managed-API files. The separate production scheduler package contains 17 files. An unexpected file makes staging fail.
+The Static Web Apps artifact contains 88 files: 70 web files and 18 managed-API files. The separate production scheduler package contains 17 files. An unexpected file makes staging fail.
 
-## Existing public website — 48 web files
+## Existing public website — 49 web files
 
-The existing production boundary is preserved as these 30 fixed files, 17 active manifest-approved generated photos and generated route configuration:
+The existing production boundary is preserved as these 30 fixed files, 18 active manifest-approved generated photos and generated route configuration:
 
 ```text
 404.html
@@ -36,6 +36,7 @@ images/generated/photos/info-winner-bethan.jpg
 images/generated/photos/kit-swap-2024.jpg
 images/generated/photos/route-ascent.jpg
 images/generated/photos/route-finish.jpg
+images/generated/photos/route-muddy-descent.jpg
 images/generated/photos/route-start.jpg
 images/generated/photos/route-steep-climb.jpg
 images/generated/photos/route-tramroad.jpg

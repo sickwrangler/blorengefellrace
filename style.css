@@ -206,8 +206,9 @@ hr { height: 1px; margin: var(--space-7) 0; border: 0; background: var(--colour-
 .tabs { display: flex; gap: 0; padding: var(--space-3) 0 0; margin: 0; overflow-x: auto; list-style: none; scrollbar-width: thin; }
 .tabs li { flex: 0 0 auto; margin: 0; }
 .tab {
-  min-height: 3rem; padding: .7rem 1rem; border: 0; border-bottom: .25rem solid transparent; border-radius: 0;
+  display: inline-flex; align-items: center; min-height: 3rem; padding: .7rem 1rem; border: 0; border-bottom: .25rem solid transparent; border-radius: 0;
   color: var(--colour-ink-soft); background: transparent; font-weight: 750;
+  text-decoration: none; white-space: nowrap;
 }
 .tab:hover { color: var(--colour-forest-dark); background: rgba(35,75,58,.07); }
 .tab.active { color: var(--colour-forest-dark); border-bottom-color: var(--colour-bracken); }
