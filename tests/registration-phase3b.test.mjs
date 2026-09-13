@@ -316,7 +316,9 @@ test("registration email supplies a fresh-browser management link without persis
   const phase3 = new Phase3IntegrationService({ repository, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
   const freshBrowser = await phase3.managementEntry(created.managementToken, at);
   assert.equal(freshBrowser.registration.runner.firstName, "Runner 1");
-  assert.equal(JSON.stringify(freshBrowser).includes("emergency"), false);
+  assert.deepEqual(Object.keys(freshBrowser.registration.emergencyContact).sort(), ["name", "phone"]);
+  assert.equal(freshBrowser.registration.emergencyContact.name, phase2Runner(1).emergencyName);
+  assert.equal(freshBrowser.registration.emergencyContact.phone, phase2Runner(1).emergencyPhone);
 });
 
 test("management recovery is non-enumerating, rotates tokens and is rate limited", async () => {

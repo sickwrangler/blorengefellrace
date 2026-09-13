@@ -6,41 +6,72 @@
   <meta name="description" content="Securely review and manage one Blorenge Fell Race entry.">
   <link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="prototype.css">
   <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+  <script src="../script.js" defer></script>
   <script type="module" src="manage.mjs"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
-  <header class="prototype-header"><a href="index.html">← Registration</a><span class="environment-status">Development · Synthetic test information only</span></header>
+  <iframe class="nav-iframe" src="../components/navbar/navbar.html" title="Primary navigation" scrolling="no"></iframe>
   <main id="main-content" class="prototype-shell">
+    <div class="registration-context"><span class="environment-status">Development · Synthetic test information only</span></div>
     <h1>Manage race entry</h1>
     <section id="access-panel" class="prototype-card" aria-labelledby="access-title">
       <h2 id="access-title">Secure entry link required</h2>
       <p id="access-message" aria-live="polite">Open the private link from your registration email, or request a replacement below.</p>
       <form id="recovery-form"><label>Email address <input name="email" type="email" autocomplete="email" required></label><button class="button" type="submit">Email a new secure link</button></form>
     </section>
-    <section id="entry-panel" class="prototype-card" hidden aria-labelledby="entry-title">
-      <p class="eyebrow">Individual runner entry</p><h2 id="entry-title">Entry details</h2>
-      <dl id="entry-summary" class="summary-list"></dl>
-      <div class="form-actions"><button id="continue-payment" class="button" type="button" hidden>Continue to payment</button><button id="request-refund" class="button button--quiet" type="button" hidden>Request refund for this entry</button><button id="refresh-entry" class="button button--quiet" type="button">Refresh status</button></div>
+    <section id="entry-panel" class="prototype-card manage-overview" hidden aria-labelledby="entry-title">
+      <p class="eyebrow">Your 2026 race place</p><h2 id="entry-title">Entry status</h2>
+      <div class="status-badges" aria-live="polite">
+        <span id="entry-status-badge" class="status-badge"></span>
+        <span id="payment-status-badge" class="status-badge"></span>
+        <span id="declaration-status-badge" class="status-badge"></span>
+      </div>
+      <section class="manage-section" aria-labelledby="entry-details-title"><h3 id="entry-details-title">Entry</h3><dl id="entry-summary" class="summary-list"></dl></section>
+      <section class="manage-section" aria-labelledby="payment-title"><h3 id="payment-title">Payment</h3><p id="payment-summary"></p></section>
+      <section class="manage-section" aria-labelledby="declaration-title"><h3 id="declaration-title">Declaration</h3><p id="declaration-summary"></p></section>
+      <section class="manage-section" aria-labelledby="contact-title"><h3 id="contact-title">Contact and race details</h3><dl id="contact-summary" class="summary-list"></dl></section>
+      <section class="manage-section" aria-labelledby="actions-title"><h3 id="actions-title">Actions</h3>
+        <div class="form-actions"><button id="continue-payment" class="button" type="button" hidden>Continue to payment</button><button id="sign-declaration" class="button" type="button" hidden>Sign your race declaration</button><button id="edit-entry" class="button button--quiet" type="button" hidden>Edit entry</button><button id="transfer-entry" class="button button--quiet" type="button" hidden>Transfer entry</button><button id="request-refund" class="button button--quiet" type="button" hidden>Request refund for this entry</button><button id="refresh-entry" class="text-button" type="button">Refresh status</button></div>
+        <p id="action-message" aria-live="polite"></p>
+      </section>
     </section>
-    <section id="amend-panel" class="prototype-card" hidden aria-labelledby="amend-title">
-      <h2 id="amend-title">Update entry details</h2>
-      <p>Name and email changes are transfers and use the separate transfer process.</p>
-      <form id="amend-form" class="prototype-form"><label>Phone number <input name="phone" type="tel" required></label><label>Club <input name="club" autocomplete="organization"></label><button class="button" type="submit">Save changes</button></form>
-      <p id="amend-message" aria-live="polite"></p>
-    </section>
-    <section id="transfer-panel" class="prototype-card" hidden aria-labelledby="transfer-title">
-      <h2 id="transfer-title">Transfer this entry</h2>
-      <p>A transfer invalidates this management link. The new adult runner receives their own secure links and must complete their own declaration before racing.</p>
-      <form id="transfer-form" class="prototype-form">
-        <label>New runner email <input name="email" type="email" required></label><label>First name <input name="firstName" required></label><label>Last name <input name="lastName" required></label>
-        <label>Phone number <input name="phone" type="tel" required></label><label>Address line 1 <input name="addressLine1" required></label><label>City <input name="city" required></label><label>Postcode <input name="postcode" required></label>
-        <label>Date of birth <input name="dateOfBirth" type="date" required></label><label>Race category <select name="raceCategory" required><option value="Female">Female</option><option value="Male / Open">Male / Open</option></select></label>
-        <label>Emergency contact name <input name="emergencyContactName" required></label><label>Emergency contact phone number <input name="emergencyContactPhone" type="tel" required></label>
-        <label>Club <input name="club"></label>
-        <button class="button" type="submit">Transfer entry</button>
-      </form><p id="transfer-message" aria-live="polite"></p>
-    </section>
+
+    <dialog id="edit-entry-dialog" class="entry-dialog" aria-labelledby="edit-entry-title">
+      <form id="amend-form" class="prototype-form" novalidate>
+        <div class="dialog-heading"><h2 id="edit-entry-title">Edit entry</h2><button class="dialog-close" type="button" data-close-dialog aria-label="Close Edit entry">×</button></div>
+        <p>Name and email changes are transfers and are not available here.</p>
+        <div class="field-grid">
+          <label>Phone number <input name="phone" type="tel" autocomplete="tel" required></label>
+          <label>Address line 1 <input name="addressLine1" autocomplete="address-line1" required></label>
+          <label>Address line 2 <span class="hint">Optional</span><input name="addressLine2" autocomplete="address-line2"></label>
+          <label>City <input name="city" autocomplete="address-level2" required></label>
+          <label>Postcode <input name="postcode" autocomplete="postal-code" required></label>
+          <label>Race category <select name="raceCategory" required><option value="Female">Female</option><option value="Male / Open">Male / Open</option></select></label>
+          <label>Club <span class="hint">Optional</span><input name="club" autocomplete="organization"></label>
+          <label>Emergency contact name <input name="emergencyContactName" autocomplete="off" required></label>
+          <label>Emergency contact phone number <input name="emergencyContactPhone" type="tel" autocomplete="off" required></label>
+        </div>
+        <p id="amend-message" class="form-alert" role="alert" tabindex="-1" hidden></p>
+        <div class="form-actions"><button class="button" type="submit">Save changes</button><button class="button button--quiet" type="button" data-close-dialog>Cancel</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="transfer-entry-dialog" class="entry-dialog" aria-labelledby="transfer-entry-title">
+      <form id="transfer-form" class="prototype-form" novalidate>
+        <div class="dialog-heading"><h2 id="transfer-entry-title">Transfer entry</h2><button class="dialog-close" type="button" data-close-dialog aria-label="Close Transfer entry">×</button></div>
+        <p>Transfer this race place to another runner. Your existing payment and place are preserved, but your secure links will stop working and the new runner must sign their own declaration.</p>
+        <div class="field-grid">
+          <label>New runner email <input name="email" type="email" autocomplete="email" required></label><label>First name <input name="firstName" autocomplete="given-name" required></label><label>Last name <input name="lastName" autocomplete="family-name" required></label>
+          <label>Phone number <input name="phone" type="tel" autocomplete="tel" required></label><label>Address line 1 <input name="addressLine1" autocomplete="address-line1" required></label><label>Address line 2 <span class="hint">Optional</span><input name="addressLine2" autocomplete="address-line2"></label><label>City <input name="city" autocomplete="address-level2" required></label><label>Postcode <input name="postcode" autocomplete="postal-code" required></label>
+          <label>Date of birth <input name="dateOfBirth" type="date" autocomplete="bday" required></label><label>Race category <select name="raceCategory" required><option value="Female">Female</option><option value="Male / Open">Male / Open</option></select></label>
+          <label>Emergency contact name <input name="emergencyContactName" autocomplete="off" required></label><label>Emergency contact phone number <input name="emergencyContactPhone" type="tel" autocomplete="off" required></label>
+          <label>Club <span class="hint">Optional</span><input name="club" autocomplete="organization"></label>
+        </div>
+        <p id="transfer-message" class="form-alert" role="alert" tabindex="-1" hidden></p>
+        <div class="form-actions"><button class="button" type="submit">Transfer entry</button><button class="button button--quiet" type="button" data-close-dialog>Cancel</button></div>
+      </form>
+    </dialog>
   </main>
 </body>
 </html>

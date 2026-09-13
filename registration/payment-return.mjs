@@ -8,7 +8,7 @@ const actions = document.querySelector("#payment-actions");
 const retry = document.querySelector("#retry-payment");
 const refresh = document.querySelector("#refresh-payment");
 const requestRefund = document.querySelector("#request-refund");
-const help = document.querySelector("#payment-help");
+const confirmedRunners = document.querySelector("#confirmed-runners");
 const environmentStatus = document.querySelector("#payment-environment-status");
 
 const fragment = new URLSearchParams(location.hash.replace(/^#/, ""));
@@ -19,38 +19,40 @@ async function render() {
   if (new URLSearchParams(location.search).get("order") === "1" && prototype.orderToken()) {
     const [orderResult, integrations] = await Promise.all([prototype.currentOrder(), prototype.integrationStatus()]);
     environmentStatus.textContent = integrations.paymentsAvailable ? "Development · Stripe sandbox" : "Development · Payments unavailable";
-    if (!orderResult.ok) { title.textContent = "Order status unavailable"; message.textContent = "Use the secure order link sent to the purchaser."; actions.hidden = true; help.hidden = false; return; }
+    if (!orderResult.ok) { title.textContent = "Order status unavailable"; message.textContent = "Use the secure order link sent to the purchaser."; actions.hidden = true; return; }
     const order = orderResult.order; const presentation = paymentPresentation(order.paymentStatus, { paymentsAvailable: integrations.paymentsAvailable === true });
-    title.textContent = order.paymentStatus === "paid" ? "Group entries confirmed" : presentation.title;
-    message.textContent = order.paymentStatus === "paid" ? `Payment of £${(order.totalPence / 100).toFixed(2)} has confirmed ${order.runnerCount} race entries. Any outstanding declarations can be completed separately and do not affect payment.` : presentation.message;
-    retry.hidden = !presentation.canRetry; requestRefund.hidden = true; actions.hidden = false; help.hidden = false; return;
+    title.textContent = order.paymentStatus === "paid" ? "Entry confirmed" : presentation.title;
+    message.textContent = order.paymentStatus === "paid" ? "Payment confirmed. We’ve emailed each runner the information they need for their entry." : presentation.message;
+    confirmedRunners.replaceChildren(...order.registrations.map((item) => { const row = document.createElement("li"); row.textContent = `${item.runner.firstName} ${item.runner.lastName}${item.declaration.status === "complete" ? "" : " — declaration required"}`; return row; }));
+    confirmedRunners.hidden = order.paymentStatus !== "paid";
+    retry.hidden = !presentation.canRetry; requestRefund.hidden = true; actions.hidden = order.paymentStatus === "paid"; return;
   }
   const token = prototype.managementToken();
   if (!token) {
     title.textContent = "Secure entry link required";
     message.textContent = "Use the secure link supplied when the entry was created.";
-    actions.hidden = true; help.hidden = false; return;
+    actions.hidden = true; return;
   }
   const [status, integrations] = await Promise.all([prototype.paymentStatus(token), prototype.integrationStatus()]);
   environmentStatus.textContent = integrations.paymentsAvailable ? "Development · Stripe sandbox" : "Development · Payments unavailable";
   if (!status.ok) {
     title.textContent = "Payment status unavailable";
     message.textContent = runnerMessageForCode(status.code);
-    actions.hidden = true; help.hidden = false; return;
+    actions.hidden = true; return;
   }
   const presentation = paymentPresentation(status.state, { paymentsAvailable: integrations.paymentsAvailable === true });
   title.textContent = presentation.title; message.textContent = presentation.message;
   retry.hidden = !presentation.canRetry && !presentation.unavailable;
   requestRefund.hidden = status.state !== "paid";
   retry.disabled = !integrations.paymentsAvailable;
-  actions.hidden = false; help.hidden = !presentation.unavailable;
+  actions.hidden = status.state === "paid";
 }
 
 retry.addEventListener("click", async () => {
   retry.disabled = true;
   const result = new URLSearchParams(location.search).get("order") === "1" ? await prototype.checkoutOrder() : await prototype.checkout(prototype.managementToken());
   if (result.ok && result.checkoutUrl) location.assign(result.checkoutUrl);
-  else { title.textContent = "Payments unavailable"; message.textContent = runnerMessageForCode(result.code); retry.disabled = true; help.hidden = false; }
+  else { title.textContent = "Payments unavailable"; message.textContent = runnerMessageForCode(result.code); retry.disabled = true; }
 });
 requestRefund.addEventListener("click", async () => {
   if (!window.confirm("Request a full refund for this test entry? The organiser must review and approve it before any refund is made.")) return;

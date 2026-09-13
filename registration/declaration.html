@@ -4,12 +4,15 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Complete your declaration | Blorenge Fell Race</title>
   <link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="prototype.css">
+  <link rel="icon" href="/images/blorenge_fellrace_logo_white.svg" type="image/svg+xml">
+  <script src="../script.js" defer></script>
   <script type="module" src="declaration.mjs"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
-  <header class="prototype-header"><a href="../enter.html">← Race information</a><span class="environment-status">Development test</span></header>
+  <iframe class="nav-iframe" src="../components/navbar/navbar.html" title="Primary navigation" scrolling="no"></iframe>
   <main id="main-content" class="prototype-shell">
+    <div class="registration-context"><span class="environment-status">Development test</span></div>
     <h1>Complete your WFRA declaration</h1>
     <section id="declaration-loading" class="prototype-card"><p>Checking your secure link…</p></section>
     <section id="declaration-unavailable" class="prototype-card" hidden><h2>This secure link is unavailable</h2><p>Ask the race organiser to resend your declaration email, or request a replacement below.</p><form id="declaration-recovery-form"><label>Your runner email address <input name="email" type="email" autocomplete="email" required></label><button class="button button--quiet" type="submit">Email a replacement link</button></form><p id="declaration-recovery-message" aria-live="polite"></p></section>
@@ -23,7 +26,7 @@
       <label class="checkbox-field"><input name="accepted" type="checkbox" required> <span id="remote-declaration-acceptance">I am the runner named above and I accept the WFRA declaration.</span></label>
       <div class="form-actions"><button class="button" type="submit">Complete declaration</button></div>
     </form>
-    <section id="declaration-complete" class="prototype-card" hidden><h2>Declaration complete</h2><p>Your paid race place remains confirmed and your declaration is now recorded. No payment or capacity status was changed.</p></section>
+    <section id="declaration-complete" class="prototype-card" hidden><h2 tabindex="-1">Declaration complete</h2><p>Your declaration has been recorded. Returning to Manage race entry…</p></section>
   </main>
 </body>
 </html>

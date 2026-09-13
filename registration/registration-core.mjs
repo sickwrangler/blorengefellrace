@@ -63,7 +63,7 @@ export function validateRunner(input, { requireSynthetic = true } = {}) {
   else if (age >= EVENT.minimumAge && age < 18 && input.declarationSignatoryRole !== "Parent / Legal Guardian") errors.declarationSignatoryRole = "A parent or legal guardian must sign for a runner aged 16 or 17.";
   if (!String(input.declarationName ?? "").trim()) errors.declarationName = age < 18 ? "Enter the parent or legal guardian's full name." : "Enter the runner's full name.";
   if (!input.acceptDeclaration) errors.acceptDeclaration = "Accept the declaration to continue.";
-  if (!input.acceptTerms) errors.acceptTerms = "You must accept the prototype race terms.";
+  if (!input.acceptTerms) errors.acceptTerms = "You must accept the race terms.";
   if (!input.acceptPrivacy) errors.acceptPrivacy = "You must acknowledge the prototype privacy notice.";
   return errors;
 }

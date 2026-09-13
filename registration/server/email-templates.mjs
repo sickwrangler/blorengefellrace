@@ -37,11 +37,17 @@ export function renderRegistrationEmail(template, data = {}) {
   if (data.status) lines.push(`Status: ${data.status}`);
   if (data.runnerCount) lines.push(`Entries: ${data.runnerCount}`);
   if (Number.isInteger(data.amountPence)) lines.push(`Payment: £${(data.amountPence / 100).toFixed(2)}`);
-  if (data.secureUrl) lines.push(`Secure entry link: ${data.secureUrl}`);
+  const declarationAction = ["entry_confirmed_declaration_required", "declaration_reminder", "entry_transferred"].includes(template);
+  const managementAction = template === "management_link";
+  if (data.secureUrl) lines.push(`${declarationAction ? "Sign your race declaration" : managementAction ? "Manage your entry" : "Secure entry link"}: ${data.secureUrl}`);
   if (data.managementUrl) lines.push(`Manage your entry: ${data.managementUrl}`);
   if (data.raceInfoUrl) lines.push(`Race information: ${data.raceInfoUrl}`);
   const text = lines.join("\n\n");
-  const html = lines.map((line) => line.startsWith("Secure entry link: ")
+  const html = lines.map((line) => line.startsWith("Sign your race declaration: ")
+    ? `<p><a href="${escapeHtml(data.secureUrl)}">Sign your race declaration</a></p>`
+    : line.startsWith("Manage your entry: ") && data.secureUrl
+      ? `<p><a href="${escapeHtml(data.secureUrl)}">Manage your entry</a></p>`
+      : line.startsWith("Secure entry link: ")
     ? `<p><a href="${escapeHtml(data.secureUrl)}">Open your secure entry page</a></p>`
     : line.startsWith("Manage your entry: ")
       ? `<p><a href="${escapeHtml(data.managementUrl)}">Manage your entry</a></p>`

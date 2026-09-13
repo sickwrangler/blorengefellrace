@@ -176,7 +176,12 @@ export class OrderRegistrationService {
     this.repository = repository; this.stripeGateway = stripeGateway; this.emailAdapter = emailAdapter;
     this.publicBaseUrl = String(publicBaseUrl).replace(/\/$/, ""); this.maxRunnersPerOrder = Math.min(DEFAULT_MAX_RUNNERS_PER_ORDER, Number.isInteger(maxRunnersPerOrder) && maxRunnersPerOrder > 0 ? maxRunnersPerOrder : DEFAULT_MAX_RUNNERS_PER_ORDER); this.reminderPolicy = reminderPolicy; this.draftRetentionHours = Number.isInteger(draftRetentionHours) && draftRetentionHours > 0 ? draftRetentionHours : null;
   }
-  declarationUrl(token) { return `${this.publicBaseUrl}/registration/declaration.html#token=${encodeURIComponent(token)}`; }
+  declarationUrl(token, managementToken = null) {
+    const secure = new URLSearchParams();
+    if (managementToken) secure.set("manage", managementToken);
+    secure.set("token", token);
+    return `${this.publicBaseUrl}/registration/declaration.html#${secure}`;
+  }
   orderUrl(token) { return `${this.publicBaseUrl}/registration/#order=${encodeURIComponent(token)}`; }
   communicate(state, message, key, at) { return deliverRegistrationCommunication(state, this.emailAdapter, message, { idempotencyKey: key, at }); }
 
@@ -334,7 +339,7 @@ export class OrderRegistrationService {
             const runner = runnerFor(state, registration); const management = issueManagementToken(state, registration.id, { actorType: "system" }, at);
             if (declarationView(state, registration).status === "pending") {
               const declarationToken = issueDeclarationToken(state, registration.id, at);
-              await this.communicate(state, { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, secureUrl: this.declarationUrl(declarationToken), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed-pending`, at);
+              await this.communicate(state, { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, secureUrl: this.declarationUrl(declarationToken, management.token), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed-pending`, at);
               registration.declarationInitialSentAt = iso(at);
             } else await this.communicate(state, { registrationId: registration.id, template: "entry_confirmed", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed`, at);
           }

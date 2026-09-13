@@ -23,8 +23,15 @@ function runnerAgeOnRaceDay(dateOfBirth) {
 function guardianRequired() { const age = runnerAgeOnRaceDay(form.elements.dateOfBirth.value); return Number.isFinite(age) && age < 18; }
 
 const declarationContainer = document.querySelector("#declaration-content");
-declarationContainer.replaceChildren(...WFRA_SENIOR_ENTRY_DECLARATION.paragraphs.map((text) => { const paragraph = document.createElement("p"); paragraph.textContent = text; return paragraph; }));
+declarationContainer.replaceChildren(...WFRA_SENIOR_ENTRY_DECLARATION.displayParagraphs.map((text) => { const paragraph = document.createElement("p"); paragraph.textContent = text; return paragraph; }));
 document.querySelector("#safety-requirements-link").href = WFRA_SENIOR_ENTRY_DECLARATION.safetyRequirementsUrl;
+
+function declarationMode() {
+  const guardian = guardianRequired();
+  const name = guardian ? form.elements.guardianDeclarationName.value : form.elements.declarationName.value;
+  const identityConfirmed = guardian ? form.elements.completedByParentOrLegalGuardian.checked : form.elements.completedByNamedRunner.checked;
+  return name.trim() || identityConfirmed || form.elements.acceptDeclaration.checked ? "now" : "later";
+}
 
 function payload() {
   const data = Object.fromEntries(new FormData(form).entries());
@@ -34,6 +41,7 @@ function payload() {
   data.acceptDeclaration = form.elements.acceptDeclaration.checked;
   data.completedByNamedRunner = form.elements.completedByNamedRunner.checked;
   data.completedByParentOrLegalGuardian = form.elements.completedByParentOrLegalGuardian.checked;
+  data.declarationTiming = declarationMode();
   if (guardianRequired()) { data.declarationName = form.elements.guardianDeclarationName.value; data.declarationSignatoryRole = "Parent / Legal Guardian"; }
   else data.declarationSignatoryRole = "Competitor";
   return data;
@@ -98,7 +106,14 @@ function setFormFromRunner(item) {
   const runner = item.runner;
   const mapping = { firstName: runner.firstName, lastName: runner.lastName, email: runner.email, phone: runner.phone, addressLine1: runner.addressLine1, addressLine2: runner.addressLine2, city: runner.city, postcode: runner.postcode, genderCategory: runner.raceCategory, dateOfBirth: runner.dateOfBirth, club: runner.club, wfraMembershipNumber: runner.wfraMembershipNumber, emergencyName: runner.emergencyContactName, emergencyPhone: runner.emergencyContactPhone };
   for (const [name, value] of Object.entries(mapping)) if (form.elements[name]) form.elements[name].value = value ?? "";
-  form.elements.wfraMember.value = runner.wfraMember ? "yes" : "no"; form.elements.declarationTiming.value = item.declaration.status === "complete" ? "now" : "later"; updateMembershipFields(); updateDeclarationFields();
+  form.elements.wfraMember.value = runner.wfraMember ? "yes" : "no";
+  const complete = item.declaration.status === "complete"; const guardian = guardianRequired();
+  form.elements.declarationName.value = complete && !guardian ? `${runner.firstName} ${runner.lastName}` : "";
+  form.elements.acceptDeclaration.checked = complete;
+  form.elements.completedByNamedRunner.checked = complete && !guardian;
+  form.elements.guardianDeclarationName.value = "";
+  form.elements.completedByParentOrLegalGuardian.checked = false;
+  updateMembershipFields(); updateDeclarationFields();
 }
 
 function renderOrder() {
@@ -116,7 +131,7 @@ function renderOrder() {
 }
 
 function showApiError(result) {
-  const messages = { DUPLICATE_ORDER_EMAIL: "Each runner needs a unique email address so we can send their declaration and entry-management link directly.", DUPLICATE_ACTIVE_ENTRY: "An active entry may already exist for this email address.", ORDER_RUNNER_LIMIT: "An order can contain up to five runners.", GROUP_CAPACITY_UNAVAILABLE: `This whole group cannot currently fit. ${result.availablePlaces ?? 0} place(s) remain; remove runner(s) to continue.`, RUNNER_MUST_COMPLETE_DECLARATION: "The named runner must personally complete the declaration, or choose to complete it later." };
+  const messages = { DUPLICATE_ORDER_EMAIL: "Each runner needs a unique email address so we can send their declaration and entry-management link directly.", DUPLICATE_ACTIVE_ENTRY: "An active entry may already exist for this email address.", ORDER_RUNNER_LIMIT: "An order can contain up to five runners.", GROUP_CAPACITY_UNAVAILABLE: `This whole group cannot currently fit. ${result.availablePlaces ?? 0} place(s) remain; remove runner(s) to continue.`, RUNNER_MUST_COMPLETE_DECLARATION: "The named runner must personally complete the declaration. Leave the whole declaration blank if they will sign it later." };
   alert.textContent = result.message ?? messages[result.code] ?? runnerMessageForCode(result.code); alert.hidden = false; alert.focus(); if (result.errors) showErrors(result.errors);
 }
 
@@ -130,10 +145,10 @@ async function refreshStatus() {
 
 function updateMembershipFields() { const member = form.elements.wfraMember.value === "yes"; document.querySelector("#wfra-number-field").hidden = !member; form.elements.wfraMembershipNumber.required = member; }
 function updateDeclarationFields() {
-  const now = form.elements.declarationTiming.value === "now"; const guardian = guardianRequired();
-  document.querySelector("#declaration-fields").hidden = !now; document.querySelector("#adult-declaration-fields").hidden = guardian; document.querySelector("#guardian-declaration-fields").hidden = !guardian;
-  form.elements.declarationName.required = now && !guardian; form.elements.completedByNamedRunner.required = now && !guardian;
-  form.elements.guardianDeclarationName.required = now && guardian; form.elements.completedByParentOrLegalGuardian.required = now && guardian; form.elements.acceptDeclaration.required = now;
+  const guardian = guardianRequired();
+  document.querySelector("#declaration-fields").hidden = false; document.querySelector("#adult-declaration-fields").hidden = guardian; document.querySelector("#guardian-declaration-fields").hidden = !guardian;
+  form.elements.declarationName.required = false; form.elements.completedByNamedRunner.required = false;
+  form.elements.guardianDeclarationName.required = false; form.elements.completedByParentOrLegalGuardian.required = false; form.elements.acceptDeclaration.required = false;
 }
 
 async function beginOrRecover() {
@@ -150,7 +165,7 @@ document.querySelector("#details-continue")?.addEventListener("click", () => { i
 document.querySelector("#race-back")?.addEventListener("click", () => showStage(1));
 document.querySelector("#race-continue")?.addEventListener("click", () => { if (validateStage(2)) showStage(3); });
 document.querySelector("#review-back")?.addEventListener("click", () => showStage(2));
-form.elements.wfraMember.addEventListener("change", updateMembershipFields); form.elements.dateOfBirth.addEventListener("change", updateDeclarationFields); for (const choice of form.elements.declarationTiming) choice.addEventListener("change", updateDeclarationFields); updateMembershipFields(); updateDeclarationFields();
+form.elements.wfraMember.addEventListener("change", updateMembershipFields); form.elements.dateOfBirth.addEventListener("change", updateDeclarationFields); updateMembershipFields(); updateDeclarationFields();
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault(); if (submitting || !validateStage(2)) return; submitting = true; let result;
@@ -160,9 +175,9 @@ form.addEventListener("submit", async (event) => {
   currentOrder = result.order; document.querySelector("#submit-test").closest(".form-actions").hidden = true; renderOrder(); await refreshStatus();
 });
 
-document.querySelector("#add-another-runner")?.addEventListener("click", () => { const next = currentOrder.runnerCount + 1; editingRegistrationId = null; document.querySelector("#submit-test").textContent = "Add runner to order"; form.reset(); form.elements.email.value = `runner-${next}@example.com`; form.elements.firstName.value = `Runner ${next}`; form.elements.lastName.value = "Example"; form.elements.declarationName.value = `Runner ${next} Example`; updateMembershipFields(); updateDeclarationFields(); document.querySelector("#order-review").hidden = true; document.querySelector("#submit-test").closest(".form-actions").hidden = false; showStage(1); });
+document.querySelector("#add-another-runner")?.addEventListener("click", () => { const next = currentOrder.runnerCount + 1; editingRegistrationId = null; document.querySelector("#submit-test").textContent = "Add runner to order"; form.reset(); form.elements.email.value = `runner-${next}@example.com`; form.elements.firstName.value = `Runner ${next}`; form.elements.lastName.value = "Example"; updateMembershipFields(); updateDeclarationFields(); document.querySelector("#order-review").hidden = true; document.querySelector("#submit-test").closest(".form-actions").hidden = false; showStage(1); });
 document.querySelector("#continue-order-payment")?.addEventListener("click", async () => { document.querySelector("#payment-runner-count").textContent = currentOrder.runnerCount; document.querySelector("#payment-order-total").textContent = `£${(currentOrder.totalPence / 100).toFixed(2)}`; showStage(4); await renderPaymentAvailability(); });
 
-async function renderPaymentAvailability() { const integrations = await prototype.integrationStatus(); const button = document.querySelector("#continue-payment"); button.disabled = integrations.paymentsAvailable !== true; document.querySelector("#payment-availability").textContent = integrations.paymentsAvailable ? "You will pay for every runner in one Stripe test Checkout. Outstanding declarations do not prevent payment." : "Online payment is not available in this development environment."; }
+async function renderPaymentAvailability() { const integrations = await prototype.integrationStatus(); const button = document.querySelector("#continue-payment"); button.disabled = integrations.paymentsAvailable !== true; const count = currentOrder?.runnerCount ?? 0; document.querySelector("#payment-availability").textContent = integrations.paymentsAvailable ? `You are paying for ${count} ${count === 1 ? "entry" : "entries"}.` : "Online payment is not available in this development environment."; }
 document.querySelector("#continue-payment")?.addEventListener("click", async () => { const button = document.querySelector("#continue-payment"); button.disabled = true; const result = await prototype.checkoutOrder(); if (result.ok && result.checkoutUrl) return location.assign(result.checkoutUrl); showApiError(result); await renderPaymentAvailability(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete all synthetic test entries and start again?")) return; const result = await prototype.reset(); if (result.ok) location.reload(); else showApiError(result); });

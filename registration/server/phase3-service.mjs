@@ -13,6 +13,7 @@ const activeRegistration = (item) => item && !item.deletedAt && !["cancelled", "
 const runnerFor = (state, registration) => state.runners.find((item) => item.id === registration?.runnerId);
 const paymentFor = (state, registration) => state.payments.find((item) => item.registrationId === registration?.id || item.registrationIds?.includes(registration?.id));
 const refundFor = (state, registration) => [...state.refundRequests].reverse().find((item) => item.registrationId === registration?.id);
+const emergencyFor = (state, registration) => state.emergencyContacts?.find((item) => item.registrationId === registration?.id);
 
 function registrationForToken(state, token) {
   const stored = state.managementTokens.find((item) => item.tokenHash === hashToken(token) && !item.invalidatedAt);
@@ -25,6 +26,7 @@ function managementView(state, registration, at = new Date()) {
   const refund = refundFor(state, registration);
   const beforeCutoff = new Date(at) <= new Date(state.event.transferRefundCutoffUtc);
   const paymentState = runnerPaymentState(state, registration.id);
+  const emergency = emergencyFor(state, registration);
   const stateName = refund?.status === "requested" ? "refund_requested" : refund?.status === "approved" ? "refund_approved" : refund?.status === "rejected" ? "refund_rejected" : paymentState.state;
   const labels = { refund_requested: "Refund requested", refund_approved: "Refund approved", refund_rejected: "Refund request not approved", refunded: "Refund completed" };
   return {
@@ -37,9 +39,10 @@ function managementView(state, registration, at = new Date()) {
         dateOfBirth: runner.dateOfBirth, raceCategory: runner.raceCategory ?? runner.genderCategory,
         club: runner.club, wfraMember: runner.wfraMember === true
       },
+      emergencyContact: { name: emergency?.name ?? "", phone: emergency?.phone ?? "" },
       entryStatus: registration.entryStatus, placeStatus: registration.placeStatus,
       declaration: { status: registration.declarationStatus ?? "complete", completionMethod: registration.declarationCompletionMethod ?? "digital_during_entry", clearedToStart: (registration.declarationStatus ?? "complete") === "complete" && registration.placeStatus === "confirmed" },
-      payment: { state: stateName, label: labels[stateName] ?? paymentState.label, canContinue: ["created", "not_configured", "failed", "expired"].includes(payment?.status) },
+      payment: { state: stateName, label: labels[stateName] ?? paymentState.label, canContinue: ["created", "not_configured", "checkout_pending", "failed", "expired"].includes(payment?.status) },
       amendmentEligible: beforeCutoff && activeRegistration(registration),
       transferEligible: beforeCutoff && activeRegistration(registration),
       refundEligible: beforeCutoff && payment?.status === "paid" && !refund,
@@ -115,8 +118,17 @@ export class Phase3IntegrationService {
       if (!registration || !activeRegistration(registration)) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
       if (new Date(at) > new Date(state.event.transferRefundCutoffUtc)) return { ok: false, code: "AMENDMENT_CUTOFF_PASSED" };
       const runner = runnerFor(state, registration); const changedFields = [];
+      const emergencyName = changes.emergencyContactName === undefined ? undefined : String(changes.emergencyContactName).trim();
+      const emergencyPhone = changes.emergencyContactPhone === undefined ? undefined : String(changes.emergencyContactPhone).trim();
+      const errors = {};
+      if (emergencyName !== undefined && !emergencyName) errors.emergencyContactName = "Enter an emergency contact name.";
+      if (emergencyPhone !== undefined && !emergencyPhone) errors.emergencyContactPhone = "Enter an emergency contact phone number.";
+      if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
       const allowed = ["phone", "addressLine1", "addressLine2", "city", "postcode", "raceCategory", "genderCategory", "club", "wfraMember", "wfraMembershipNumber"];
       for (const field of allowed) if (changes[field] !== undefined && changes[field] !== runner[field]) { runner[field] = typeof changes[field] === "string" ? changes[field].trim() : changes[field]; changedFields.push(field); }
+      const emergency = emergencyFor(state, registration);
+      if (emergency && emergencyName !== undefined && emergency.name !== emergencyName) { emergency.name = emergencyName; changedFields.push("emergencyContactName"); }
+      if (emergency && emergencyPhone !== undefined && emergency.phone !== emergencyPhone) { emergency.phone = emergencyPhone; changedFields.push("emergencyContactPhone"); }
       if (runner.wfraMember !== true) runner.wfraMembershipNumber = null;
       registration.updatedAt = iso(at);
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: "runner", actorId: null, action: "runner_details_amended", subjectId: registration.id, before: null, after: { fields: changedFields }, environment: state.environment });
@@ -152,7 +164,7 @@ export class Phase3IntegrationService {
       const action = actor.actorType === "organiser" ? "organiser_entry_transferred" : "entry_transferred";
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType, actorId: actor.id ?? null, action, subjectId: registration.id, before: { runnerId: previous.id }, after: { runnerId: runner.id, declarationStatus: "pending", cutoffOverride: Boolean(afterCutoff && allowCutoffOverride) }, environment: state.environment });
       await this.communicate(state, { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} }, `registration:${registration.id}:transfer-old:${registration.updatedAt}`, at);
-      await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, managementUrl: this.managementUrl(issued.token), secureUrl: this.orders.declarationUrl(declarationToken), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
+      await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, managementUrl: this.managementUrl(issued.token), secureUrl: this.orders.declarationUrl(declarationToken, issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
       return managementView(state, registration, at);
     });
   }
