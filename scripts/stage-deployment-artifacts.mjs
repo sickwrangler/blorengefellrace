@@ -284,7 +284,7 @@ function productionBrowserTransform(file, source) {
   if (file === "registration/runner.mjs") {
     value = value
       .replace(/\n?document\.querySelector\("#reset-test"\)\?\.addEventListener\([\s\S]*?\);\n/, "\n")
-      .replace(/form\.reset\(\); form\.elements\.email\.value = `runner-\$\{next\}@example\.com`; form\.elements\.firstName\.value = `Runner \$\{next\}`; form\.elements\.lastName\.value = "Example"; form\.elements\.declarationName\.value = `Runner \$\{next\} Example`;/, "form.reset();")
+      .replace(/form\.reset\(\); form\.elements\.email\.value = `runner-\$\{next\}@example\.com`; form\.elements\.firstName\.value = `Runner \$\{next\}`; form\.elements\.lastName\.value = "Example";/, "form.reset();")
       .replace("You will pay for every runner in one Stripe test Checkout.", "You will pay for every runner in one Stripe Checkout.")
       .replace("Online payment is not available in this development environment.", "Online payment is unavailable while registration is closed.");
   }

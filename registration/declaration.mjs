@@ -1,21 +1,30 @@
 import { prototype } from "./prototype-client.mjs";
 import { WFRA_SENIOR_ENTRY_DECLARATION } from "./declarations.mjs";
 
-const token = new URLSearchParams(location.hash.replace(/^#/, "")).get("token");
+const secureParameters = new URLSearchParams(location.hash.replace(/^#/, ""));
+const token = secureParameters.get("token");
+if (secureParameters.get("manage")) prototype.rememberManagementToken(secureParameters.get("manage"));
+if (location.hash) history.replaceState(null, "", `${location.pathname}${location.search}`);
 const loading = document.querySelector("#declaration-loading");
 const unavailable = document.querySelector("#declaration-unavailable");
 const form = document.querySelector("#remote-declaration-form");
 const complete = document.querySelector("#declaration-complete");
 const result = token ? await prototype.declarationEntry(token) : { ok: false };
 loading.hidden = true;
+function returnToManagement() {
+  complete.hidden = false;
+  complete.querySelector("h2").focus();
+  window.setTimeout(() => location.replace("manage.html?declaration=complete"), 900);
+}
+
 if (!result.ok) unavailable.hidden = false;
-else if (result.registration.declaration.status === "complete") complete.hidden = false;
+else if (result.registration.declaration.status === "complete") returnToManagement();
 else {
   const runner = result.registration.runner; form.hidden = false;
   const guardian = runner.requiresGuardianDeclaration === true;
   document.querySelector("#declaration-runner").textContent = `${runner.firstName} ${runner.lastName}`;
   document.querySelector("#declaration-entry").replaceChildren(...[["Reference", result.registration.reference], ["Category", runner.raceCategory], ["Club", runner.club || "Unattached"]].flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
-  document.querySelector("#remote-declaration-content").replaceChildren(...WFRA_SENIOR_ENTRY_DECLARATION.paragraphs.map((text) => { const paragraph = document.createElement("p"); paragraph.textContent = text; return paragraph; }));
+  document.querySelector("#remote-declaration-content").replaceChildren(...WFRA_SENIOR_ENTRY_DECLARATION.displayParagraphs.map((text) => { const paragraph = document.createElement("p"); paragraph.textContent = text; return paragraph; }));
   if (guardian) {
     document.querySelector("#remote-declaration-instruction strong").textContent = "This runner is aged 16 or 17 on race day. Their parent or legal guardian must complete this declaration.";
     document.querySelector("#remote-declaration-name-label").firstChild.textContent = "Parent or legal guardian full name ";
@@ -30,7 +39,7 @@ form.addEventListener("submit", async (event) => {
   if (!form.elements.accepted.checked || !form.elements.typedFullName.value.trim()) { alert.textContent = guardian ? "A parent or legal guardian must type their full name and accept the declaration." : "The named runner must type their name and accept the declaration."; alert.hidden = false; alert.focus(); return; }
   const response = await prototype.completeDeclaration(token, { accepted: true, typedFullName: form.elements.typedFullName.value, signatoryRole: guardian ? "Parent / Legal Guardian" : "Competitor", completedByNamedRunner: !guardian, completedByParentOrLegalGuardian: guardian });
   if (!response.ok) { alert.textContent = response.code === "DECLARATION_NAME_MISMATCH" ? "The typed name must match the named runner." : "The declaration could not be completed. Ask the organiser to resend the secure link."; alert.hidden = false; alert.focus(); return; }
-  form.hidden = true; complete.hidden = false; complete.querySelector("h2").focus();
+  form.hidden = true; returnToManagement();
 });
 
 document.querySelector("#declaration-recovery-form").addEventListener("submit", async (event) => {
