@@ -29,6 +29,20 @@ for (const implementationDetail of ["no elevation", "elevation profile", "calcul
 for (const hook of ["fitBounds", "tileerror", "GPX could not", "route description and GPX download"]) {
   if (!mapScript.includes(hook)) errors.push(`route-map.js is missing expected behaviour: ${hook}`);
 }
+for (const requirement of [
+  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  "OpenStreetMap contributors",
+  'referrerPolicy: "strict-origin-when-cross-origin"',
+  "detectRetina: false",
+  "updateWhenIdle: true",
+  "route-direction-icon",
+  'bindTooltip("Start / finish"',
+]) {
+  if (!mapScript.includes(requirement)) errors.push(`route-map.js is missing map policy or direction behaviour: ${requirement}`);
+}
+if (!routePage.includes('<meta name="referrer" content="strict-origin-when-cross-origin">')) errors.push("route.html is missing the OpenStreetMap-compatible referrer policy");
+if (!routePage.includes("https://www.openstreetmap.org/fixthemap")) errors.push("route.html is missing the background-map issue link");
+if (/rel=["'](?:preload|prefetch)["'][^>]+tile\.openstreetmap\.org/i.test(routePage)) errors.push("route.html must not prefetch or preload OpenStreetMap tiles");
 
 if (errors.length) {
   errors.forEach((error) => console.error(`ERROR: ${error}`));

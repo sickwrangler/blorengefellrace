@@ -121,7 +121,9 @@ function showApiError(result) {
 }
 
 async function refreshStatus() {
-  const status = await prototype.status(); document.querySelector("#status-places").textContent = `${status.accepted} / ${status.capacity}`; document.querySelector("#status-waiting").textContent = status.waiting; const standard = (status.pricing?.standardPricePence ?? 600) / 100; const member = (status.pricing?.wfraMemberPricePence ?? 400) / 100; document.querySelector("#status-price").textContent = `£${standard.toFixed(0)} standard · £${member.toFixed(0)} WFRA`;
+  const status = await prototype.status();
+  if (!Number.isFinite(status.accepted) || !Number.isFinite(status.capacity)) return { environment: "production", operationalState: "CLOSED", unavailable: true };
+  document.querySelector("#status-places").textContent = `${status.accepted} / ${status.capacity}`; document.querySelector("#status-waiting").textContent = status.waiting; const standard = (status.pricing?.standardPricePence ?? 600) / 100; const member = (status.pricing?.wfraMemberPricePence ?? 400) / 100; document.querySelector("#status-price").textContent = `£${standard.toFixed(0)} standard · £${member.toFixed(0)} WFRA`;
   const recovery = document.querySelector("#runner-recovery"); recovery.hidden = !status.recovery; recovery.textContent = status.recovery?.message || ""; document.querySelector("#start-test").disabled = Boolean(status.recovery);
   return status;
 }
@@ -141,7 +143,7 @@ async function beginOrRecover() {
 
 if (!canTest) document.querySelector("#closed-panel").hidden = false;
 else if (prototype.hasPrivateInvitation && !(await prototype.inspectPrivateAccess("registration")).ok) document.querySelector("#invalid-link-panel").hidden = false;
-else { const status = await refreshStatus(); if (status.environment === "production" && !["OPEN", "PRIVATE_LIVE"].includes(status.operationalState)) document.querySelector("#closed-panel").hidden = false; else { document.querySelector("#test-experience").hidden = false; await beginOrRecover(); } }
+else { const status = await refreshStatus(); if (status.unavailable || (status.environment === "production" && !["OPEN", "PRIVATE_LIVE"].includes(status.operationalState))) document.querySelector("#closed-panel").hidden = false; else { document.querySelector("#test-experience").hidden = false; await beginOrRecover(); } }
 
 document.querySelector("#start-test")?.addEventListener("click", () => { const purchaser = document.querySelector("#purchaser-email"); if (!purchaser.checkValidity()) return purchaser.reportValidity(); document.querySelector("#test-landing").hidden = true; document.querySelector("#runner-flow").hidden = false; showStage(1); });
 document.querySelector("#details-continue")?.addEventListener("click", () => { if (validateStage(1)) showStage(2); });

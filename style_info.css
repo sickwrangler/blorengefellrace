@@ -108,6 +108,26 @@
   margin-bottom: 0;
 }
 
+.community-feature {
+  display: grid;
+  gap: var(--space-5);
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: 2px solid var(--colour-forest);
+}
+
+.community-feature img {
+  width: 100%;
+  max-height: 30rem;
+  object-fit: cover;
+  background: var(--colour-paper-light);
+}
+
+.community-feature h3 { margin-top: 0; }
+.community-feature p:last-child { margin-bottom: 0; }
+
 @media (min-width: 48rem) {
   .travel-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .community-feature { grid-template-columns: minmax(0,.9fr) minmax(0,1.1fr); align-items: center; }
+  .community-feature--reverse img { order: 2; }
 }

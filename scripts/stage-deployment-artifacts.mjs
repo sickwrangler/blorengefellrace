@@ -22,6 +22,8 @@ export const PRODUCTION_FILES = Object.freeze([
   "images/blorenge_contour_lines.png",
   "images/blorenge_fellrace_logo.svg",
   "images/blorenge_fellrace_logo_white.svg",
+  "images/kitswap.png",
+  "images/litterpickwalk.png",
   "index.html",
   "info.html",
   "photo-manager.js",
@@ -234,10 +236,10 @@ function productionBrowserTransform(file, source) {
     .replaceAll('from "./prototype-client.mjs"', 'from "./production-client.mjs"')
     .replaceAll('from "./registration-core.mjs"', 'from "./production-validation.mjs"')
     .replaceAll('from "./preview-repository.mjs"', 'from "./production-query.mjs"')
-    .replaceAll("Development · Closed", "Production · Closed")
-    .replaceAll("Development · Synthetic test information only", "Production registration")
-    .replaceAll("Development test", "Production registration")
-    .replaceAll("Development · Checking integrations", "Production · Checking integrations")
+    .replaceAll("Development · Closed", "Registration")
+    .replaceAll("Development · Synthetic test information only", "Registration")
+    .replaceAll("Development test", "Registration")
+    .replaceAll("Development · Checking integrations", "Payment status")
     .replaceAll("Stripe sandbox", "Stripe")
     .replaceAll("controlled development channel", "transactional email service")
     .replaceAll("Stripe sandbox refund", "Stripe refund")
@@ -251,7 +253,7 @@ function productionBrowserTransform(file, source) {
     .replaceAll("synthetic-registration-export.csv", "registration-export.csv");
   if (file === "registration/index.html") {
     value = value
-      .replace("This test cannot accept or store an entry on the production website.", "Registration is currently closed. No entry or payment can be created.")
+      .replace("Entries are not open yet. Please check back here for opening details.", "Entries are not open yet. Please check back here for opening details.")
       .replace("In development, this journey accepts synthetic information only. It creates no real race entry, takes no money from a real payment method, and keeps payment sandboxed or disabled. Any enabled test email is redirected to an approved safe recipient.", "Enter up to five runners and pay for the order securely when registration is available.")
       .replace("Used for the group payment summary; synthetic address only", "Used for the group payment summary")
       .replace("Start a test registration", "Start registration")
@@ -300,7 +302,7 @@ function productionBrowserTransform(file, source) {
       .replaceAll("Controlled email", "Transactional email")
       .replaceAll("No messages have been captured for this entry.", "No communications are recorded for this entry.");
   }
-  if (file === "registration/payment-return.mjs") value = value.replaceAll("Development · Stripe", "Production · Stripe").replaceAll("Development · Payments unavailable", "Production · Payments unavailable");
+  if (file === "registration/payment-return.mjs") value = value.replaceAll("Development · Stripe", "Payment status").replaceAll("Development · Payments unavailable", "Payment status");
   if (file === "registration/payment-state.mjs") value = value.replaceAll("Online payment is not available yet in this development environment.", "Online payment is currently unavailable.");
   return value;
 }

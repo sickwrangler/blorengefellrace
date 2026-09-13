@@ -240,7 +240,8 @@ hr { height: 1px; margin: var(--space-7) 0; border: 0; background: var(--colour-
 @media (max-width: 35rem) {
   .race-facts { grid-template-columns: 1fr; }
   .detail-list div { grid-template-columns: 1fr; gap: 0; }
-  .content-list li { display: block; }
+  .content-list li { display: grid; gap: .3rem; }
+  .content-list li span { display: block; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
