@@ -23,6 +23,11 @@
   const tiles = window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+    detectRetina: false,
+    keepBuffer: 1,
+    noWrap: true,
+    referrerPolicy: "strict-origin-when-cross-origin",
+    updateWhenIdle: true,
   });
   let tileFailures = 0;
   tiles.on("tileerror", () => {
@@ -55,13 +60,34 @@
         weight: 5,
       }).addTo(map);
       route.bindTooltip("Confirmed 2026 race route");
+
+      const bearing = ([lat1, lon1], [lat2, lon2]) => {
+        const radians = (degrees) => degrees * Math.PI / 180;
+        const y = Math.sin(radians(lon2 - lon1)) * Math.cos(radians(lat2));
+        const x = Math.cos(radians(lat1)) * Math.sin(radians(lat2))
+          - Math.sin(radians(lat1)) * Math.cos(radians(lat2)) * Math.cos(radians(lon2 - lon1));
+        return Math.atan2(y, x) * 180 / Math.PI;
+      };
+      [0.14, 0.3, 0.46, 0.62, 0.78, 0.9].forEach((fraction) => {
+        const index = Math.min(points.length - 2, Math.max(1, Math.round((points.length - 1) * fraction)));
+        const angle = bearing(points[index - 1], points[index + 1]);
+        const icon = window.L.divIcon({
+          className: "route-direction-icon",
+          html: `<span aria-hidden="true" style="transform:rotate(${angle - 90}deg)">→</span>`,
+          iconAnchor: [12, 12],
+          iconSize: [24, 24],
+        });
+        window.L.marker(points[index], { icon, interactive: false, keyboard: false }).addTo(map);
+      });
       window.L.circleMarker(points[0], {
         color: "#173126",
         fillColor: "#fffdf8",
         fillOpacity: 1,
         radius: 7,
         weight: 3,
-      }).addTo(map).bindPopup("Start and finish: bottom of Church Lane, Llanfoist");
+      }).addTo(map)
+        .bindPopup("Start and finish: bottom of Church Lane, Llanfoist")
+        .bindTooltip("Start / finish", { direction: "top", permanent: true, offset: [0, -8] });
       map.fitBounds(route.getBounds(), { padding: [24, 24] });
       if (tileFailures === 0) showStatus("Interactive route map loaded. Use the map controls to pan and zoom.");
     })

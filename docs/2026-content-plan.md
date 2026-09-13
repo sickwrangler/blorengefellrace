@@ -14,7 +14,7 @@ organiser or stakeholder contact details.
 - Distance: 5.7 km
 - Ascent: 485 m
 - Entry fee: £6
-- Entry limit: 110 runners
+- Entry limit: 120 runners
 - Minimum age: 16
 - No entries on the day
 - Parking is available but limited
