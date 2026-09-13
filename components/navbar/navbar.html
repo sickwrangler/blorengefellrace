@@ -24,6 +24,8 @@
       <li><a href="/enter.html" target="_top">Enter</a></li>
       <li><a href="/result.html" target="_top">Results</a></li>
       <li><a href="/route.html" target="_top">Route</a></li>
+      <li><a href="/recce.html" target="_top">Recce</a></li>
+      <li><a href="/kit-swap.html" target="_top">Kit Swap</a></li>
       <li><a href="/info.html" target="_top">Info</a></li>
     </ul>
   </nav>
@@ -37,7 +39,7 @@
       const expanded = toggle.getAttribute('aria-expanded') === 'true';
       window.parent.postMessage({
         type: 'blorenge-nav-height',
-        height: mobile.matches && expanded ? 190 : (mobile.matches ? 72 : 84)
+        height: mobile.matches && expanded ? 250 : (mobile.matches ? 72 : 84)
       }, window.location.origin);
     }
 

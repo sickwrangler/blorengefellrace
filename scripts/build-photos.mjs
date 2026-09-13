@@ -34,8 +34,13 @@ function dimensions(file) {
 const manifest = readManifest();
 const initialErrors = validateManifest(manifest, { requireOutputs: false });
 if (initialErrors.length) throw new Error(initialErrors.join("\n"));
+const requestedIds = new Set(process.argv.slice(2));
+const selectedPhotos = requestedIds.size ? manifest.photos.filter((photo) => requestedIds.has(photo.id)) : manifest.photos;
+for (const id of requestedIds) {
+  if (!manifest.photos.some((photo) => photo.id === id)) throw new Error(`Unknown photo ID: ${id}`);
+}
 
-for (const photo of manifest.photos) {
+for (const photo of selectedPhotos) {
   const source = path.join(root, photo.sourceFilename);
   const output = path.join(root, photo.optimizedFilename);
   fs.mkdirSync(path.dirname(output), { recursive: true });

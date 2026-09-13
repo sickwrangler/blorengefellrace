@@ -92,7 +92,8 @@ test("production artifacts are exact and physically exclude browser test control
   try {
     const artifact = stageRegistrationProduction({ outputRoot: path.join(root, "site") }); const scheduler = stageProductionScheduler({ targetRoot: path.join(root, "scheduler") });
     assert.equal(artifact.appFiles.includes("registration/prototype-client.mjs"), false); assert.equal(artifact.appFiles.includes("registration/preview-repository.mjs"), false); assert.equal(artifact.apiFiles.includes("src/functions/registration.mjs"), false); assert.ok(scheduler.includes("src/functions/registration-production-scheduler.mjs"));
-    for (const image of ["images/kitswap.png", "images/litterpickwalk.png"]) assert.ok(artifact.appFiles.includes(image));
+    for (const file of ["recce.html", "kit-swap.html", "images/generated/photos/kit-swap-2024.jpg"]) assert.ok(artifact.appFiles.includes(file));
+    for (const illustration of ["images/kitswap.png", "images/litterpickwalk.png"]) assert.equal(artifact.appFiles.includes(illustration), false);
     const runnerPage = fs.readFileSync(path.join(root, "site/app/registration/index.html"), "utf8");
     for (const internalPhrase of ["Production ·", "persistent development API", "No entry or payment can be created"]) assert.equal(runnerPage.includes(internalPhrase), false);
     assert.ok(runnerPage.includes("Entries are not open yet. Please check back here for opening details."));

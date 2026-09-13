@@ -7,6 +7,8 @@ const checks = [
   ["", "text/html"],
   ["index.html", "text/html"],
   ["info.html", "text/html"],
+  ["recce.html", "text/html"],
+  ["kit-swap.html", "text/html"],
   ["route.html", "text/html"],
   ["enter.html", "text/html"],
   ["result.html", "text/html"],

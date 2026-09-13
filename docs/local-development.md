@@ -27,6 +27,7 @@ node --test tests/registration.test.mjs
 node scripts/validate-route.mjs
 node scripts/validate-photos.mjs
 node scripts/inspect-photo-metadata.mjs
+node scripts/generate-image-catalogue.mjs
 node scripts/smoke-site.mjs
 ```
 
@@ -39,15 +40,20 @@ configuration. It uses only the Node.js standard library.
 The route validator checks the confirmed coordinate fingerprint, start/finish,
 metadata boundary, official published figures and interactive-map failure
 states. The photo validator checks the manifest, source and generated files,
-page assignments, permissions metadata, collisions and stripped display
-metadata. To regenerate all browser-ready photographs without changing source
-files, run:
+page assignments, roles, focal points, permissions metadata, collisions,
+public file size and stripped display metadata. It also prints zero-use,
+single-use and reused-image assignments. To regenerate one browser-ready
+photograph without changing its source file, run:
 
 ```sh
-node scripts/build-photos.mjs
+node scripts/build-photos.mjs <image-id>
+node scripts/generate-image-catalogue.mjs
 ```
 
-See `docs/photo-management.md` for the organiser workflow and privacy boundary.
+Omit the image ID only when every derivative genuinely needs rebuilding. The
+generated visual inventory is `docs/internal/image-catalogue.html` and remains
+outside production. See `docs/photo-management.md` for the organiser workflow
+and privacy boundary.
 
 To validate the normalized public 2025 result data against its authoritative
 workbook, keep the workbook outside the repository and run:
@@ -61,7 +67,7 @@ private-data boundary.
 
 The automated checks complement manual browser review, which should cover:
 
-- home, information, route, entry, results, and privacy pages;
+- home, information, route, Recce, Kit Swap, entry, results, and privacy pages;
 - navbar and footer links;
 - images and case-sensitive paths;
 - approximately 320, 375, 430, 768 and 1440 pixel widths, checking for horizontal overflow;

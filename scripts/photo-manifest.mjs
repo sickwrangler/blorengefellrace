@@ -13,14 +13,16 @@ export function validateManifest(manifest, { requireOutputs = true } = {}) {
   const ids = new Set();
   const outputs = new Set();
   const requiredStrings = [
-    "id", "sourceFilename", "optimizedFilename", "page", "section", "role",
-    "alt", "credit", "objectPosition", "aspectRatioRole", "provenanceNote", "permissionStatus",
+    "id", "sourceFilename", "optimizedFilename", "section", "role",
+    "alt", "credit", "focalPoint", "aspectRatioRole", "provenanceNote", "permissionStatus",
   ];
   const permissionStatuses = new Set(["approved", "existing-public-use", "review-required", "do-not-publish"]);
 
-  if (manifest.version !== 1 || !Array.isArray(manifest.photos)) {
-    return ["data/photos/manifest.json: expected version 1 and a photos array"];
+  if (manifest.version !== 2 || !Array.isArray(manifest.photos) || !manifest.pages || !manifest.roles) {
+    return ["data/photos/manifest.json: expected version 2 with pages, roles and a photos array"];
   }
+  const knownPages = new Set(Object.keys(manifest.pages));
+  const knownRoles = new Set(Object.keys(manifest.roles));
 
   for (const [index, photo] of manifest.photos.entries()) {
     const label = photo.id || `entry ${index + 1}`;
@@ -33,11 +35,18 @@ export function validateManifest(manifest, { requireOutputs = true } = {}) {
     outputs.add(photo.optimizedFilename);
     if (!Number.isInteger(photo.displayOrder)) errors.push(`${label}: displayOrder must be an integer`);
     if (typeof photo.active !== "boolean") errors.push(`${label}: active must be true or false`);
+    if (!Array.isArray(photo.usedOn) || !photo.usedOn.length || photo.usedOn.some((page) => typeof page !== "string" || !knownPages.has(page))) {
+      errors.push(`${label}: usedOn must contain known page IDs`);
+    } else if (new Set(photo.usedOn).size !== photo.usedOn.length) {
+      errors.push(`${label}: usedOn contains duplicate page IDs`);
+    }
+    if (!knownRoles.has(photo.role)) errors.push(`${label}: unsupported image role`);
     if (photo.year !== null && (!Number.isInteger(photo.year) || photo.year < 1900 || photo.year > 2100)) errors.push(`${label}: year must be null or a four-digit year`);
     if (photo.link !== null && typeof photo.link !== "string") errors.push(`${label}: link must be null or a string`);
     if (!permissionStatuses.has(photo.permissionStatus)) errors.push(`${label}: unsupported permissionStatus`);
     if (photo.active && photo.permissionStatus === "do-not-publish") errors.push(`${label}: do-not-publish photo cannot be active`);
-    if (!/^\d{1,3}% \d{1,3}%$/.test(photo.objectPosition)) errors.push(`${label}: objectPosition must look like "50% 50%"`);
+    const focal = typeof photo.focalPoint === "string" ? photo.focalPoint.match(/^(\d{1,3})% (\d{1,3})%$/) : null;
+    if (!focal || Number(focal[1]) > 100 || Number(focal[2]) > 100) errors.push(`${label}: focalPoint must contain two percentages from 0% to 100%`);
     if (!fs.existsSync(path.join(root, photo.sourceFilename))) errors.push(`${label}: source file does not exist`);
     if (!photo.optimizedFilename.startsWith(`${manifest.generatedDirectory}/`)) errors.push(`${label}: optimized file must be inside ${manifest.generatedDirectory}`);
     if (requireOutputs && !fs.existsSync(path.join(root, photo.optimizedFilename))) errors.push(`${label}: optimized file does not exist; run node scripts/build-photos.mjs`);
@@ -64,6 +73,27 @@ export function forbiddenJpegMetadata(buffer) {
     offset += 2 + length;
   }
   return [...new Set(findings)];
+}
+
+export function jpegDimensions(buffer) {
+  if (buffer[0] !== 0xff || buffer[1] !== 0xd8) throw new Error("Expected a JPEG image");
+  const startOfFrame = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+  for (let offset = 2; offset + 9 < buffer.length;) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = buffer[offset + 1];
+    if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset += 2;
+      continue;
+    }
+    const length = buffer.readUInt16BE(offset + 2);
+    if (length < 2 || offset + 2 + length > buffer.length) break;
+    if (startOfFrame.has(marker)) return { width: buffer.readUInt16BE(offset + 7), height: buffer.readUInt16BE(offset + 5) };
+    offset += 2 + length;
+  }
+  throw new Error("JPEG dimensions were not found");
 }
 
 function exifHasGps(payload) {

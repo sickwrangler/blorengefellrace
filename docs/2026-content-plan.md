@@ -21,6 +21,8 @@ organiser or stakeholder contact details.
 - Walking, cycling, public transport and lift-sharing are encouraged
 - Established race route, interactive map and public GPX
 - Full WFRA kit list, with the on-the-day carry decision made by the Race Organiser
+- Race-day kit swap for clean, usable running and fell kit
+- Route recce and litter pick at 10:00 on Saturday 21 November 2026
 
 ## Outstanding confirmations
 
@@ -41,8 +43,6 @@ organiser or stakeholder contact details.
 - Rules concerning dogs, headphones and poles
 - Photography and privacy arrangements
 - Emergency arrangements appropriate for public communication
-- Whether a 2026 kit swap will take place
-- Whether a 2026 course recce or litter pick will take place
 - Precise public location details for race HQ beyond its confirmed name
 
 ## Publication boundaries
@@ -59,7 +59,7 @@ organiser or stakeholder contact details.
   public-transport information rather than publishing fragile timetable detail.
 - The organiser will publish an updated local-conditions and wildfire notice
   shortly before the race.
-- Unconfirmed recce information and assessment links remain withheld.
+- Dedicated Recce and Kit Swap pages publish the confirmed community-event details; final recce meeting details remain to be shared.
 
 ## Historical material retained
 

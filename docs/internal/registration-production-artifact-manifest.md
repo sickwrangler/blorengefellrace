@@ -1,12 +1,12 @@
 # Phase 3 production artifact manifest
 
-Status: Phase 3C.1A review manifest. It has been constructed and simulated but not deployed.
+Status: deployed in CLOSED production, with the public-content allowlist updated through the normal reviewed deployment process.
 
-The Static Web Apps artifact contains 84 files: 66 web files and 18 managed-API files. The separate production scheduler package contains 17 files. An unexpected file makes staging fail.
+The Static Web Apps artifact contains 87 files: 69 web files and 18 managed-API files. The separate production scheduler package contains 17 files. An unexpected file makes staging fail.
 
-## Existing public website — 45 web files
+## Existing public website — 48 web files
 
-The existing production boundary is preserved as these 28 fixed files, 16 active manifest-approved generated photos and generated route configuration:
+The existing production boundary is preserved as these 30 fixed files, 17 active manifest-approved generated photos and generated route configuration:
 
 ```text
 404.html
@@ -33,6 +33,7 @@ images/generated/photos/home-wildfire-smoke.jpg
 images/generated/photos/info-finishers.jpg
 images/generated/photos/info-third-jonathan.jpg
 images/generated/photos/info-winner-bethan.jpg
+images/generated/photos/kit-swap-2024.jpg
 images/generated/photos/route-ascent.jpg
 images/generated/photos/route-finish.jpg
 images/generated/photos/route-start.jpg
@@ -42,8 +43,10 @@ images/generated/photos/route-trig.jpg
 images/generated/photos/route-tunnel.jpg
 index.html
 info.html
+kit-swap.html
 photo-manager.js
 privacy.html
+recce.html
 result.html
 route-map.js
 route.html
