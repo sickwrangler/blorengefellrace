@@ -38,7 +38,7 @@ test("production staging contains only allowlisted public website files", () => 
   const outputRoot = temporaryDirectory("production-artifact");
   try {
     const files = stageProduction({ outputRoot });
-    for (const required of ["index.html", "recce.html", "kit-swap.html", "images/generated/photos/kit-swap-2024.jpg", "404.html", "data/public/results/2025.json", "downloads/blorenge-fell-race-2026.gpx", "staticwebapp.config.json"]) {
+    for (const required of ["index.html", "recce.html", "kit-swap.html", "images/generated/photos/kit-swap-2024.jpg", "images/generated/photos/route-muddy-descent.jpg", "404.html", "data/public/results/2025.json", "downloads/blorenge-fell-race-2026.gpx", "staticwebapp.config.json"]) {
       assert.ok(files.includes(required), `missing ${required}`);
     }
     for (const forbidden of ["registration/", "api/", "docs/", "infrastructure/", "scripts/", "tests/", ".github/"]) {

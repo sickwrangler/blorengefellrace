@@ -21,12 +21,10 @@
     </h1>
     <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-links">Menu</button>
     <ul class="nav-links" id="primary-links">
-      <li><a href="/enter.html" target="_top">Enter</a></li>
       <li><a href="/result.html" target="_top">Results</a></li>
       <li><a href="/route.html" target="_top">Route</a></li>
-      <li><a href="/recce.html" target="_top">Recce</a></li>
-      <li><a href="/kit-swap.html" target="_top">Kit Swap</a></li>
       <li><a href="/info.html" target="_top">Info</a></li>
+      <li><a class="nav-enter" href="/enter.html" target="_top">Enter</a></li>
     </ul>
   </nav>
   <script>
@@ -39,13 +37,17 @@
       const expanded = toggle.getAttribute('aria-expanded') === 'true';
       window.parent.postMessage({
         type: 'blorenge-nav-height',
-        height: mobile.matches && expanded ? 250 : (mobile.matches ? 72 : 84)
+        height: mobile.matches && expanded ? 190 : (mobile.matches ? 72 : 84)
       }, window.location.origin);
     }
 
     const currentPath = window.parent.location.pathname.replace(/\/$/, '/index.html');
+    const infoAreaPaths = ['/info.html', '/recce.html', '/kit-swap.html'];
     links.forEach((link) => {
-      if (link.getAttribute('href') === currentPath) link.setAttribute('aria-current', 'page');
+      const href = link.getAttribute('href');
+      if (href === currentPath || (href === '/info.html' && infoAreaPaths.includes(currentPath))) {
+        link.setAttribute('aria-current', 'page');
+      }
     });
 
     toggle.addEventListener('click', () => {

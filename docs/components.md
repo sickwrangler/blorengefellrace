@@ -16,7 +16,7 @@
 
 ## Shared components
 
-`components/navbar/navbar.html` contains the logo, primary links—including dedicated Recce and Kit Swap destinations—and compact two-column mobile menu. Every top-level page embeds it in an iframe with class `nav-iframe`. The component posts its open or closed height to the parent page; `script.js` safely applies that height to the iframe.
+`components/navbar/navbar.html` contains the logo and the four primary destinations: Results, Route, Info and the aligned Enter action. Recce and Kit Swap remain dedicated pages but sit in the Information sub-navigation shared by those three pages. The compact mobile menu uses two columns. Every top-level page embeds the primary navigation in an iframe with class `nav-iframe`; the component posts its open or closed height to the parent page and `script.js` safely applies that height.
 
 `components/footer/footer.html` contains the contact address, privacy link and WFRA banner. Every top-level page embeds it in an iframe with class `footer-iframe`.
 

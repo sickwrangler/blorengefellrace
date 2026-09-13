@@ -15,14 +15,20 @@ html, body { margin:0; color:var(--paper); background:var(--forest); font-family
   border:1px solid rgba(245,241,232,.6); border-radius:.2rem;
   color:var(--paper); background:transparent; font:700 .9rem/1 "Inter",sans-serif;
 }
-.nav-links { display:flex; justify-content:flex-end; gap:.25rem; padding:0; margin:0; list-style:none; }
-.nav-links li { display:flex; align-items:stretch; }
+.nav-links { display:flex; align-items:center; justify-content:flex-end; gap:.25rem; padding:0; margin:0; list-style:none; }
+.nav-links li { display:flex; align-items:center; }
 .nav-links a {
   display:inline-flex; align-items:center; justify-content:center; min-height:2.75rem; padding:.45rem .8rem;
   border-bottom:.2rem solid transparent; color:var(--paper); font-size:.92rem; font-weight:700; text-decoration:none;
   line-height:1;
 }
 .nav-links a:hover, .nav-links a[aria-current="page"] { border-bottom-color:var(--bracken); }
+.nav-links .nav-enter {
+  min-height:2.75rem; margin-left:.3rem; border:1px solid rgba(245,241,232,.7); border-bottom-width:1px;
+}
+.nav-links .nav-enter:hover, .nav-links .nav-enter[aria-current="page"] {
+  border-color:var(--bracken); background:var(--forest-light);
+}
 a:focus-visible, button:focus-visible { outline:.2rem solid var(--focus); outline-offset:.15rem; }
 @media (min-width:48rem) and (max-width:68rem) {
   .logo_navbar { width:4.5rem; }
@@ -39,5 +45,6 @@ a:focus-visible, button:focus-visible { outline:.2rem solid var(--focus); outlin
   .nav-links li { border-top:1px solid rgba(245,241,232,.25); }
   .nav-links li:nth-child(odd) { border-right:1px solid rgba(245,241,232,.25); }
   .nav-links a { width:100%; min-height:3.35rem; padding-inline:1rem; border-bottom:0; }
+  .nav-links .nav-enter { min-height:3.35rem; margin-left:0; border:0; }
   .nav-links a:hover, .nav-links a[aria-current="page"] { color:var(--paper); background:var(--forest-light); }
 }
