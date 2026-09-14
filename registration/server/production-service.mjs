@@ -21,6 +21,7 @@ function entities(state, registration) {
 
 function registrationView(state, registration) {
   const { runner, emergency, payment, consent } = entities(state, registration);
+  const order = state.orders?.find((item) => item.registrationIds?.includes(registration.id));
   const declaration = [...state.declarations].reverse().find((item) => item.registrationId === registration.id && !item.revokedAt);
   const declarationStatus = declaration ? "complete" : registration.declarationStatus ?? "pending";
   const refunded = payment?.refundedRegistrationIds?.includes(registration.id);
@@ -32,7 +33,8 @@ function registrationView(state, registration) {
     runner: { ...runner, emergencyName: emergency?.name, emergencyPhone: emergency?.phone },
     termsVersion: consent?.termsVersion, privacyVersion: consent?.privacyVersion, consentRecordedAt: consent?.recordedAt,
     declaration, declarationStatus, declarationCompletionMethod: declaration?.completionMethod ?? registration.declarationCompletionMethod ?? null,
-    clearedToStart: declarationStatus === "complete" && registration.placeStatus === "confirmed" && registration.entryStatus !== "place_released"
+    clearedToStart: declarationStatus === "complete" && registration.placeStatus === "confirmed" && registration.entryStatus !== "place_released",
+    providerProof: order?.providerProof === true
   };
 }
 

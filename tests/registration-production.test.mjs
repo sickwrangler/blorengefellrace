@@ -140,6 +140,36 @@ test("one CLOSED provider proof permits exactly one adult standard-price live Ch
   assert.equal(final.registrationState, "CLOSED"); assert.equal(final.phase3RegistrationState, "CLOSED");
   assert.equal(capacitySummary(final).remaining, 119); assert.equal(final.orders[0].providerProof, true);
   assert.equal((await service.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:30:00Z" }, at)).code, "PROVIDER_PROOF_ALREADY_USED");
+  assert.equal((await service.revokePrivateInvitation(organiser, invitation.invitation.id, at)).ok, true);
+  assert.equal((await service.privateInvitations(organiser)).invitations[0].status, "Revoked");
+});
+
+test("organiser can request only the exact paid CLOSED production provider-proof refund", async () => {
+  const at = new Date("2026-10-01T12:00:00Z");
+  const repository = createMemoryRepository(createProductionBootstrap());
+  const stripeGateway = {
+    mode: "live",
+    async createOrderCheckoutSession() { return { id: "cs_live_refund_proof", url: "https://checkout.stripe.com/provider-proof", expiresAt: "2026-10-01T12:30:00Z" }; }
+  };
+  const service = new ProductionRegistrationService({ repository, emailAdapter: email, stripeMode: "live" });
+  const invitation = await service.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at);
+  const integrations = new Phase3IntegrationService({ repository, stripeGateway, emailAdapter: email, publicBaseUrl: "https://www.blorengefellrace.cymru", environment: "production" });
+  const created = await integrations.orders.createOrder({ purchaserEmail: "proof@example.com" }, at, invitation.token);
+  const runner = { firstName: "Provider", lastName: "Proof", email: "proof@example.com", phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", acceptTerms: true, acceptPrivacy: true };
+  const added = await integrations.orders.addRunner(created.orderToken, { runner, declarationMode: "later" }, at);
+  await integrations.orders.checkout(created.orderToken, at);
+  const paid = await integrations.orders.webhook({ id: "evt_live_refund_proof", type: "checkout.session.completed", data: { object: { id: "cs_live_refund_proof", payment_intent: "pi_live_refund_proof", amount_total: 600, currency: "gbp", payment_status: "paid" } } }, at);
+  assert.equal(paid.ok, true);
+
+  const registrationId = added.order.registrations[0].id;
+  assert.equal((await integrations.requestProviderProofRefund({ authenticated: true, role: null }, registrationId, at)).code, "FORBIDDEN");
+  const requested = await integrations.requestProviderProofRefund(organiser, registrationId, at);
+  assert.equal(requested.ok, true); assert.equal(requested.request.status, "requested");
+  const duplicate = await integrations.requestProviderProofRefund(organiser, registrationId, at);
+  assert.equal(duplicate.ok, true); assert.equal(duplicate.duplicate, true); assert.equal(duplicate.request.id, requested.request.id);
+  const final = await repository.read();
+  assert.equal(final.registrationState, "CLOSED"); assert.equal(final.phase3RegistrationState, "CLOSED"); assert.equal(final.refundRequests.length, 1);
+  assert.equal(final.auditEvents.some((event) => event.action === "refund_requested" && event.subjectId === registrationId), true);
 });
 
 test("production scheduler is harmless while CLOSED and empty", async () => {
@@ -161,6 +191,9 @@ test("production artifacts are exact and physically exclude browser test control
     const runnerPage = fs.readFileSync(path.join(root, "site/app/registration/index.html"), "utf8");
     for (const internalPhrase of ["Production ·", "persistent development API", "No entry or payment can be created"]) assert.equal(runnerPage.includes(internalPhrase), false);
     assert.ok(runnerPage.includes("Entries are not open yet. Please check back here for opening details."));
+    const dashboardScript = fs.readFileSync(path.join(root, "site/app/registration/dashboard.mjs"), "utf8");
+    for (const required of ["Create controlled proof refund request", "Approve full ${refundKind} refund", "Revoke proof access"]) assert.ok(dashboardScript.includes(required));
+    assert.equal(dashboardScript.includes("Stripe sandbox refund"), false);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

@@ -69,6 +69,8 @@ async function renderPrivateInvitations() {
     if (status === "Active") {
       li.append(actionButton("Expire now", async () => { const expired = await prototype.expirePrivateInvitation(invitation.id); showNotice(expired.ok ? "Private link expired." : `Link could not be expired: ${expired.code}`, !expired.ok); await renderPrivateInvitations(); }, "text-button"));
       li.append(actionButton("Revoke", async () => { const revoked = await prototype.revokePrivateInvitation(invitation.id); showNotice(revoked.ok ? "Private link revoked." : `Link could not be revoked: ${revoked.code}`, !revoked.ok); await renderPrivateInvitations(); }, "text-button danger-link"));
+    } else if (status === "Used" && invitation.kind === "stripe_provider_proof") {
+      li.append(actionButton("Revoke proof access", async () => { if (!window.confirm("Revoke this used provider-proof invitation?")) return; const revoked = await prototype.revokePrivateInvitation(invitation.id); showNotice(revoked.ok ? "Provider-proof access revoked." : `Link could not be revoked: ${revoked.code}`, !revoked.ok); await renderPrivateInvitations(); }, "text-button danger-link"));
     }
     list.append(li);
   }
@@ -160,11 +162,16 @@ function renderActions(item) {
     await render();
   }));
   if (available.includes("promote")) actions.append(actionButton("Promote from waiting list", async () => { const result = await prototype.promote(item.id); showNotice(result.ok ? `${item.testReference} promoted.` : `Promotion unavailable: ${result.code}`, !result.ok); await render(); }));
+  if (item.providerProof && item.paymentStatus === "successful" && !refundRequest && currentState.environment === "production" && (currentState.phase3RegistrationState ?? "CLOSED") === "CLOSED" && currentIntegrations.stripe === "live") {
+    actions.append(actionButton("Create controlled proof refund request", async () => { if (!window.confirm(`Create the refund request for controlled provider proof ${item.testReference}? This does not send money yet.`)) return; const result = await prototype.requestProviderProofRefund(item.id); showNotice(result.ok ? "Controlled provider-proof refund requested. Review and approve it before execution." : `Refund request could not be created: ${result.code}`, !result.ok); await render(); }));
+  }
+  const liveRefund = currentIntegrations.stripe === "live";
+  const refundKind = liveRefund ? "live" : "test";
   if (refundRequest?.status === "requested") {
-    actions.append(actionButton("Approve full test refund", async () => { const result = await prototype.decideRefund(refundRequest.id, "approve"); showNotice(result.ok ? "Full test refund approved. It has not been sent to Stripe yet." : `Refund could not be approved: ${result.code}`, !result.ok); await render(); }));
+    actions.append(actionButton(`Approve full ${refundKind} refund`, async () => { const result = await prototype.decideRefund(refundRequest.id, "approve"); showNotice(result.ok ? `Full ${refundKind} refund approved. It has not been sent to Stripe yet.` : `Refund could not be approved: ${result.code}`, !result.ok); await render(); }));
     actions.append(actionButton("Reject refund request", async () => { const result = await prototype.decideRefund(refundRequest.id, "reject"); showNotice(result.ok ? "Refund request rejected." : `Refund could not be rejected: ${result.code}`, !result.ok); await render(); }, "button button--quiet danger-button"));
   }
-  if (refundRequest?.status === "approved" && currentIntegrations.paymentsAvailable) actions.append(actionButton("Execute approved full test refund", async () => { if (!window.confirm(`Send a full Stripe sandbox refund for ${item.testReference}?`)) return; const result = await prototype.executeRefund(refundRequest.id); showNotice(result.ok ? "Full Stripe sandbox refund completed and the place released." : `The refund could not be processed: ${result.code}`, !result.ok); await render(); }));
+  if (refundRequest?.status === "approved" && currentIntegrations.paymentsAvailable) actions.append(actionButton(`Execute approved full ${refundKind} refund`, async () => { if (!window.confirm(`Send a full Stripe ${refundKind} refund for ${item.testReference}? This will return real money when Stripe is live.`)) return; const result = await prototype.executeRefund(refundRequest.id); showNotice(result.ok ? `Full Stripe ${refundKind} refund completed and the place released.` : `The refund could not be processed: ${result.code}`, !result.ok); await render(); }));
   if (available.includes("cancel")) actions.append(actionButton("Cancel entry", async () => {
     if (item.raceNumber) {
       pendingCancellation = item.id;

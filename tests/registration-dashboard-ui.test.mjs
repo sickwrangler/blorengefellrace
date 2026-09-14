@@ -24,3 +24,12 @@ test("routine correction uses an accessible form dialog instead of native prompt
   assert.match(script, /prototype\.correctEntry\(registrationId, data\)/);
   assert.doesNotMatch(script, /window\.prompt/);
 });
+
+test("provider-proof refund controls are explicit and mode-aware", () => {
+  const script = fs.readFileSync("registration/dashboard.mjs", "utf8");
+  assert.match(script, /Create controlled proof refund request/);
+  assert.match(script, /requestProviderProofRefund\(item\.id\)/);
+  assert.match(script, /This does not send money yet/);
+  assert.match(script, /This will return real money when Stripe is live/);
+  assert.match(script, /Revoke proof access/);
+});

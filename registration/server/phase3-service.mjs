@@ -216,6 +216,38 @@ export class Phase3IntegrationService {
     });
   }
 
+  requestProviderProofRefund(actor, registrationId, at = new Date()) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.repository.transaction((state) => {
+      const closedProductionProof = state.environment === "production"
+        && state.registrationState === "CLOSED"
+        && (state.phase3RegistrationState ?? "CLOSED") === "CLOSED"
+        && this.stripeGateway?.mode === "live"
+        && this.emailAdapter?.externalDelivery !== true
+        && state.event.under18EntriesEnabled === false;
+      if (!closedProductionProof) return { ok: false, code: "PROVIDER_PROOF_UNAVAILABLE" };
+      const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
+      const order = state.orders?.find((item) => item.providerProof === true && item.registrationIds?.includes(registrationId));
+      const payment = paymentFor(state, registration);
+      const exactProof = registration && order
+        && (state.orders ?? []).filter((item) => item.providerProof === true).length === 1
+        && order.registrationIds.length === 1
+        && order.totalPence === 600
+        && registration.priceActuallyChargedPence === 600
+        && payment?.status === "paid"
+        && payment.providerMode === "live"
+        && payment.currency === "gbp"
+        && payment.expectedAmountPence === 600
+        && payment.actualPaidAmountPence === 600
+        && !payment.refundedRegistrationIds?.includes(registrationId);
+      if (!exactProof) return { ok: false, code: "PROVIDER_PROOF_REQUIREMENTS" };
+      const existing = state.refundRequests.find((item) => item.registrationId === registrationId && ["requested", "approved"].includes(item.status));
+      if (existing) return { ok: true, duplicate: true, request: { id: existing.id, status: existing.status, requestedAt: existing.requestedAt } };
+      const result = requestRefund(state, registrationId, actor, at);
+      return result.ok ? { ok: true, request: { id: result.request.id, status: result.request.status, requestedAt: result.request.requestedAt } } : result;
+    });
+  }
+
   decideRefund(actor, refundRequestId, decision, at = new Date()) {
     if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
     return this.repository.transaction(async (state) => {
