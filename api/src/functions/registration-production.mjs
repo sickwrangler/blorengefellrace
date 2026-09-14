@@ -18,7 +18,7 @@ const repository = createAzureTableRepository(createProductionAzureTableTranspor
 const emailAdapter = createProductionEmailAdapter(configuration);
 const stripeGateway = createProductionStripeGateway(configuration);
 const phase3Integrations = new Phase3IntegrationService({ repository, stripeGateway, emailAdapter, publicBaseUrl: configuration.publicBaseUrl, environment: "production", orderConfiguration: { maxRunnersPerOrder: configuration.maxRunnersPerOrder } });
-const handle = createProductionApi({ service: new ProductionRegistrationService({ repository, emailAdapter }), phase3Integrations, repository });
+const handle = createProductionApi({ service: new ProductionRegistrationService({ repository, emailAdapter, stripeMode: stripeGateway?.mode ?? "disabled" }), phase3Integrations, repository });
 
 const handler = async (request, context) => {
   try {

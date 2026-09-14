@@ -154,14 +154,24 @@ function updateDeclarationFields() {
   form.elements.guardianDeclarationName.required = false; form.elements.completedByParentOrLegalGuardian.required = false; form.elements.acceptDeclaration.required = false;
 }
 
-async function beginOrRecover() {
-  const recovered = await prototype.currentOrder();
+async function beginOrRecover(recovered = null) {
+  recovered ??= await prototype.currentOrder();
   if (recovered.ok && ["draft", "checkout_expired", "checkout_pending"].includes(recovered.order.status)) { currentOrder = recovered.order; document.querySelector("#test-landing").hidden = true; document.querySelector("#runner-flow").hidden = false; showStage(3); document.querySelector("#submit-test").closest(".form-actions").hidden = true; renderOrder(); if (recovered.order.paymentRequired) { alert.textContent = recovered.order.status === "checkout_pending" ? "Payment required. Continue to payment to return to your existing secure Checkout." : "Payment required. Places are not held after Checkout expires; capacity and price will be checked again."; alert.hidden = false; } }
 }
 
 if (!canTest) document.querySelector("#closed-panel").hidden = false;
-else if (prototype.hasPrivateInvitation && !(await prototype.inspectPrivateAccess("registration")).ok) document.querySelector("#invalid-link-panel").hidden = false;
-else { const status = await refreshStatus(); if (status.unavailable || (status.environment === "production" && !["OPEN", "PRIVATE_LIVE"].includes(status.operationalState))) document.querySelector("#closed-panel").hidden = false; else { document.querySelector("#test-experience").hidden = false; await beginOrRecover(); } }
+else {
+  const privateAccess = prototype.hasPrivateInvitation ? await prototype.inspectPrivateAccess() : null;
+  const recovered = await prototype.currentOrder();
+  const recoveringProviderProof = recovered.ok && recovered.order.providerProof === true;
+  if (privateAccess && !privateAccess.ok && !recoveringProviderProof) document.querySelector("#invalid-link-panel").hidden = false;
+  else {
+    const status = await refreshStatus();
+    const closedProviderProof = privateAccess?.ok && privateAccess.purpose === "stripe_provider_proof";
+    if (status.unavailable || (status.environment === "production" && !["OPEN", "PRIVATE_LIVE"].includes(status.operationalState) && !closedProviderProof && !recoveringProviderProof)) document.querySelector("#closed-panel").hidden = false;
+    else { document.querySelector("#test-experience").hidden = false; await beginOrRecover(recovered); }
+  }
+}
 
 document.querySelector("#start-test")?.addEventListener("click", () => { const purchaser = document.querySelector("#purchaser-email"); if (!purchaser.checkValidity()) return purchaser.reportValidity(); document.querySelector("#test-landing").hidden = true; document.querySelector("#runner-flow").hidden = false; showStage(1); });
 document.querySelector("#details-continue")?.addEventListener("click", () => { if (validateStage(1)) { refreshSyntheticDeclarationName(); showStage(2); } });

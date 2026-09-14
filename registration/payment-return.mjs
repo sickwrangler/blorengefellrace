@@ -15,14 +15,22 @@ const fragment = new URLSearchParams(location.hash.replace(/^#/, ""));
 if (fragment.get("manage")) prototype.rememberManagementToken(fragment.get("manage"));
 if (location.hash) history.replaceState(null, "", `${location.pathname}${location.search}`);
 
+function integrationLabel(integrations) {
+  const environment = integrations.environment === "production" ? "Production" : "Development";
+  const stripe = integrations.stripe === "live" ? "Stripe live" : integrations.paymentsAvailable ? "Stripe sandbox" : "Payments unavailable";
+  return `${environment} · ${stripe}`;
+}
+
 async function render() {
   if (new URLSearchParams(location.search).get("order") === "1" && prototype.orderToken()) {
     const [orderResult, integrations] = await Promise.all([prototype.currentOrder(), prototype.integrationStatus()]);
-    environmentStatus.textContent = integrations.paymentsAvailable ? "Development · Stripe sandbox" : "Development · Payments unavailable";
+    environmentStatus.textContent = integrationLabel(integrations);
     if (!orderResult.ok) { title.textContent = "Order status unavailable"; message.textContent = "Use the secure order link sent to the purchaser."; actions.hidden = true; return; }
     const order = orderResult.order; const presentation = paymentPresentation(order.paymentStatus, { paymentsAvailable: integrations.paymentsAvailable === true });
     title.textContent = order.paymentStatus === "paid" ? "Entry confirmed" : presentation.title;
-    message.textContent = order.paymentStatus === "paid" ? "Payment confirmed. We’ve emailed each runner the information they need for their entry." : presentation.message;
+    message.textContent = order.paymentStatus === "paid"
+      ? integrations.externalEmailAvailable ? "Payment confirmed. We’ve emailed each runner the information they need for their entry." : "Payment confirmed. External email delivery is disabled for this controlled proof; the organiser can review the entry in the dashboard."
+      : presentation.message;
     confirmedRunners.replaceChildren(...order.registrations.map((item) => { const row = document.createElement("li"); row.textContent = `${item.runner.firstName} ${item.runner.lastName}${item.declaration.status === "complete" ? "" : " — declaration required"}`; return row; }));
     confirmedRunners.hidden = order.paymentStatus !== "paid";
     retry.hidden = !presentation.canRetry; requestRefund.hidden = true; actions.hidden = order.paymentStatus === "paid"; return;
@@ -34,7 +42,7 @@ async function render() {
     actions.hidden = true; return;
   }
   const [status, integrations] = await Promise.all([prototype.paymentStatus(token), prototype.integrationStatus()]);
-  environmentStatus.textContent = integrations.paymentsAvailable ? "Development · Stripe sandbox" : "Development · Payments unavailable";
+  environmentStatus.textContent = integrationLabel(integrations);
   if (!status.ok) {
     title.textContent = "Payment status unavailable";
     message.textContent = runnerMessageForCode(status.code);
