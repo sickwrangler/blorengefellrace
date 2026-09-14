@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import { WFRA_SENIOR_ENTRY_DECLARATION } from "../declarations.mjs";
 
 export const PHASE3_REGISTRATION_STATES = Object.freeze(["CLOSED", "PRIVATE_LIVE", "OPEN", "PAUSED", "CLOSED_FINAL"]);
-export const PRIVATE_INVITATION_KINDS = Object.freeze(["registration", "waiting_list_join", "waiting_list_offer"]);
+export const PRIVATE_INVITATION_KINDS = Object.freeze(["registration", "waiting_list_join", "waiting_list_offer", "stripe_provider_proof"]);
+export const PROVIDER_PROOF_INVITATION_HOURS = 2;
 export const RACE_CATEGORIES = Object.freeze(["Female", "Male / Open"]);
 export const REFUND_STATES = Object.freeze(["requested", "approved", "rejected", "refunded"]);
 
@@ -114,7 +115,8 @@ export function inspectPrivateInvitation(state, token, { kind, at = new Date(), 
 }
 
 export function authorizePrivateInvitation(state, token, { kind, at = new Date(), consume = false, allowDevelopmentTest = false } = {}) {
-  const statePermitsPrivateAccess = ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState) || (allowDevelopmentTest && state.environment !== "production" && state.registrationState === "test");
+  const closedProviderProof = kind === "stripe_provider_proof" && state.environment === "production" && state.registrationState === "CLOSED" && (state.phase3RegistrationState ?? "CLOSED") === "CLOSED";
+  const statePermitsPrivateAccess = closedProviderProof || ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState) || (allowDevelopmentTest && state.environment !== "production" && state.registrationState === "test");
   if (!statePermitsPrivateAccess) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
   const checked = inspectPrivateInvitation(state, token, { kind, at, consume: false });
   if (!checked.ok) return checked;

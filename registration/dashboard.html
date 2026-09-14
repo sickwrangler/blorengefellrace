@@ -26,7 +26,7 @@
     <section id="private-access" class="prototype-card" aria-labelledby="private-access-title">
       <div class="detail-heading"><div><p class="eyebrow">Phase 3 foundation</p><h2 id="private-access-title">Private access</h2></div></div>
       <p>Create a single-use private link for controlled testing. Creating a link does not open registration, bypass capacity or send anything externally.</p>
-      <div class="private-access-controls"><label>Purpose<select id="invitation-kind"><option value="registration">Registration</option><option value="waiting_list_join">Waiting-list join</option><option value="waiting_list_offer">Waiting-list place offer</option></select></label><label>Expires<input id="invitation-expiry" type="datetime-local"></label><button id="create-invitation" class="button button--quiet" type="button">Create private link</button></div>
+      <div class="private-access-controls"><label>Purpose<select id="invitation-kind"><option value="registration">Registration</option><option value="waiting_list_join">Waiting-list join</option><option value="waiting_list_offer">Waiting-list place offer</option><option id="provider-proof-option" value="stripe_provider_proof" hidden>One-off Stripe live proof</option></select></label><label>Expires<input id="invitation-expiry" type="datetime-local"></label><button id="create-invitation" class="button button--quiet" type="button">Create private link</button></div>
       <div id="created-invitation" class="form-alert form-alert--success" hidden><p>Copy this link now. Only a hash is retained by the server.</p><code id="created-invitation-url"></code></div>
       <ul id="private-invitation-list" class="message-list"><li>No private links created.</li></ul>
     </section>

@@ -32,8 +32,10 @@ async function render() {
   const environment = currentState.environment === "production" ? "Production" : "Development";
   const currentOperationalState = currentState.phase3RegistrationState ?? "CLOSED";
   const stateLabel = currentOperationalState === "PRIVATE_LIVE" ? "Private" : currentOperationalState === "CLOSED_FINAL" ? "Closed" : `${currentOperationalState[0]}${currentOperationalState.slice(1).toLowerCase()}`;
-  document.querySelector("#environment-status").textContent = `${environment} · ${stateLabel} · ${integrations.paymentsAvailable ? "Stripe sandbox" : "Payments unavailable"}`;
-  document.querySelector("#integration-status").textContent = `${integrations.paymentsAvailable ? "Stripe sandbox" : "Payments unavailable"} · ${integrations.externalEmailAvailable ? "Controlled email" : "Email captured only"}`;
+  const stripeLabel = integrations.stripe === "live" ? "Stripe live" : integrations.paymentsAvailable ? "Stripe sandbox" : "Payments unavailable";
+  document.querySelector("#environment-status").textContent = `${environment} · ${stateLabel} · ${stripeLabel}`;
+  document.querySelector("#integration-status").textContent = `${stripeLabel} · ${integrations.externalEmailAvailable ? "Controlled email" : "Email captured only"}`;
+  document.querySelector("#provider-proof-option").hidden = !(currentState.environment === "production" && currentOperationalState === "CLOSED" && integrations.stripe === "live" && integrations.externalEmailAvailable !== true && currentState.event.under18EntriesEnabled === false);
   document.querySelector("#technical-environment").textContent = snapshot.diagnostics.environment;
   document.querySelector("#technical-storage").textContent = snapshot.diagnostics.storageType;
   document.querySelector("#technical-schema").textContent = snapshot.diagnostics.schemaVersion;
@@ -212,10 +214,12 @@ document.querySelector("#reset-test")?.addEventListener("click", async () => { i
 document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });
 document.querySelector("#create-invitation")?.addEventListener("click", async () => {
   const expires = document.querySelector("#invitation-expiry");
-  if (!expires.value) expires.value = new Date(Date.now() + 48 * 3_600_000).toISOString().slice(0, 16);
-  const result = await prototype.createPrivateInvitation({ kind: document.querySelector("#invitation-kind").value, expiresAt: new Date(expires.value).toISOString(), maximumUses: 1 });
+  const kind = document.querySelector("#invitation-kind").value;
+  if (!expires.value) expires.value = new Date(Date.now() + (kind === "stripe_provider_proof" ? 1 : 48) * 3_600_000).toISOString().slice(0, 16);
+  const result = await prototype.createPrivateInvitation({ kind, expiresAt: new Date(expires.value).toISOString(), maximumUses: 1 });
   if (!result.ok) { showNotice(`Private link could not be created: ${result.code}`, true); return; }
   const url = new URL("./", window.location.href); url.searchParams.set("invite", result.token);
+  if (kind === "stripe_provider_proof") url.searchParams.set("proof", "stripe");
   document.querySelector("#created-invitation-url").textContent = url.href;
   document.querySelector("#created-invitation").hidden = false;
   await renderPrivateInvitations();

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { authorizePrivateInvitation, calculateEntryPrice, expirePrivateInvitation, issuePrivateInvitation, revokePrivateInvitation } from "./phase3-domain.mjs";
+import { authorizePrivateInvitation, calculateEntryPrice, expirePrivateInvitation, issuePrivateInvitation, PROVIDER_PROOF_INVITATION_HOURS, revokePrivateInvitation } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 
 const now = () => new Date().toISOString();
@@ -50,11 +50,20 @@ function refreshWaiting(state) {
 }
 
 export class ProductionRegistrationService {
-  constructor({ repository, emailAdapter }) { this.repository = repository; this.emailAdapter = emailAdapter; }
+  constructor({ repository, emailAdapter, stripeMode = "disabled" }) { this.repository = repository; this.emailAdapter = emailAdapter; this.stripeMode = stripeMode; }
   async status() { return totals(await this.repository.read()); }
   async inspectPrivateAccess(token, purpose, at = new Date()) {
-    const state = await this.repository.read(); const result = authorizePrivateInvitation(state, token, { kind: purpose, at });
+    const state = await this.repository.read();
+    if (purpose === "stripe_provider_proof" && !this.providerProofAvailable(state)) return { ok: false, code: "LINK_UNAVAILABLE" };
+    const result = authorizePrivateInvitation(state, token, { kind: purpose, at });
     return result.ok ? { ok: true, purpose, invitation: result.invitation } : { ok: false, code: "LINK_UNAVAILABLE" };
+  }
+  providerProofAvailable(state) {
+    return state.environment === "production" && state.registrationState === "CLOSED" && (state.phase3RegistrationState ?? "CLOSED") === "CLOSED" && this.stripeMode === "live" && this.emailAdapter?.externalDelivery !== true && state.event.under18EntriesEnabled === false && state.event.entryFeePence === 600;
+  }
+  providerProofBaselineEmpty(state) {
+    return ["orders", "registrations", "payments", "refundRequests", "reservations", "waitingList", "waitingListOffers"]
+      .every((collection) => (state[collection] ?? []).length === 0);
   }
   async snapshot(actor, filters = {}) {
     if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" };
@@ -79,7 +88,20 @@ export class ProductionRegistrationService {
     });
   }
   async privateInvitations(actor) { if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); return { ok: true, invitations: state.privateInvitations.map(({ tokenHash: _tokenHash, ...item }) => ({ ...item, status: item.revokedAt ? "Revoked" : new Date(item.expiresAt) <= new Date() ? "Expired" : item.uses >= item.maximumUses ? "Used" : "Active" })) }; }
-  createPrivateInvitation(actor, input) { if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); return this.repository.transaction((state) => issuePrivateInvitation(state, input, actor)); }
+  createPrivateInvitation(actor, input, at = new Date()) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.repository.transaction((state) => {
+      if (input.kind !== "stripe_provider_proof") return issuePrivateInvitation(state, input, actor, at);
+      if (!this.providerProofAvailable(state)) return { ok: false, code: "PROVIDER_PROOF_UNAVAILABLE" };
+      if ((state.orders ?? []).some((order) => order.providerProof === true)) return { ok: false, code: "PROVIDER_PROOF_ALREADY_USED" };
+      if (!this.providerProofBaselineEmpty(state)) return { ok: false, code: "PROVIDER_PROOF_REQUIRES_EMPTY_BASELINE" };
+      const active = (state.privateInvitations ?? []).some((invitation) => invitation.kind === "stripe_provider_proof" && !invitation.revokedAt && invitation.uses < invitation.maximumUses && new Date(invitation.expiresAt) > new Date(at));
+      if (active) return { ok: false, code: "PROVIDER_PROOF_ALREADY_ACTIVE" };
+      const expiresAt = new Date(input.expiresAt); const latest = new Date(new Date(at).getTime() + PROVIDER_PROOF_INVITATION_HOURS * 3_600_000);
+      if (!Number.isFinite(expiresAt.valueOf()) || expiresAt > latest) return { ok: false, code: "PROVIDER_PROOF_EXPIRY_TOO_LONG" };
+      return issuePrivateInvitation(state, { ...input, maximumUses: 1 }, actor, at);
+    });
+  }
   revokePrivateInvitation(actor, id) { if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); return this.repository.transaction((state) => revokePrivateInvitation(state, id, actor)); }
   expirePrivateInvitation(actor, id) { if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); return this.repository.transaction((state) => expirePrivateInvitation(state, id, actor)); }
   async auditHistory(actor, id) { if (!authorize(actor, "audit")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); return { ok: true, events: state.auditEvents.filter((item) => item.subjectId === id).map((item) => ({ ...item, timestamp: item.occurredAt })) }; }

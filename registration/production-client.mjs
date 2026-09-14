@@ -1,6 +1,7 @@
 export const canTest = true;
 export const supportsManagedApi = true;
 const privateInvitationToken = new URLSearchParams(window.location.search).get("invite");
+const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : "registration";
 const MANAGEMENT_TOKEN_SESSION_KEY = "blorenge-management-token";
 const ORDER_TOKEN_SESSION_KEY = "blorenge-order-token";
 
@@ -16,7 +17,7 @@ const v4 = (path, options) => request("v4", path, options);
 
 export const prototype = {
   hasPrivateInvitation: Boolean(privateInvitationToken),
-  inspectPrivateAccess(purpose = "registration") { return privateInvitationToken ? v2(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }) : Promise.resolve({ ok: true }); },
+  inspectPrivateAccess(purpose = privateInvitationPurpose) { return privateInvitationToken ? v2(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }) : Promise.resolve({ ok: true }); },
   status() { return v2("/registration/status"); },
   rememberManagementToken(token) { if (token) sessionStorage.setItem(MANAGEMENT_TOKEN_SESSION_KEY, token); },
   forgetManagementToken() { sessionStorage.removeItem(MANAGEMENT_TOKEN_SESSION_KEY); },

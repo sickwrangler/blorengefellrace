@@ -9,6 +9,7 @@ export const isDevelopment = environment === "development";
 export const canTest = isLocal || isPreview || isDevelopment;
 const usesApi = isLocal || isDevelopment;
 const privateInvitationToken = new URLSearchParams(window.location.search).get("invite");
+const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : "registration";
 export const supportsManagedApi = usesApi;
 const storageAdapter = {
   getItem(key) { return window.localStorage.getItem(key); },
@@ -81,7 +82,7 @@ function repositorySnapshot() {
 
 export const prototype = {
   hasPrivateInvitation: Boolean(privateInvitationToken),
-  async inspectPrivateAccess(purpose = "registration") {
+  async inspectPrivateAccess(purpose = privateInvitationPurpose) {
     if (!privateInvitationToken || !usesApi) return { ok: !privateInvitationToken };
     try { return await api(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }); }
     catch { return { ok: false, code: "LINK_UNAVAILABLE" }; }

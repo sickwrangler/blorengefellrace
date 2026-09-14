@@ -14,6 +14,27 @@ const normalizeEmail = (value) => String(value ?? "").trim().toLowerCase();
 const normalizeText = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
 const active = (entry) => entry && !entry.deletedAt && !["cancelled", "place_released"].includes(entry.entryStatus);
 
+function closedProviderProofAvailable(state, stripeGateway, emailAdapter) {
+  return state.environment === "production"
+    && state.registrationState === "CLOSED"
+    && (state.phase3RegistrationState ?? "CLOSED") === "CLOSED"
+    && stripeGateway?.mode === "live"
+    && emailAdapter?.externalDelivery !== true
+    && state.event.under18EntriesEnabled === false
+    && state.event.entryFeePence === 600;
+}
+
+function providerProofBaselineEmpty(state) {
+  return ["orders", "registrations", "payments", "refundRequests", "reservations", "waitingList", "waitingListOffers"]
+    .every((collection) => (state[collection] ?? []).length === 0);
+}
+
+function validProviderProofRunner(state, runner) {
+  return ageOnRaceDate(runner.dateOfBirth, state.event.raceDate) >= 18
+    && runner.wfraMember !== true
+    && calculateEntryPrice(state.event, runner).priceActuallyChargedPence === 600;
+}
+
 function audit(state, action, subjectId, detail = {}, at = new Date(), actor = { actorType: "system" }) {
   state.auditEvents.push({ id: id("audit"), occurredAt: iso(at), actorType: actor.actorType ?? "system", actorId: actor.id ?? null, action, subjectId, before: null, after: detail, environment: state.environment });
 }
@@ -98,6 +119,7 @@ function orderView(state, order) {
   return {
     id: order.id,
     status: order.status,
+    providerProof: order.providerProof === true,
     purchaserEmail: order.purchaserEmail,
     runnerCount: order.registrationIds.length,
     totalPence: order.totalPence,
@@ -191,7 +213,12 @@ export class OrderRegistrationService {
       const purchaserEmail = normalizeEmail(input.purchaserEmail);
       const developmentAccepting = ["local", "development"].includes(state.environment) && state.registrationState === "test";
       const productionAccepting = state.environment === "production" && ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState);
-      if (!developmentAccepting && !productionAccepting) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
+      const proofAccess = closedProviderProofAvailable(state, this.stripeGateway, this.emailAdapter)
+        ? authorizePrivateInvitation(state, invitationToken, { kind: "stripe_provider_proof", at })
+        : { ok: false };
+      const providerProof = proofAccess.ok === true && providerProofBaselineEmpty(state);
+      if (!developmentAccepting && !productionAccepting && !providerProof) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
+      if (providerProof && (state.orders ?? []).some((order) => order.providerProof === true)) return { ok: false, code: "LINK_UNAVAILABLE" };
       if (state.environment === "production" && state.registrationState === "PRIVATE_LIVE") {
         const access = authorizePrivateInvitation(state, invitationToken, { kind: "registration", at });
         if (!access.ok) return { ok: false, code: "LINK_UNAVAILABLE" };
@@ -201,8 +228,12 @@ export class OrderRegistrationService {
         const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "registration", at, consume: true });
         if (!consumed.ok) return { ok: false, code: "LINK_UNAVAILABLE" };
       }
-      const order = { id: id("order"), purchaserEmail, status: "draft", registrationIds: [], totalPence: 0, createdAt: iso(at), updatedAt: iso(at), checkoutExpiresAt: null, deletedAt: null };
-      state.orders.push(order); const orderToken = issueOrderToken(state, order.id, at); audit(state, "order_created", order.id, {}, at, { actorType: "purchaser" });
+      if (providerProof) {
+        const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "stripe_provider_proof", at, consume: true });
+        if (!consumed.ok) return { ok: false, code: "LINK_UNAVAILABLE" };
+      }
+      const order = { id: id("order"), purchaserEmail, status: "draft", registrationIds: [], totalPence: 0, providerProof, privateInvitationId: providerProof ? proofAccess.invitation.id : null, createdAt: iso(at), updatedAt: iso(at), checkoutExpiresAt: null, deletedAt: null };
+      state.orders.push(order); const orderToken = issueOrderToken(state, order.id, at); audit(state, providerProof ? "provider_proof_order_created" : "order_created", order.id, {}, at, { actorType: "purchaser" });
       return { ok: true, order: orderView(state, order), orderToken };
     });
   }
@@ -219,6 +250,7 @@ export class OrderRegistrationService {
       if (order.registrationIds.length >= this.maxRunnersPerOrder) return { ok: false, code: "ORDER_RUNNER_LIMIT" };
       const { runner: normalized, errors } = validateOrderRunner(state, input.runner ?? input);
       if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
+      if (order.providerProof && (order.registrationIds.length >= 1 || !closedProviderProofAvailable(state, this.stripeGateway, this.emailAdapter) || !validProviderProofRunner(state, normalized))) return { ok: false, code: "PROVIDER_PROOF_REQUIREMENTS" };
       const existingOrderEmails = registrationsFor(state, order).map((registration) => normalizeEmail(runnerFor(state, registration)?.email));
       if (existingOrderEmails.includes(normalized.email)) return { ok: false, code: "DUPLICATE_ORDER_EMAIL", message: "Each runner needs a unique email address so we can send their declaration and entry-management link directly." };
       const alreadyActive = state.registrations.some((registration) => active(registration) && ["payment_reserved", "confirmed"].includes(registration.placeStatus) && normalizeEmail(runnerFor(state, registration)?.email) === normalized.email);
@@ -256,6 +288,7 @@ export class OrderRegistrationService {
       ensureCollections(state); const order = orderForToken(state, token); const registration = state.registrations.find((item) => item.id === registrationId && !item.deletedAt);
       if (!order || !["draft", "checkout_expired"].includes(order.status) || !order.registrationIds.includes(registrationId) || !registration) return { ok: false, code: "ORDER_NOT_EDITABLE" };
       const { runner: normalized, errors } = validateOrderRunner(state, input.runner ?? input); if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
+      if (order.providerProof && (!closedProviderProofAvailable(state, this.stripeGateway, this.emailAdapter) || !validProviderProofRunner(state, normalized))) return { ok: false, code: "PROVIDER_PROOF_REQUIREMENTS" };
       const duplicate = registrationsFor(state, order).some((item) => item.id !== registrationId && normalizeEmail(runnerFor(state, item)?.email) === normalized.email);
       if (duplicate) return { ok: false, code: "DUPLICATE_ORDER_EMAIL" };
       const declarationCheck = validateDeclaration(state, normalized, input.declarationMode, input.declaration); if (!declarationCheck.ok) return declarationCheck;
@@ -279,6 +312,7 @@ export class OrderRegistrationService {
       const reject = (result) => recognisedExpiredCheckout ? { ok: true, committedError: result } : result;
       ensureCollections(state); const order = orderForToken(state, token);
       if (!order) return { ok: false, code: "ORDER_NOT_EDITABLE" };
+      if (order.providerProof && !closedProviderProofAvailable(state, this.stripeGateway, this.emailAdapter)) return { ok: false, code: "PROVIDER_PROOF_UNAVAILABLE" };
       let payment = orderPayment(state, order);
       if (order.status === "checkout_pending" && payment?.status === "checkout_pending" && new Date(payment.checkoutExpiresAt) > new Date(at)) {
         return { ok: true, duplicate: true, checkoutUrl: payment.checkoutUrl, expiresAt: payment.checkoutExpiresAt, totalPence: payment.expectedAmountPence };
@@ -292,6 +326,7 @@ export class OrderRegistrationService {
       if (!["draft", "checkout_expired"].includes(order.status)) return reject({ ok: false, code: "ORDER_NOT_EDITABLE" });
       const registrations = registrationsFor(state, order).filter(active);
       if (!registrations.length || registrations.length > this.maxRunnersPerOrder) return reject({ ok: false, code: "ORDER_RUNNER_COUNT_INVALID" });
+      if (order.providerProof && (registrations.length !== 1 || !validProviderProofRunner(state, runnerFor(state, registrations[0])))) return reject({ ok: false, code: "PROVIDER_PROOF_REQUIREMENTS" });
       let recalculatedTotal = 0;
       for (const registration of registrations) {
         const runner = runnerFor(state, registration);

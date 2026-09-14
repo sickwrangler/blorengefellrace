@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createProductionBootstrap, productionAvailability, validateProductionState } from "../registration/server/production-bootstrap.mjs";
 import { createMemoryRepository } from "../registration/server/repositories.mjs";
-import { issuePrivateInvitation, transitionRegistrationState } from "../registration/server/phase3-domain.mjs";
+import { capacitySummary, issuePrivateInvitation, transitionRegistrationState } from "../registration/server/phase3-domain.mjs";
 import { authorize as authorizeProduction, staticWebAppActor } from "../registration/server/production-auth.mjs";
 import { OrderRegistrationService } from "../registration/server/order-service.mjs";
 import { createProductionBackupService, operationalDailyBackupDue, PRODUCTION_BACKUP_POLICY } from "../registration/server/production-backup.mjs";
@@ -76,6 +76,70 @@ test("PRIVATE_LIVE requires a purpose-bound invitation and consumes it only for 
   assert.equal((await orders.createOrder({ purchaserEmail: "runner@example.com" }, new Date("2026-10-01T12:02:00Z"), invitation.token)).ok, true);
   assert.equal((await repository.read()).privateInvitations[0].uses, 1);
   assert.equal((await orders.createOrder({ purchaserEmail: "other@example.com" }, new Date("2026-10-01T12:03:00Z"), invitation.token)).code, "LINK_UNAVAILABLE");
+});
+
+test("CLOSED Stripe proof invitations are organiser-only, short-lived and single-use", async () => {
+  const at = new Date("2026-10-01T12:00:00Z");
+  const repository = createMemoryRepository(createProductionBootstrap());
+  const disabled = new ProductionRegistrationService({ repository, emailAdapter: email, stripeMode: "disabled" });
+  assert.equal((await disabled.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at)).code, "PROVIDER_PROOF_UNAVAILABLE");
+
+  const externalEmail = new ProductionRegistrationService({ repository, emailAdapter: { ...email, externalDelivery: true }, stripeMode: "live" });
+  assert.equal((await externalEmail.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at)).code, "PROVIDER_PROOF_UNAVAILABLE");
+
+  const nonEmptyState = createProductionBootstrap(); nonEmptyState.waitingList.push({ id: "existing_record" });
+  const nonEmpty = new ProductionRegistrationService({ repository: createMemoryRepository(nonEmptyState), emailAdapter: email, stripeMode: "live" });
+  assert.equal((await nonEmpty.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at)).code, "PROVIDER_PROOF_REQUIRES_EMPTY_BASELINE");
+
+  const live = new ProductionRegistrationService({ repository, emailAdapter: email, stripeMode: "live" });
+  assert.equal((await live.createPrivateInvitation({ authenticated: true, role: null }, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at)).code, "FORBIDDEN");
+  assert.equal((await live.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T14:00:01Z" }, at)).code, "PROVIDER_PROOF_EXPIRY_TOO_LONG");
+
+  const created = await live.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z", maximumUses: 99 }, at);
+  assert.equal(created.ok, true); assert.equal(created.invitation.maximumUses, 1); assert.equal(created.invitation.tokenHash, undefined);
+  assert.equal((await live.inspectPrivateAccess(created.token, "stripe_provider_proof", new Date("2026-10-01T12:01:00Z"))).ok, true);
+  assert.equal((await live.inspectPrivateAccess(created.token, "registration", new Date("2026-10-01T12:01:00Z"))).code, "LINK_UNAVAILABLE");
+  assert.equal((await live.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:30:00Z" }, at)).code, "PROVIDER_PROOF_ALREADY_ACTIVE");
+});
+
+test("one CLOSED provider proof permits exactly one adult standard-price live Checkout", async () => {
+  const at = new Date("2026-10-01T12:00:00Z");
+  const repository = createMemoryRepository(createProductionBootstrap());
+  const stripeCalls = [];
+  const stripeGateway = {
+    mode: "live",
+    async createOrderCheckoutSession(input) {
+      stripeCalls.push(input);
+      return { id: "cs_live_provider_proof", url: "https://checkout.stripe.com/provider-proof", expiresAt: "2026-10-01T12:30:00Z" };
+    }
+  };
+  const service = new ProductionRegistrationService({ repository, emailAdapter: email, stripeMode: "live" });
+  const invitation = await service.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at);
+  const orders = new OrderRegistrationService({ repository, stripeGateway, emailAdapter: email, publicBaseUrl: "https://www.blorengefellrace.cymru" });
+
+  assert.equal((await orders.createOrder({ purchaserEmail: "proof@example.com" }, at)).code, "REGISTRATION_NOT_ACCEPTING");
+  assert.equal((await orders.createOrder({ purchaserEmail: "invalid" }, at, invitation.token)).code, "VALIDATION_ERROR");
+  assert.equal((await repository.read()).privateInvitations[0].uses, 0);
+
+  const created = await orders.createOrder({ purchaserEmail: "proof@example.com" }, at, invitation.token);
+  assert.equal(created.ok, true); assert.equal(created.order.runnerCount, 0); assert.equal(created.order.providerProof, true);
+  assert.equal((await orders.getOrder(created.orderToken)).order.providerProof, true);
+  assert.equal((await repository.read()).privateInvitations[0].uses, 1);
+  assert.equal((await orders.createOrder({ purchaserEmail: "second@example.com" }, at, invitation.token)).code, "REGISTRATION_NOT_ACCEPTING");
+
+  const baseRunner = { firstName: "Provider", lastName: "Proof", email: "proof@example.com", phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", acceptTerms: true, acceptPrivacy: true };
+  assert.equal((await orders.addRunner(created.orderToken, { runner: { ...baseRunner, wfraMember: true, wfraMembershipNumber: "WFRA-PROOF" }, declarationMode: "later" }, at)).code, "PROVIDER_PROOF_REQUIREMENTS");
+  const added = await orders.addRunner(created.orderToken, { runner: baseRunner, declarationMode: "later" }, at);
+  assert.equal(added.ok, true); assert.equal(added.order.totalPence, 600);
+  assert.equal((await orders.addRunner(created.orderToken, { runner: { ...baseRunner, email: "extra@example.com" }, declarationMode: "later" }, at)).code, "PROVIDER_PROOF_REQUIREMENTS");
+
+  const checkout = await orders.checkout(created.orderToken, at);
+  assert.equal(checkout.ok, true); assert.equal(checkout.totalPence, 600);
+  assert.deepEqual(stripeCalls[0].runnerPricesPence, [600]); assert.match(checkout.checkoutUrl, /^https:\/\/checkout\.stripe\.com\//);
+  const final = await repository.read();
+  assert.equal(final.registrationState, "CLOSED"); assert.equal(final.phase3RegistrationState, "CLOSED");
+  assert.equal(capacitySummary(final).remaining, 119); assert.equal(final.orders[0].providerProof, true);
+  assert.equal((await service.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:30:00Z" }, at)).code, "PROVIDER_PROOF_ALREADY_USED");
 });
 
 test("production scheduler is harmless while CLOSED and empty", async () => {
