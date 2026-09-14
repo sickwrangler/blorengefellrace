@@ -50,6 +50,8 @@ export function createProductionApi({ service, phase3Integrations, repository })
     if (method === "POST" && pathname === "/api/v3/organiser/waiting-list/offer-next") return resultResponse(await phase3Integrations.offerNextWaitingPlace(actor));
     const resendManagement = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/resend-management$/);
     if (method === "POST" && resendManagement) return resultResponse(await phase3Integrations.resendManagementLink(actor, decodeURIComponent(resendManagement[1])));
+    const providerProofRefund = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/provider-proof-refund-request$/);
+    if (method === "POST" && providerProofRefund) return resultResponse(await phase3Integrations.requestProviderProofRefund(actor, decodeURIComponent(providerProofRefund[1])), 201);
     const refundDecision = pathname.match(/^\/api\/v3\/organiser\/refunds\/([^/]+)\/(approve|reject)$/);
     if (method === "POST" && refundDecision) return resultResponse(await phase3Integrations.decideRefund(actor, decodeURIComponent(refundDecision[1]), refundDecision[2] === "approve" ? "approved" : "rejected"));
     const executeRefund = pathname.match(/^\/api\/v3\/organiser\/refunds\/([^/]+)\/execute$/);

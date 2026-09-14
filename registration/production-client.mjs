@@ -40,6 +40,7 @@ export const prototype = {
   paymentStatus(token = this.managementToken()) { return token ? v3("/payments/status", { headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
   checkout(token = this.managementToken()) { return token ? v3("/payments/checkout", { method: "POST", headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "PAYMENTS_UNAVAILABLE" }); },
   requestRefund(token = this.managementToken()) { return token ? v3("/refunds/request", { method: "POST", headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
+  requestProviderProofRefund(id) { return v3(`/organiser/registrations/${encodeURIComponent(id)}/provider-proof-refund-request`, { method: "POST" }); },
   managementEntry(token = this.managementToken()) { return token ? v3("/management/entry", { headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
   recoverManagementLink(email) { return v3("/management/recover", { method: "POST", body: JSON.stringify({ email }) }); },
   amendEntry(changes, token = this.managementToken()) { return v3("/management/amend", { method: "POST", body: JSON.stringify(changes), headers: { "x-management-token": token } }); },
