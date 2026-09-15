@@ -16,11 +16,7 @@
     <div class="registration-context"><span id="environment-status" class="environment-status">Development · Closed</span></div>
     <h1>Blorenge Fell Race registration <span class="heading-translation" lang="cy">Cofrestru</span></h1>
     <p><a href="start-list.html">View the public start list</a> · <a href="manage.html">Already entered? Manage your entry or request a new secure link.</a></p>
-    <section id="invalid-link-panel" class="prototype-card" hidden>
-      <p class="eyebrow">Private access</p>
-      <h2>This link is no longer available.</h2>
-      <p>Please ask the race organiser for help.</p>
-    </section>
+    <div id="access-check-status" class="availability-check" role="status"><p>Checking registration availability…</p></div>
     <section id="closed-panel" class="prototype-card" hidden>
       <p class="eyebrow">Registration status</p><h2>2026 entries are not yet open</h2>
       <p>Entries are not open yet. Please check back here for opening details.</p><p><a class="button" href="../enter.html">Return to entry information</a></p>
@@ -69,7 +65,7 @@
               <label>Emergency contact phone number <input name="emergencyPhone" type="tel" autocomplete="off" required value="07700 900456"></label>
             </div>
             <label class="checkbox-field"><input name="acceptTerms" type="checkbox" required> I confirm these details are correct and agree to follow the race rules.</label>
-            <label class="checkbox-field"><input name="acceptPrivacy" type="checkbox" required> I have read the <a href="../privacy.html" target="_blank" rel="noopener">privacy notice</a>.</label>
+            <label class="checkbox-field"><input name="acceptPrivacy" type="checkbox" required><span>I have read the <a href="../privacy.html" target="_blank" rel="noopener">Privacy Notice</a>.</span></label>
             <div class="declaration-panel">
               <h3>WFRA competitor declaration</h3>
               <p>If the runner is completing this registration, they can sign below. Otherwise, leave the declaration blank and we will email them a secure link after payment.</p>
