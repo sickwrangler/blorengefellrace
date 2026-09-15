@@ -26,7 +26,7 @@
       <section id="test-landing" class="prototype-card prototype-intro">
         <p class="eyebrow">2026 race entry</p><h2>Enter the Blorenge Fell Race</h2>
         <p class="lede">In development, this journey accepts synthetic information only. It creates no real race entry, takes no money from a real payment method, and keeps payment sandboxed or disabled. Any enabled test email is redirected to an approved safe recipient.</p>
-        <div class="status-grid" aria-live="polite"><div><span>Places</span><strong id="status-places">0 of 120</strong></div><div><span>Waiting list</span><strong id="status-waiting">0</strong></div><div><span>Entry fee</span><strong id="status-price">£6 standard · £4 WFRA</strong></div></div>
+        <div class="status-grid" aria-live="polite"><div><span>Places</span><strong id="status-places">0 of 120</strong></div><div><span>Waiting list</span><strong id="status-waiting">0</strong></div><div><span>Entry fee</span><strong id="status-price">£6 standard · £4 Welsh Fell Runners Association member</strong></div></div>
         <div id="runner-recovery" class="form-alert" role="alert" hidden></div>
         <label>Purchaser email address <span class="hint">Used for the group payment summary; synthetic address only</span><input id="purchaser-email" type="email" value="alex.runner@example.com" required></label>
         <div class="form-actions"><button id="start-test" class="button" type="button">Start a test registration</button><a class="secondary-link" href="dashboard.html">View organiser test area</a></div>
@@ -52,8 +52,11 @@
               <label>Race category<select name="genderCategory" required><option value="">Select one</option><option value="Female">Female</option><option value="Male / Open" selected>Male / Open</option></select></label>
               <label>Date of birth <input name="dateOfBirth" type="date" autocomplete="bday" required value="1990-06-15"></label>
               <label>Club <span class="hint">Optional</span><input name="club" autocomplete="organization" value="Example Harriers"></label>
-              <label>WFRA member?<span class="hint">£4 member price; £6 standard price.</span><select name="wfraMember" required><option value="no" selected>No</option><option value="yes">Yes</option></select></label>
-              <label id="wfra-number-field" hidden>WFRA membership number <input name="wfraMembershipNumber" autocomplete="off" maxlength="80"></label>
+              <div class="membership-question">
+                <label>Are you a Welsh Fell Runners Association member?<span class="hint">£4 member price; £6 standard price.</span><select name="wfraMember" required><option value="no" selected>No</option><option value="yes">Yes</option></select></label>
+                <p class="hint membership-guidance">Not a member? You can <a href="https://welshfellrunnersassociation.org.uk/en/join-us">join the Welsh Fell Runners Association</a> online.</p>
+              </div>
+              <label id="wfra-number-field" hidden>Welsh Fell Runners Association membership number <input name="wfraMembershipNumber" autocomplete="off" maxlength="80"></label>
             </div>
             <div class="form-actions"><button id="details-continue" class="button" type="button">Continue</button></div>
           </section>

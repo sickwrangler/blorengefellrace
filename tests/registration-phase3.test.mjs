@@ -204,7 +204,7 @@ test("runner UI is English-only, contains the approved fields and has no languag
   const html = fs.readFileSync("registration/index.html", "utf8");
   for (const label of [
     "Email address", "First name", "Last name", "Phone number", "Address line 1", "Address line 2", "City", "Postcode",
-    "Race category", "Date of birth", "Club", "WFRA member?", "WFRA membership number",
+    "Race category", "Date of birth", "Club", "Are you a Welsh Fell Runners Association member?", "Welsh Fell Runners Association membership number",
     "Emergency contact name", "Emergency contact phone number", "Runner full name", "Parent or legal guardian full name"
   ]) assert.ok(html.includes(label), `missing English label: ${label}`);
   assert.ok(html.includes('<option value="Female">Female</option>'));
