@@ -229,6 +229,8 @@ hr { height: 1px; margin: var(--space-7) 0; border: 0; background: var(--colour-
 .managed-image { margin: 0; }
 .managed-image img { width: 100%; background: var(--colour-stone); }
 .managed-image--hero img { aspect-ratio: 16 / 9; object-fit: cover; }
+.managed-image--content { width: min(100%, var(--reading-width)); justify-self: start; }
+.managed-image--content img { aspect-ratio: 3 / 2; object-fit: cover; }
 [data-image-role="feature"] { aspect-ratio: 3 / 2; }
 [data-image-role="card"] { aspect-ratio: 4 / 3; }
 .event-facts { display: grid; margin-block: var(--space-6); border-top: 2px solid var(--colour-forest); }

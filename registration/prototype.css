@@ -17,6 +17,8 @@ body { min-width: 0; }
 .step-indicator { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
 .step-indicator progress { max-width: 10rem; accent-color: var(--colour-forest); }
 .field-grid { display: grid; gap: 1rem; }
+.membership-question { display: grid; align-content: start; gap: .3rem; min-width: 0; }
+.membership-guidance { margin: 0; }
 label { display: grid; gap: .3rem; font-weight: 650; }
 input, select { width: 100%; min-height: 2.9rem; padding: .55rem .65rem; border: 1px solid var(--colour-stone-dark); border-radius: var(--radius-small); background: #fff; color: var(--colour-ink); }
 input[aria-invalid="true"], select[aria-invalid="true"] { border: .15rem solid #a12b21; }

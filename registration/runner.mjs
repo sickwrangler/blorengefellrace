@@ -99,7 +99,7 @@ function showStage(number) {
 
 function renderReview() {
   const data = payload(); const declaration = data.declarationTiming === "later" ? "Declaration to be completed after entry" : `Complete — ${data.declarationName} (${data.declarationSignatoryRole})`;
-  const fields = { Name: `${data.firstName} ${data.lastName}`, Email: data.email, Category: data.genderCategory, Club: data.club || "Unattached", "WFRA member": data.wfraMember ? "Yes" : "No", Price: data.wfraMember ? "£4.00" : "£6.00", Declaration: declaration };
+  const fields = { Name: `${data.firstName} ${data.lastName}`, Email: data.email, Category: data.genderCategory, Club: data.club || "Unattached", "Welsh Fell Runners Association member": data.wfraMember ? "Yes" : "No", Price: data.wfraMember ? "£4.00" : "£6.00", Declaration: declaration };
   document.querySelector("#review-list").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
 }
 
@@ -139,7 +139,7 @@ function showApiError(result) {
 async function refreshStatus() {
   const status = await prototype.status();
   if (!Number.isFinite(status.accepted) || !Number.isFinite(status.capacity)) return { environment: "production", operationalState: "CLOSED", unavailable: true };
-  document.querySelector("#status-places").textContent = `${status.accepted} / ${status.capacity}`; document.querySelector("#status-waiting").textContent = status.waiting; const standard = (status.pricing?.standardPricePence ?? 600) / 100; const member = (status.pricing?.wfraMemberPricePence ?? 400) / 100; document.querySelector("#status-price").textContent = `£${standard.toFixed(0)} standard · £${member.toFixed(0)} WFRA`;
+  document.querySelector("#status-places").textContent = `${status.accepted} / ${status.capacity}`; document.querySelector("#status-waiting").textContent = status.waiting; const standard = (status.pricing?.standardPricePence ?? 600) / 100; const member = (status.pricing?.wfraMemberPricePence ?? 400) / 100; document.querySelector("#status-price").textContent = `£${standard.toFixed(0)} standard · £${member.toFixed(0)} Welsh Fell Runners Association member`;
   const recovery = document.querySelector("#runner-recovery"); recovery.hidden = !status.recovery; recovery.textContent = status.recovery?.message || ""; document.querySelector("#start-test").disabled = Boolean(status.recovery);
   return status;
 }

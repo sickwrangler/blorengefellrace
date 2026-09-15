@@ -34,6 +34,24 @@ test("runner registration removes prototype and internal operational wording", a
   assert.doesNotMatch(runner, /form\.elements\.declarationTiming/);
 });
 
+test("runner membership wording introduces the association and links to joining guidance", async () => {
+  const [html, runner] = await Promise.all([
+    read("registration/index.html"),
+    read("registration/runner.mjs")
+  ]);
+
+  assert.match(html, /Are you a Welsh Fell Runners Association member\?/);
+  assert.match(html, /Welsh Fell Runners Association membership number/);
+  assert.match(html, />join the Welsh Fell Runners Association<\/a>/);
+  assert.match(html, /href="https:\/\/welshfellrunnersassociation\.org\.uk\/en\/join-us"/);
+  assert.match(html, /£6 standard · £4 Welsh Fell Runners Association member/);
+  assert.match(runner, /"Welsh Fell Runners Association member"/);
+  for (const incorrect of ["Welsh Fell Running Association", "Welsh Feel Running Association"]) {
+    assert.doesNotMatch(html, new RegExp(incorrect, "i"));
+    assert.doesNotMatch(runner, new RegExp(incorrect, "i"));
+  }
+});
+
 test("declaration wording hides its version while retaining audit metadata", async () => {
   const [runner, declaration] = await Promise.all([
     read("registration/runner.mjs"),
