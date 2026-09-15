@@ -190,7 +190,7 @@ test("production artifacts are exact and physically exclude browser test control
     for (const illustration of ["images/kitswap.png", "images/litterpickwalk.png"]) assert.equal(artifact.appFiles.includes(illustration), false);
     const runnerPage = fs.readFileSync(path.join(root, "site/app/registration/index.html"), "utf8");
     for (const internalPhrase of ["Production ·", "persistent development API", "No entry or payment can be created"]) assert.equal(runnerPage.includes(internalPhrase), false);
-    assert.ok(runnerPage.includes("Entries are not open yet. Please check back here for opening details."));
+    assert.ok(runnerPage.includes("Entries open on 28 September 2026. Please return then."));
     const dashboardScript = fs.readFileSync(path.join(root, "site/app/registration/dashboard.mjs"), "utf8");
     for (const required of ["Create controlled proof refund request", "Approve full ${refundKind} refund", "Revoke proof access"]) assert.ok(dashboardScript.includes(required));
     assert.equal(dashboardScript.includes("Stripe sandbox refund"), false);
