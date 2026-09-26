@@ -1,5 +1,7 @@
 # Phase 3 production artifact manifest
 
+> **Historical manifest snapshot.** Generate/validate the current artifact from code and use the [operations deployment guide](../operations/deployment-and-rollback.md) for live releases.
+
 Status: deployed in CLOSED production, with the public-content allowlist updated through the normal reviewed deployment process.
 
 The Static Web Apps artifact contains 88 files: 70 web files and 18 managed-API files. The separate production scheduler package contains 17 files. An unexpected file makes staging fail.

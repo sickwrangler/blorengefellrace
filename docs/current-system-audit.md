@@ -1,59 +1,42 @@
 # Current system overview
 
-Last reviewed: 1 September 2026
+Last verified: 26 September 2026. This supersedes the September 2026 static-only audit. Detailed operation is documented in [docs/operations/](operations/README.md).
 
-## Summary
+## Production baseline
 
-The Blorenge Fell Race website is a static public information site built with HTML, CSS, browser JavaScript, and images. It is hosted by Azure Static Web Apps and published from the project's GitHub repository through GitHub Actions.
+- GitHub `main`: `2b4a4d17d6b17d42727650a4855135e78e4349ba`
+- Latest production GitHub Actions deployment: successful
+- Public site: <https://www.blorengefellrace.cymru/>
+- Operational state: `PRIVATE_LIVE`
+- Capacity: 120
+- Stripe: live/enabled
+- ACS Email: production/enabled
+- Junior entry: disabled
+- Public opening announcement: 28 September 2026 (informational; not an automatic transition)
 
-The public production website is:
+## Current architecture
 
-<https://www.blorengefellrace.cymru/>
+Azure Static Web Apps hosts public static content, production registration pages and a managed registration API. Private registration state is stored in Azure Table `RegistrationProduction`, partition `blorenge-2026-live`. Stripe handles hosted Checkout/webhooks/refunds. ACS Email sends transactional messages. A separate Node 22 Flex Consumption Function runs scheduled work every 30 minutes. Microsoft Entra/Static Web Apps role `organiser` protects the dashboard and organiser APIs. Application Insights, Log Analytics, ACS diagnostics, an action group and four scheduled-query alerts provide monitoring.
 
-## Application
+The public start list is a minimised API projection of confirmed registration data. It is not a spreadsheet or manually edited copy. Results archives and registration state remain separate.
 
-The site does not require a server-side application, package build, database, or application API. Azure serves the files in the repository directly.
+## Verified production resources
 
-Main public pages:
+Resource group `rg-blorenge-registration-prod-weu` contains storage `stblorengeregprodc1b64c`, table `RegistrationProduction`, private backup and scheduler-package containers, ACS/ECS resources with suffix `c1b64c`, scheduler `func-blorenge-registration-scheduler-prod-c1b64c`, Flex plan, Log Analytics, Application Insights, action group, four registration alert rules and the Application Insights failure-anomaly detector. See the [resource inventory](operations/resource-inventory.md).
 
-- Home
-- Information
-- Route
-- Entry
-- Results
-- Privacy
-
-Shared navigation and footer content is stored under `components/`. Site images and other static media are stored under `images/`. The confirmed route GPX is stored under `downloads/`, while the editorial photo catalogue is stored under `data/photos/`.
-
-## Public services
-
-The site uses several external public services:
-
-- A public registration service when confirmed (none is active on the current entry page)
-- Published Google Sheets and OpenSheet for race results
-- Google Analytics for site usage measurement
-- Leaflet and OpenStreetMap for the interactive route map
-- Google Fonts, YouTube and weatherwidget.io for public content and presentation
-
-Registration submissions and published result data are managed by those external services rather than stored by this static website.
+Storage public blob access is disabled; versioning and 35-day soft deletion are enabled. The `www` hostname is Ready. Azure records the bare apex hostname as Failed; no DNS change was made during this audit.
 
 ## Deployment
 
-GitHub stores the website source and GitHub Actions publishes reviewed changes to Azure Static Web Apps. Pull requests can be used to review proposed changes in a separate preview before they are approved for production.
+GitHub Actions validates the full site/registration suite and exact allowlists. A push to `main` deploys 71 application files and 18 managed API files. Documentation, infrastructure, tests, fixtures and development/private files are excluded. The 17-file scheduler artifact is staged/validated but is not automatically deployed by the current production workflow.
 
-There is no compilation or server startup step. The repository root is served as the website.
+A code deployment does not normally change registrations, provider transactions or operational state. Production data lives separately. Pull requests currently validate but do not receive an Azure preview from the production workflow.
 
-## Public-site checks
+## Known operational limitations
 
-At the review date:
+- The organiser dashboard has no state-transition button; the authenticated confirmation-protected API is supported.
+- Automatic daily backup creation is policy/code but not wired/verified in the deployed scheduler artifact; controlled snapshots are manual.
+- Scheduler execution metrics were healthy, but no completion trace was returned in a three-hour query. The trace-based heartbeat alert is configured but not independently proven to alert on total trace absence.
+- GitHub reports `main` as not branch-protected.
 
-- the main public pages responded successfully over HTTPS;
-- representative images and shared styles were available;
-- the public registration form and results sources were reachable; and
-- sampled production application files matched the reviewed repository version.
-
-No registration form was submitted during these checks.
-
-## Further review
-
-Detailed operational and security review information is maintained separately from the public website.
+These findings were documented only. No application, infrastructure, provider, configuration, state or production data was changed.

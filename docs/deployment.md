@@ -1,36 +1,42 @@
 # Deployment
 
-## Public website
+Current production deployment details. Operational release/rollback instructions are in [operations/deployment-and-rollback.md](operations/deployment-and-rollback.md).
 
-The production website is hosted by Azure Static Web Apps:
+## Production
 
-<https://www.blorengefellrace.cymru/>
+- Public URL: <https://www.blorengefellrace.cymru/>
+- Azure Static Web App: `BlorengeFellRace` (Free), resource group `Blorenge`
+- GitHub repository: `sickwrangler/blorengefellrace`
+- Production branch: `main`
+- Verified baseline: `2b4a4d17d6b17d42727650a4855135e78e4349ba`
 
-## Deployment model
+The production application is not merely the repository root. `scripts/stage-deployment-artifacts.mjs production-registration` builds an exact allowlisted artifact containing the static public site, production registration browser files and managed API. It excludes documentation, infrastructure, tests, fixtures, development clients/reset controls and private files.
 
-The website source is stored in GitHub. GitHub Actions sends reviewed website versions to Azure Static Web Apps.
+## GitHub Actions
 
-The site is deployed directly from the repository root:
+`.github/workflows/azure-static-web-apps-ambitious-bay-0339ed203.yml` runs on pull requests and pushes affecting `main`. It installs locked API/scheduler packages and runs all validators/tests. Pull requests currently validate only; deployment is guarded by `github.event_name == 'push'`, so no Azure PR preview is created by this workflow.
 
-- there is no package installation;
-- there is no compilation step;
-- there is no server startup command; and
-- there is no application API or database migration.
+After an approved merge/push to `main`, it deploys:
 
-Pull requests can receive a separate Azure preview URL. A preview allows maintainers to check a proposed version without changing the production website. Preview URLs do not use the production custom domain.
+- `.deployment/production-registration/app` as the Static Web App;
+- `.deployment/production-registration/api` as managed Functions.
 
-## Safe release process
+At the verified baseline, the allowlists contain 71 application files and 18 API files. The workflow also produces a 17-file production scheduler package for validation, but it does **not** deploy that package to the external Function App. Scheduler changes need a separate controlled Azure release.
 
-1. Make changes on a non-production branch.
-2. Review the source diff and run the checks in `local-development.md`.
-3. Open a pull request and wait for its preview deployment.
-4. Check the preview on desktop and mobile without submitting public forms.
-5. Obtain approval before merging the pull request.
-6. After an approved production deployment, check the main public pages and external integrations.
+## Production data and settings
 
-## Public boundaries
+Deployment does not normally change/delete registrations. Authoritative state is separate in Azure Table `RegistrationProduction`, partition `blorenge-2026-live`. Stripe payment/refund records are external. App settings, secrets, ACS resources, scheduler configuration and operational state are not changed by ordinary content deployment.
 
-Registration, results, published documents, statistics, and analytics depend on the external public services described in `architecture.md`. A website deployment does not modify registration submissions or published race-result data.
+Rolling code back does not roll back Table data or Stripe. Review schema/domain compatibility and reconcile providers before a revert. Never force-push `main`.
 
-Detailed operational and security review information is maintained separately from the public website.
+## Scheduler deployment
 
+The external scheduler is `func-blorenge-registration-scheduler-prod-c1b64c`. Its package belongs in private container `scheduler-app-package` and its runtime/configuration are infrastructure operations. The repository currently has no active GitHub step that publishes the staged scheduler package. Do not infer scheduler deployment from a green Static Web Apps run.
+
+## Development
+
+The stable synthetic environment uses a separate workflow, Static Web App, managed API, storage, Stripe test mode and scheduler. A push to `codex/development` within configured paths deploys that isolated environment. It must never receive production credentials/data.
+
+## Public boundary
+
+Operational documentation under `docs/`, infrastructure, scripts, tests, package metadata and source server modules are excluded from the production artifact. `/docs/...` and internal operational files must return 404 publicly.
