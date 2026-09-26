@@ -1,60 +1,66 @@
-# Architecture
+# Current architecture
+
+Last verified: 26 September 2026. For operating procedures, use the [registration operations handbook](operations/README.md).
 
 ## Overview
 
-The Blorenge Fell Race website is a static, browser-rendered site. Azure Static Web Apps serves HTML, CSS, JavaScript, and images directly. There is no application server, API, or database in this repository.
+The Blorenge Fell Race site combines a static public website and production registration browser application with an Azure Static Web Apps managed Functions API. Registration data is stored privately in Azure Table Storage. Stripe provides live Checkout/refunds and authoritative signed events; Azure Communication Services sends transactional email. A separate Azure Function handles 30-minute scheduled work. Microsoft Entra/Static Web Apps protects organiser operations.
 
 ```mermaid
 flowchart LR
-    U[User / browser]
-    SITE[Public static website<br/>HTML / CSS / JavaScript / images]
-    DATA[Committed public data<br/>results JSON / GPX / photo manifest]
-    AZ[Azure Static Web Apps]
-    GH[GitHub repository]
-    GA[GitHub Actions deployment]
-    RESULTS[Google Sheets and OpenSheet<br/>race results]
-    ANALYTICS[Google Analytics]
-    MEDIA[Fonts, Leaflet, OpenStreetMap,<br/>weather and video]
-
-    U --> AZ --> SITE
-    GH --> GA --> AZ
-    SITE --> DATA
-    SITE --> RESULTS
-    SITE --> ANALYTICS
-    SITE --> MEDIA
+    U[Runner / public browser] --> SWA[Azure Static Web App]
+    O[Organiser<br/>Entra + organiser role] --> SWA
+    SWA --> STATIC[Static HTML / CSS / JavaScript<br/>images / results / GPX]
+    SWA --> API[Managed production API]
+    API --> TABLE[(Azure Table<br/>RegistrationProduction)]
+    API --> STRIPE[Stripe live]
+    API --> ACS[ACS Email]
+    API --> LIST[Public start-list projection]
+    SCHED[External Function scheduler] --> TABLE
+    SCHED --> ACS
+    STORE[Production Storage] --> TABLE
+    STORE --> BACKUPS[Private backup blobs]
+    STORE --> PACKAGE[Scheduler package]
+    MON[Application Insights<br/>Log Analytics / alerts] -.-> API
+    MON -.-> SCHED
+    GH[GitHub] --> ACTIONS[GitHub Actions] --> SWA
+    RESULTS[Published results sources] --> STATIC
+    MAPS[Leaflet / OpenStreetMap] --> STATIC
 ```
 
 ## Components
 
-| Component | Location | Responsibility |
-|---|---|---|
-| Home | `index.html` | Event summary, location, and community and environmental content |
-| Information | `info.html` | Travel, kit, race information, images, and statistics |
-| Route | `route.html` | Confirmed route narrative, interactive/static maps, images, and GPX download |
-| Entry | `enter.html` | Publishes confirmed entry facts and registration availability |
-| Results | `result.html` | Loads and presents current and historical published results |
-| Privacy | `privacy.html` | Public privacy information and contact details |
-| Shared navigation and footer | `components/` | Common page navigation and footer content |
-| Styling | `style*.css` and component CSS | Layout, responsive presentation, tables, route, and winner styling |
-| Behaviour | `script.js`, `route-map.js`, `photo-manager.js`, and inline scripts | Page interaction, route map, photo assignment, results rendering, analytics, and public embeds |
-| Public data | `data/public/`, `data/photos/`, and `downloads/` | Normalized results, editorial photo catalogue, and the public route GPX |
-| Media | `images/` | Logos, static maps, source photographs, and generated display photographs |
+| Component | Responsibility |
+|---|---|
+| Static public pages | Race information, route, GPX, photographs, results, privacy and content |
+| Registration browser pages | Order of up to five runners, Checkout return, management, declaration and start list |
+| Organiser dashboard | Authenticated entry/refund/transfer/declaration/race-number/invitation operations |
+| Managed production API | Validation, state enforcement, ETag transactions, provider integration and public projection |
+| `RegistrationProduction` | Authoritative private event state in partition `blorenge-2026-live` |
+| Stripe | Hosted live payment, webhook truth and refunds |
+| ACS Email | Transactional runner messages and secure links |
+| External scheduler | Waiting-list/declaration reminders and reservation/offer/order expiry every 30 minutes |
+| Storage blobs | Private backups, Functions host metadata and scheduler deployment package |
+| Monitoring | Application Insights, Log Analytics, ACS diagnostics, alert rules/action group |
+| GitHub Actions | Validates exact artifacts and deploys the Static Web App/managed API from `main` |
 
-## Data flow
+## Registration data flow
 
-- General event content, the confirmed route GPX, the photo manifest and display images are committed as static files.
-- The current entry page does not activate a registration service; it will link or embed the confirmed public service when entries open.
-- Results are loaded in the visitor's browser from published Google Sheets and OpenSheet endpoints.
-- The interactive route map uses Leaflet and OpenStreetMap tiles; the route description and GPX remain available if either external resource fails.
-- Google Analytics receives website usage events from the browser.
-- Public contact links open the visitor's email application; the website does not send email itself.
+The runner browser never receives storage credentials and cannot choose price/state. The API validates the order, calculates £6 standard or £4 WFRA price, and reserves capacity when Checkout starts. Stripe sends signed events to the webhook; the API reconciles those events before confirming payment/place. The browser return page only reads server state.
 
-The repository contains no server-side payment, email, database, or storage implementation. The JSON photo manifest and generated images are repository files, not a separate media service.
+Private runner, contact, emergency, declaration, secure-token, payment-operational and audit data remain in production storage. The public start list returns only the current confirmed runner's permitted public fields. Results archives remain separate public data sources.
 
-The unlinked registration prototype has local and Azure-preview simulations plus a separate, stable Azure development environment for shared synthetic testing. The latter uses managed Functions, Entra organiser access and isolated Table storage. None is a production registration service; production remains closed and has no registration API or private data store.
+Payment and declaration are independent. A paid runner may require declaration completion. Email delivery failure does not undo payment or registration. Scheduled expiry/reminders are asynchronous; submissions, Checkout creation, webhooks, refunds and organiser changes are synchronous.
 
-## Deployment flow
+## Public content services
 
-GitHub stores the source. GitHub Actions publishes reviewed website versions to Azure Static Web Apps. Pull-request previews provide a separate URL for checking proposed changes before production approval.
+- General content, normalized 2025 results, GPX, photo manifest and generated images are committed public files.
+- Historical/published result sources may use Google Sheets/OpenSheet.
+- Route display uses Leaflet/OpenStreetMap; committed route facts/GPX remain available if tiles fail.
+- Existing analytics and public embeds run in the browser.
 
-Detailed operational and security review information is maintained separately from the public website.
+## Deployment and data separation
+
+The production workflow creates an allowlisted application/API artifact; repository docs, infrastructure, tests, fixtures, private files and development controls are excluded. A merge to `main` deploys application code but does not normally modify production registrations or operational state. The external scheduler package is validated/staged by the workflow but deployed separately.
+
+Production and development have separate Static Web Apps, storage accounts, tables/partitions, Stripe modes, ACS controls and schedulers. Development accepts synthetic data only. See [environments](operations/environments.md).

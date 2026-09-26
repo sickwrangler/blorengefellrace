@@ -1,5 +1,7 @@
 # Phase 3 — Production-ready registration system
 
+> **Historical implementation plan.** Phase 3 production registration is now deployed. Use the [current operations handbook](operations/README.md) for live architecture and procedures.
+
 ## Purpose and release principle
 
 Phase 3 will turn the tested registration model into a supportable production service. It must preserve the separation between the public production website, the stable synthetic development environment and private production registration data.

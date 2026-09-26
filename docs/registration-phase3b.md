@@ -1,5 +1,7 @@
 # Phase 3B — controlled payments and communications
 
+> **Historical phase record.** Stripe live and ACS production email are now enabled. Use the [current operations handbook](operations/README.md) rather than these development-era gates.
+
 ## Status
 
 Phase 3B.2 is complete in the isolated stable development environment. Phase 3B.3 adds the multi-runner order, individual declaration and per-runner refund model on the Phase 3 feature branch. External payment and email remain independently fail-closed unless the isolated development integrations are explicitly enabled and fully configured. Production is unchanged and contains no registration artifact.

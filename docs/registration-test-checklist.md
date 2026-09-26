@@ -1,5 +1,7 @@
 # Registration production-readiness rehearsal
 
+> **Historical/synthetic-development checklist.** Production is now deployed and `PRIVATE_LIVE`. Do not use this as live operations guidance; use the [current operations handbook](operations/README.md).
+
 Use the isolated stable development site for this rehearsal. It runs the production-shaped user journey with synthetic data, Stripe in test mode, controlled test email and organiser authentication. Do not change the production site from `CLOSED`, and never enter genuine runner information.
 
 ## Before testing
