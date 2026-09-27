@@ -1,6 +1,6 @@
 import { gzipSync, gunzipSync } from "node:zlib";
 import { AzureSASCredential, TableClient } from "@azure/data-tables";
-import { createProductionBootstrap, validateProductionState } from "./shared/server/production-bootstrap.mjs";
+import { applyProductionRuntimeConfiguration, createProductionBootstrap, validateProductionState } from "./shared/server/production-bootstrap.mjs";
 
 const ROW_KEY = "registration-state";
 const CHUNK_SIZE = 60_000;
@@ -37,13 +37,13 @@ export function createProductionAzureTableTransport({ accountName, tableName, sa
   async function loadPartition() {
     try {
       const entity = await client.getEntity(partitionKey, ROW_KEY);
-      return { state: decodeProductionState(entity), etag: entity.etag };
+      return { state: applyProductionRuntimeConfiguration(decodeProductionState(entity), { under18EntriesEnabled }), etag: entity.etag };
     } catch (error) {
       if (error?.statusCode !== 404) throw error;
       try { await client.createEntity(entityFor(partitionKey, baseline())); }
       catch (createError) { if (createError?.statusCode !== 409) throw createError; }
       const entity = await client.getEntity(partitionKey, ROW_KEY);
-      return { state: decodeProductionState(entity), etag: entity.etag };
+      return { state: applyProductionRuntimeConfiguration(decodeProductionState(entity), { under18EntriesEnabled }), etag: entity.etag };
     }
   }
 

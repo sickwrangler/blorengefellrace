@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createProductionBootstrap, productionAvailability, validateProductionState } from "../registration/server/production-bootstrap.mjs";
+import { applyProductionRuntimeConfiguration, createProductionBootstrap, productionAvailability, validateProductionState } from "../registration/server/production-bootstrap.mjs";
 import { createMemoryRepository } from "../registration/server/repositories.mjs";
 import { capacitySummary, issuePrivateInvitation, transitionRegistrationState } from "../registration/server/phase3-domain.mjs";
 import { authorize as authorizeProduction, staticWebAppActor } from "../registration/server/production-auth.mjs";
@@ -27,6 +27,18 @@ test("production bootstrap is CLOSED, exact, empty and junior-gated", () => {
   assert.equal(state.environment, "production"); assert.equal(state.registrationState, "CLOSED"); assert.equal(state.phase3RegistrationState, "CLOSED"); assert.equal(state.event.capacity, 120); assert.equal(state.event.entryFeePence, 600); assert.equal(state.event.wfraMemberPricePence, 400); assert.equal(state.event.under18EntriesEnabled, false);
   for (const name of ["registrations", "orders", "payments", "refundRequests", "reservations", "waitingList", "waitingListOffers", "privateInvitations", "scheduledWork"]) assert.deepEqual(state[name], []);
   assert.deepEqual(productionAvailability({ environment: "production", registrationState: "OPEN" }), { available: false, operationalState: "CLOSED" });
+});
+
+test("the production junior launch setting is authoritative for existing stored state", () => {
+  const stored = createProductionBootstrap({ under18EntriesEnabled: false });
+  stored.registrations.push({ id: "existing-real-entry" });
+  const enabled = applyProductionRuntimeConfiguration(stored, { under18EntriesEnabled: true });
+  assert.equal(stored.event.under18EntriesEnabled, false);
+  assert.equal(enabled.event.under18EntriesEnabled, true);
+  assert.deepEqual(enabled.registrations, stored.registrations);
+  const disabledAgain = applyProductionRuntimeConfiguration(enabled, { under18EntriesEnabled: false });
+  assert.equal(disabledAgain.event.under18EntriesEnabled, false);
+  assert.deepEqual(disabledAgain.registrations, stored.registrations);
 });
 
 test("production configuration rejects environment crossover and permits disabled providers", () => {
