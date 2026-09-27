@@ -47,6 +47,11 @@ export function validateProductionState(state) {
   return state;
 }
 
+export function applyProductionRuntimeConfiguration(state, { under18EntriesEnabled = false } = {}) {
+  validateProductionState(state);
+  return { ...state, event: { ...state.event, under18EntriesEnabled: under18EntriesEnabled === true } };
+}
+
 export function productionAvailability(state) {
   try {
     validateProductionState(state);
