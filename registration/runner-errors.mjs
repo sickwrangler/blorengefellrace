@@ -34,6 +34,7 @@ export function runnerMessageForCode(code) {
     REGISTRATION_NOT_ACCEPTING: "Registration is not currently accepting entries.",
     GUARDIAN_DECLARATION_REQUIRED: "A parent or legal guardian must complete the declaration for a runner aged 16 or 17.",
     GUARDIAN_MUST_COMPLETE_DECLARATION: "A parent or legal guardian must provide their full name and confirm the declaration.",
+    GUARDIAN_NAME_MATCHES_RUNNER: "Enter the parent or legal guardian's full name, not the runner's name.",
     PAYMENTS_UNAVAILABLE: "Online payment is not available yet. Your synthetic entry details have been retained.",
     MANAGEMENT_TOKEN_INVALID: "This secure entry link is no longer available.",
     CAPACITY_FULL: "There are currently no entry places available.",

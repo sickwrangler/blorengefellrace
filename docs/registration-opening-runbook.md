@@ -1,6 +1,6 @@
 # Production registration opening runbook
 
-This is a checklist, not authority to open. Production was verified `PRIVATE_LIVE` on 26 September 2026. The public site announces 28 September 2026, but no opening time has been persisted and `intendedOpeningDate` is null. A date never performs the state transition automatically.
+This is a checklist, not authority to open. Production was verified `PRIVATE_LIVE` before the approved 27 September 2026 launch sequence. Public opening messaging is derived from the authoritative registration state. A date never performs the state transition automatically.
 
 Use the [operations handbook](operations/README.md), especially the [emergency sheet](operations/emergency-cheat-sheet.md), before opening.
 
@@ -12,7 +12,7 @@ Record explicit approval for:
 2. transition `PRIVATE_LIVE → OPEN`;
 3. current permissions/terms/privacy/declaration wording;
 4. capacity 120 and prices £6/£4;
-5. junior entry remains disabled unless separately approved;
+5. junior entry is enabled only after compatible guardian-declaration code is deployed and verified;
 6. Stripe live/webhook and ACS sender/delivery health;
 7. organiser access and emergency pause capability;
 8. scheduler health and waiting-list policy;

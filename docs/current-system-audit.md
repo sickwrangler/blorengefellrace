@@ -1,10 +1,10 @@
 # Current system overview
 
-Last verified: 26 September 2026. This supersedes the September 2026 static-only audit. Detailed operation is documented in [docs/operations/](operations/README.md).
+Last verified: 27 September 2026. This supersedes the September 2026 static-only audit. Detailed operation is documented in [docs/operations/](operations/README.md).
 
 ## Production baseline
 
-- GitHub `main`: `2b4a4d17d6b17d42727650a4855135e78e4349ba`
+- GitHub `main`: `268b1a7fa5814b29f2b1cfb3ce174b7bb280034f`
 - Latest production GitHub Actions deployment: successful
 - Public site: <https://www.blorengefellrace.cymru/>
 - Operational state: `PRIVATE_LIVE`
@@ -12,7 +12,7 @@ Last verified: 26 September 2026. This supersedes the September 2026 static-only
 - Stripe: live/enabled
 - ACS Email: production/enabled
 - Junior entry: disabled
-- Public opening announcement: 28 September 2026 (informational; not an automatic transition)
+- Public opening messaging: derived from the authoritative registration state
 
 ## Current architecture
 
@@ -37,6 +37,6 @@ A code deployment does not normally change registrations, provider transactions 
 - The organiser dashboard has no state-transition button; the authenticated confirmation-protected API is supported.
 - Automatic daily backup creation is policy/code but not wired/verified in the deployed scheduler artifact; controlled snapshots are manual.
 - Scheduler execution metrics were healthy, but no completion trace was returned in a three-hour query. The trace-based heartbeat alert is configured but not independently proven to alert on total trace absence.
-- GitHub reports `main` as not branch-protected.
+- GitHub ruleset `Protect main` requires a pull request and the production `Build and Deploy Job`; force pushes and deletion are blocked.
 
 These findings were documented only. No application, infrastructure, provider, configuration, state or production data was changed.

@@ -34,9 +34,9 @@ Start with the [emergency cheat sheet](emergency-cheat-sheet.md). Normal organis
 - Production URL: <https://www.blorengefellrace.cymru>
 - Organiser dashboard: <https://www.blorengefellrace.cymru/registration/dashboard.html>
 - GitHub repository: `sickwrangler/blorengefellrace`
-- Verified production commit: `2b4a4d17d6b17d42727650a4855135e78e4349ba`
+- Verified pre-launch production commit: `268b1a7fa5814b29f2b1cfb3ce174b7bb280034f`
 - Operational state at verification: `PRIVATE_LIVE`
-- Public opening announcement: 28 September 2026
+- Public opening messaging: derived from the authoritative registration state
 - Production data is private and separate from the Git repository and deployment artifact.
 
 The announced date does not automatically open registration. A confirmed, authenticated state transition is still required.
