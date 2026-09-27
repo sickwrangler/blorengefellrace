@@ -226,3 +226,12 @@ For serious or unclear incidents: **PAUSE/CLOSE new registrations before repairi
 - **Diagnose/recover:** repair through reviewed infrastructure change and run a controlled non-sensitive proof.
 - **Do not:** generate real charges/emails solely to test without approval or assume silence means health.
 - **Escalate:** Azure monitoring owner; document temporary manual monitoring cadence.
+
+## 26. Reads healthy but production writes return 503
+
+- **Symptoms:** public/static pages and status reads succeed, valid order creation returns 503, and Azure Storage records failed `UpdateEntity` operations.
+- **Contain:** if failures repeat or state integrity is uncertain, transition `OPEN` to `PAUSED`; do not restore a backup merely because writes fail.
+- **Inspect:** `registration_state_write_failed`, the aggregate storage-headroom diagnostic, Table `Transactions` split by `ApiName=UpdateEntity`/response type, managed API `FunctionErrors`, and deployed API **and scheduler** serializer versions.
+- **Known 27 September 2026 cause:** 60,000-character Base64 chunks exceeded the safe Azure Table UTF-16 string-property boundary. The resolution was 30,000-character chunks in the shared codec.
+- **Diagnose/recover:** distinguish service/auth/ETag/size errors; deploy reviewed code through the protected workflow; deploy the external scheduler separately when its package changed; prove natural writes/timer health.
+- **Do not:** directly edit chunks, bypass the pre-write size guard, expose compressed state, restore data without corruption evidence, or manufacture production registrations.

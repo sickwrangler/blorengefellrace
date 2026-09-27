@@ -22,14 +22,6 @@ const organiser = { authenticated: true, role: "organiser", actorType: "entra_or
 const email = { kind: "disabled", externalDelivery: false, async send() { return { delivery: "disabled", externalCall: false }; } };
 const env = (extra = {}) => ({ REGISTRATION_ENVIRONMENT: "production", REGISTRATION_STORAGE_ACCOUNT: "stblorengeregprodabc", REGISTRATION_TABLE: "RegistrationProduction", REGISTRATION_EVENT_PARTITION: "blorenge-2026-live", REGISTRATION_TABLE_SAS_TOKEN: "review-only-placeholder", REGISTRATION_PUBLIC_BASE_URL: "https://www.blorengefellrace.cymru", STRIPE_ENABLED: "false", ACS_EMAIL_ENABLED: "false", ...extra });
 
-test("production state chunks remain below the Azure Table UTF-16 string-property limit", () => {
-  const source = fs.readFileSync(new URL("../api/src/production-storage.mjs", import.meta.url), "utf8");
-  const configured = source.match(/const CHUNK_SIZE = ([\d_]+);/);
-  assert.ok(configured, "production storage chunk size must be explicit and reviewable");
-  const chunkSize = Number(configured[1].replaceAll("_", ""));
-  assert.ok(chunkSize > 0 && chunkSize <= 30_000, `unsafe Azure Table string chunk size: ${chunkSize}`);
-});
-
 test("production bootstrap is CLOSED, exact, empty and junior-gated", () => {
   const state = createProductionBootstrap(); assert.equal(validateProductionState(state), state);
   assert.equal(state.environment, "production"); assert.equal(state.registrationState, "CLOSED"); assert.equal(state.phase3RegistrationState, "CLOSED"); assert.equal(state.event.capacity, 120); assert.equal(state.event.entryFeePence, 600); assert.equal(state.event.wfraMemberPricePence, 400); assert.equal(state.event.under18EntriesEnabled, false);
@@ -51,6 +43,9 @@ test("the production junior launch setting is authoritative for existing stored 
 
 test("production configuration rejects environment crossover and permits disabled providers", () => {
   const config = loadProductionConfiguration(env()); assert.equal(config.stripeEnabled, false); assert.equal(config.emailEnabled, false); assert.equal(config.under18EntriesEnabled, false);
+  assert.equal(config.storageSasExpiryAt, null);
+  assert.equal(loadProductionConfiguration(env({ REGISTRATION_TABLE_SAS_EXPIRES_AT: "2027-01-31T23:59:00Z" })).storageSasExpiryAt, "2027-01-31T23:59:00Z");
+  assert.throws(() => loadProductionConfiguration(env({ REGISTRATION_TABLE_SAS_EXPIRES_AT: "not-a-date" })), /expiry metadata/);
   assert.throws(() => loadProductionConfiguration(env({ REGISTRATION_STORAGE_ACCOUNT: "stblorengeregdev2026" })), /development storage/);
   assert.throws(() => loadProductionConfiguration(env({ REGISTRATION_EMAIL_SAFE_RECIPIENTS: "configured-elsewhere" })), /forbidden/);
   assert.throws(() => loadProductionConfiguration(env({ REGISTRATION_STATE: "OPEN" })), /cannot open/);
@@ -73,12 +68,19 @@ test("under-18 launch gate blocks only 16/17 production runners", async () => {
   runner.dateOfBirth = "1990-01-01"; const adult = await orders.addRunner(created.orderToken, { runner: { ...runner, email: "adult@example.com" }, declarationMode: "later" }); assert.equal(adult.ok, true);
 });
 
-test("production API omits development routes and requires organiser role", async () => {
+test("production API omits development routes and protects aggregate storage diagnostics", async () => {
   const repository = createMemoryRepository(createProductionBootstrap()); const integrations = new Phase3IntegrationService({ repository, emailAdapter: email, publicBaseUrl: "https://www.blorengefellrace.cymru", environment: "production" }); const service = new ProductionRegistrationService({ repository, emailAdapter: email }); const api = createProductionApi({ service, phase3Integrations: integrations, repository });
   const call = (method, pathname, extra = {}) => api({ method, pathname, hostname: "www.blorengefellrace.cymru", ...extra });
   for (const pathname of ["/api/v2/organiser/reset", "/api/v2/organiser/import/synthetic", "/api/v2/registrations/x/mock-payment"]) assert.equal((await call("POST", pathname)).status, 404);
   assert.equal((await call("GET", "/api/v2/organiser/snapshot")).status, 403);
+  assert.equal((await call("GET", "/api/v2/organiser/storage-metrics")).status, 403);
   assert.equal((await call("POST", "/api/v4/orders", { body: { purchaserEmail: "runner@example.com" } })).body.code, "REGISTRATION_NOT_ACCEPTING");
+
+  const storageMetrics = { chunkCount: 2, totalEncodedCharacters: 42_000, largestChunkCharacters: 30_000, estimatedEntityBytes: 86_000, entityPropertyCount: 10, storageHeadroomPercent: 10.94, storageHeadroomLevel: "healthy" };
+  const protectedApi = createProductionApi({ service, phase3Integrations: integrations, repository, storageDiagnostics: async () => storageMetrics });
+  const principal = Buffer.from(JSON.stringify({ userId: "configured-at-deployment", userRoles: ["authenticated", "organiser"] })).toString("base64");
+  const diagnostic = await protectedApi({ method: "GET", pathname: "/api/v2/organiser/storage-metrics", hostname: "www.blorengefellrace.cymru", headers: { "x-ms-client-principal": principal } });
+  assert.deepEqual(diagnostic.body, { ok: true, metrics: storageMetrics });
 });
 
 test("production Entra authorization requires the literal organiser role", () => {

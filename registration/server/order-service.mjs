@@ -207,6 +207,19 @@ export class OrderRegistrationService {
   }
   orderUrl(token) { return `${this.publicBaseUrl}/registration/#order=${encodeURIComponent(token)}`; }
   communicate(state, message, key, at) { return deliverRegistrationCommunication(state, this.emailAdapter, message, { idempotencyKey: key, at }); }
+  async communicateWithoutRollingBackState(state, message, key, at) {
+    try { return await this.communicate(state, message, key, at); }
+    catch (error) {
+      if (!state.communications.some((item) => item.idempotencyKey === key)) state.communications.push({
+        id: id("communication"), idempotencyKey: key, registrationId: message.registrationId ?? null,
+        orderId: message.orderId ?? null, template: message.template,
+        intendedRecipientAddress: normalizeEmail(message.intendedRecipientAddress), delivery: "failed",
+        providerReference: null, externalCall: false, createdAt: iso(at), sentAt: null,
+        retryCount: 1, failureCategory: String(error?.name || "email_provider_error").slice(0, 80)
+      });
+      return { ok: false, code: "EMAIL_DELIVERY_FAILED" };
+    }
+  }
 
   createOrder(input, at = new Date(), invitationToken = null) {
     return this.repository.transaction(async (state) => {
@@ -375,11 +388,11 @@ export class OrderRegistrationService {
             const runner = runnerFor(state, registration); const management = issueManagementToken(state, registration.id, { actorType: "system" }, at);
             if (declarationView(state, registration).status === "pending") {
               const declarationToken = issueDeclarationToken(state, registration.id, at);
-              await this.communicate(state, { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, secureUrl: this.declarationUrl(declarationToken, management.token), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed-pending`, at);
+              await this.communicateWithoutRollingBackState(state, { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, secureUrl: this.declarationUrl(declarationToken, management.token), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed-pending`, at);
               registration.declarationInitialSentAt = iso(at);
-            } else await this.communicate(state, { registrationId: registration.id, template: "entry_confirmed", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed`, at);
+            } else await this.communicateWithoutRollingBackState(state, { registrationId: registration.id, template: "entry_confirmed", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed`, at);
           }
-          if (registrations.length > 1) await this.communicate(state, { orderId: order.id, template: "order_payment_confirmed", intendedRecipientAddress: order.purchaserEmail, data: { runnerCount: registrations.length, amountPence: order.totalPence } }, `order:${order.id}:purchaser-confirmed`, at);
+          if (registrations.length > 1) await this.communicateWithoutRollingBackState(state, { orderId: order.id, template: "order_payment_confirmed", intendedRecipientAddress: order.purchaserEmail, data: { runnerCount: registrations.length, amountPence: order.totalPence } }, `order:${order.id}:purchaser-confirmed`, at);
           audit(state, "order_payment_confirmed", order.id, { runnerCount: registrations.length, totalPence: order.totalPence }, at);
         }
       } else if (["checkout.session.expired", "checkout.session.async_payment_failed"].includes(event.type)) {

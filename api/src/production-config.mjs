@@ -19,11 +19,13 @@ export function loadProductionConfiguration(environment = process.env) {
   if (!/^https:\/\/www\.blorengefellrace\.cymru$/i.test(publicBaseUrl)) throw new Error("Production public base URL is invalid.");
   const stripeEnabled = enabled(environment.STRIPE_ENABLED);
   const emailEnabled = enabled(environment.ACS_EMAIL_ENABLED);
+  const storageSasExpiryAt = String(environment.REGISTRATION_TABLE_SAS_EXPIRES_AT ?? "").trim() || null;
+  if (storageSasExpiryAt && !Number.isFinite(new Date(storageSasExpiryAt).valueOf())) throw new Error("Production Table SAS expiry metadata is invalid.");
   if (!stripeEnabled && (environment.STRIPE_SECRET_KEY || environment.STRIPE_WEBHOOK_SIGNING_SECRET)) throw new Error("Stripe credentials must not be supplied while production Stripe is disabled.");
   if (!emailEnabled && (environment.ACS_EMAIL_CONNECTION_STRING || environment.REGISTRATION_EMAIL_SENDER)) throw new Error("Email credentials must not be supplied while production email is disabled.");
   return Object.freeze({
     storageAccount, tableName, eventPartition, publicBaseUrl,
-    tableSasToken: required(environment, "REGISTRATION_TABLE_SAS_TOKEN"),
+    tableSasToken: required(environment, "REGISTRATION_TABLE_SAS_TOKEN"), storageSasExpiryAt,
     stripeEnabled, emailEnabled,
     under18EntriesEnabled: enabled(environment.REGISTRATION_UNDER18_ENABLED),
     maxRunnersPerOrder: Number(environment.REGISTRATION_MAX_RUNNERS_PER_ORDER || 5),

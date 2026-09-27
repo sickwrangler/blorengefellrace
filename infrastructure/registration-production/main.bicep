@@ -18,6 +18,12 @@ param registrationPublicBaseUrl string = 'https://www.blorengefellrace.cymru'
 @description('Enable real entries for runners aged 16 or 17 only after external approval.')
 param registrationUnder18Enabled bool = false
 
+@description('Resource group containing the public production Static Web App.')
+param productionStaticWebAppResourceGroup string = 'Blorenge'
+
+@description('Public production Static Web App name.')
+param productionStaticWebAppName string = 'BlorengeFellRace'
+
 @secure()
 @description('Operational alert receivers supplied manually as a receivers array of name/emailAddress objects.')
 param alertContacts object
@@ -114,6 +120,11 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
   }
 }
 
+resource productionStaticWebApp 'Microsoft.Web/staticSites@2023-12-01' existing = {
+  scope: resourceGroup(productionStaticWebAppResourceGroup)
+  name: productionStaticWebAppName
+}
+
 resource schedulerPlan 'Microsoft.Web/serverfarms@2024-04-01' = {
   name: schedulerPlanName
   location: location
@@ -178,6 +189,9 @@ var alertDefinitions = [
   { name: 'registration-persistent-5xx', description: 'Repeated production registration API 5xx responses', query: 'requests | where resultCode startswith "5" | summarize failures=count() by bin(timestamp, 5m) | where failures >= 3' }
   { name: 'registration-email-failures', description: 'Transactional email failures after retry', query: 'traces | where message == "registration_email_failed_after_retry"' }
   { name: 'registration-scheduler-heartbeat', description: 'No scheduler success for 75 minutes while registration is active', query: 'traces | where message == "Production registration scheduled work completed" | summarize lastSuccess=max(timestamp) | where lastSuccess < ago(75m)' }
+  { name: 'registration-state-write-failures', description: 'A production registration state write failed outside normal ETag conflict handling', query: 'traces | where message == "registration_state_write_failed"' }
+  { name: 'registration-order-creation-5xx', description: 'Repeated POST /api/v4/orders server failures', query: 'traces | where message == "registration_order_creation_5xx" | summarize failures=count() by bin(timestamp, 5m) | where failures >= 2' }
+  { name: 'registration-table-sas-expiry', description: 'Production Table credential expiry metadata is missing or within 30 days', query: 'traces | where message in ("registration_table_sas_expiry_unknown", "registration_table_sas_expiry_30_days", "registration_table_sas_expiry_14_days", "registration_table_sas_expiry_7_days")' }
 ]
 resource alerts 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = [for alert in alertDefinitions: {
   name: '${alert.name}-${nameSuffix}'
@@ -194,6 +208,73 @@ resource alerts 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = [f
     actions: { actionGroups: [actionGroup.id] }
   }
 }]
+
+resource storageWriteFailureAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'registration-table-write-failures-${nameSuffix}'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'Repeated failed Azure Table UpdateEntity operations. Investigate writes and pause registration if persistent.'
+    severity: 1
+    enabled: true
+    scopes: [storage.id]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    autoMitigate: true
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'RepeatedFailedUpdateEntity'
+          criterionType: 'StaticThresholdCriterion'
+          metricNamespace: 'Microsoft.Storage/storageAccounts'
+          metricName: 'Transactions'
+          operator: 'GreaterThanOrEqual'
+          threshold: 3
+          timeAggregation: 'Total'
+          dimensions: [
+            { name: 'ApiName', operator: 'Include', values: ['UpdateEntity'] }
+            { name: 'ResponseType', operator: 'Exclude', values: ['Success'] }
+          ]
+          skipMetricValidation: false
+        }
+      ]
+    }
+    actions: [{ actionGroupId: actionGroup.id }]
+  }
+}
+
+
+resource managedApiFailureAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'registration-managed-api-failures-${nameSuffix}'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'Repeated managed Function errors, including order-creation 5xx failures.'
+    severity: 1
+    enabled: true
+    scopes: [productionStaticWebApp.id]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    autoMitigate: true
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'RepeatedManagedFunctionErrors'
+          criterionType: 'StaticThresholdCriterion'
+          metricNamespace: 'Microsoft.Web/staticSites'
+          metricName: 'FunctionErrors'
+          operator: 'GreaterThanOrEqual'
+          threshold: 2
+          timeAggregation: 'Total'
+          skipMetricValidation: false
+        }
+      ]
+    }
+    actions: [{ actionGroupId: actionGroup.id }]
+  }
+}
 
 output proposedResourceNames object = {
   storageAccount: storage.name

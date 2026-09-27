@@ -292,6 +292,51 @@ test("Stripe refund and notification side effects are not repeated by Azure ETag
   assert.equal(final.communications.filter((item) => item.template === "refund_completed").length, 1); assert.equal(writes, 6);
 });
 
+test("Stripe webhook converges after storage failure without duplicate payment, place or provider communication", async () => {
+  const prepared = setup(); const created = await createOrder(prepared.orders); await add(prepared.orders, created.orderToken, 1, "later"); await prepared.orders.checkout(created.orderToken, start);
+  let stored = await prepared.repository.read(); let etag = 1; let writes = 0; let sendCalls = 0;
+  const providerEffects = new Set();
+  const repository = createAzureTableRepository({
+    async loadPartition() { return { state: structuredClone(stored), etag: String(etag) }; },
+    async submitTransaction({ after }) {
+      writes += 1;
+      if (writes === 1) { const error = new Error("synthetic storage outage"); error.statusCode = 503; throw error; }
+      stored = structuredClone(after); etag += 1;
+    },
+    retryDelay: async () => {}
+  });
+  const emailAdapter = { kind: "test", async send(message) { sendCalls += 1; providerEffects.add(message.deliveryIdempotencyKey); return { delivery: "test", externalCall: true, providerReference: `deduplicated-${message.deliveryIdempotencyKey}` }; } };
+  const orders = new OrderRegistrationService({ repository, stripeGateway: prepared.stripeGateway, emailAdapter, publicBaseUrl: "https://development.example" });
+  const event = { id: "evt_storage_retry", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_storage_retry", metadata: { orderId: created.order.id } } } };
+  await assert.rejects(orders.webhook(event, start), /synthetic storage outage/);
+  assert.equal(stored.payments[0].status, "checkout_pending");
+  assert.equal((await orders.webhook(event, start)).ok, true);
+  const final = await repository.read();
+  assert.equal(final.payments.length, 1); assert.equal(final.payments[0].status, "paid");
+  assert.equal(final.registrations.filter((item) => item.placeStatus === "confirmed").length, 1);
+  assert.equal(final.processedPaymentEvents.filter((item) => item.id === event.id).length, 1);
+  assert.equal(final.communications.filter((item) => item.template === "entry_confirmed_declaration_required").length, 1);
+  assert.equal(providerEffects.size, 1); assert.equal(sendCalls, 2);
+});
+
+test("email provider failure cannot roll back authoritative paid state and resend remains independent", async () => {
+  const prepared = setup(); const created = await createOrder(prepared.orders); const added = await add(prepared.orders, created.orderToken, 1, "later"); await prepared.orders.checkout(created.orderToken, start);
+  let providerAvailable = false; const sent = [];
+  const emailAdapter = { kind: "test", async send(message) { if (!providerAvailable) throw new Error("synthetic email outage"); sent.push(message); return { delivery: "test", externalCall: true, providerReference: "synthetic-email-retry" }; } };
+  const orders = new OrderRegistrationService({ repository: prepared.repository, stripeGateway: prepared.stripeGateway, emailAdapter, publicBaseUrl: "https://development.example" });
+  const event = { id: "evt_email_failure", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_email_failure", metadata: { orderId: created.order.id } } } };
+  assert.equal((await orders.webhook(event, start)).ok, true);
+  const paid = await prepared.repository.read();
+  assert.equal(paid.payments[0].status, "paid"); assert.equal(paid.registrations[0].placeStatus, "confirmed");
+  assert.equal(paid.communications.filter((item) => item.delivery === "failed").length, 1);
+  providerAvailable = true;
+  assert.equal((await orders.resendDeclaration(admin, added.order.registrations[0].id, start)).ok, true);
+  assert.equal(sent.length, 1);
+  const final = await prepared.repository.read();
+  assert.equal(final.payments[0].status, "paid"); assert.equal(final.registrations[0].placeStatus, "confirmed");
+  assert.ok(final.communications.some((item) => item.template === "declaration_reminder" && item.delivery === "test"));
+});
+
 test("Checkout expiry releases every runner and scheduler reminders stop after completion", async () => {
   const { orders, repository, sent } = setup(); const created = await createOrder(orders); const added = await add(orders, created.orderToken, 1); await orders.checkout(created.orderToken, start);
   const expired = await orders.runScheduledWork(new Date("2026-09-01T12:31:00Z")); assert.equal(expired.abandonedOrders, 1); assert.equal(capacitySummary(await repository.read()).remaining, 120);

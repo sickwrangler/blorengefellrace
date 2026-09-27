@@ -21,6 +21,7 @@ Start with the [emergency cheat sheet](emergency-cheat-sheet.md). Normal organis
 6. [Email and ACS](email-and-acs.md) — transactional email and delivery diagnosis
 7. [Scheduler](scheduler.md) — 30-minute background work and health checks
 8. [Monitoring and alerts](monitoring-and-alerts.md) — logs, metrics and alert rules
+   - [Production storage limits and headroom](storage-hardening.md) — serializer limits, forecasts and cloud proof
 9. [Deployment and rollback](deployment-and-rollback.md) — GitHub-to-Azure releases
 10. [Backup and recovery](backup-and-recovery.md) — snapshots and guarded restore
 11. [Manual intervention](manual-intervention.md) — intervention levels and approvals
@@ -34,8 +35,8 @@ Start with the [emergency cheat sheet](emergency-cheat-sheet.md). Normal organis
 - Production URL: <https://www.blorengefellrace.cymru>
 - Organiser dashboard: <https://www.blorengefellrace.cymru/registration/dashboard.html>
 - GitHub repository: `sickwrangler/blorengefellrace`
-- Verified pre-launch production commit: `268b1a7fa5814b29f2b1cfb3ce174b7bb280034f`
-- Operational state at verification: `PRIVATE_LIVE`
+- Verified production commit before this hardening pass: `72bd23865ec36127cdcca60693fd6f13ff26541f`
+- Operational state at verification: `OPEN`
 - Public opening messaging: derived from the authoritative registration state
 - Production data is private and separate from the Git repository and deployment artifact.
 
