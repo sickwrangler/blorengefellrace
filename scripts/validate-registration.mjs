@@ -31,7 +31,8 @@ const allSource = files.map((file) => fs.readFileSync(file, "utf8")).join("\n");
 for (const forbidden of ["stripe.com", "paypal.com", "sendgrid", "mailgun", "connectionString", "AZURE_STATIC_WEB_APPS_API_TOKEN"])
   if (allSource.toLowerCase().includes(forbidden.toLowerCase())) errors.push(`Unexpected external/credential integration: ${forbidden}`);
 const entryPage = fs.readFileSync("enter.html", "utf8");
-if (/href=["'][^"']*registration\//i.test(entryPage)) errors.push("Public entry page activates the prototype");
+if (!/href=["']registration\/index\.html["']/i.test(entryPage)) errors.push("Public entry page does not link to the state-gated registration journey");
+if (/google\.com\/forms|google-form-iframe|Previous registration form/i.test(entryPage)) errors.push("Public entry page still contains the retired Google registration form");
 const fixtures = JSON.parse(fs.readFileSync("registration/fixtures.json", "utf8"));
 if (fixtures.some((fixture) => fixture.runner?.email && !/@(example\.(com|org|net)|[^@]+\.invalid)$/i.test(fixture.runner.email))) errors.push("Fixture contains a non-synthetic email");
 const repository = fs.readFileSync("registration/preview-repository.mjs", "utf8");

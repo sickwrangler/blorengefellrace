@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   stageProduction,
   stageDevelopment,
+  stageRegistrationProduction,
   validateProductionArtifact
 } from "../scripts/stage-deployment-artifacts.mjs";
 
@@ -13,7 +14,7 @@ function temporaryDirectory(name) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `blorenge-${name}-`));
 }
 
-function assertLocalReferencesExist(outputRoot, files) {
+function assertLocalReferencesExist(outputRoot, files, allowedExternalPaths = new Set()) {
   const skipped = /^(?:https?:|mailto:|tel:|data:|javascript:|#|\/\/)/i;
   const references = [];
   for (const file of files.filter((name) => /\.(?:html|css)$/.test(name))) {
@@ -26,6 +27,7 @@ function assertLocalReferencesExist(outputRoot, files) {
   for (const [sourceFile, reference] of references) {
     if (!reference || skipped.test(reference)) continue;
     const pathname = decodeURIComponent(reference.split(/[?#]/)[0]);
+    if (allowedExternalPaths.has(pathname.replace(/^\//, ""))) continue;
     const target = pathname.startsWith("/")
       ? path.join(outputRoot, pathname.slice(1))
       : path.resolve(path.dirname(path.join(outputRoot, sourceFile)), pathname);
@@ -50,7 +52,20 @@ test("production staging contains only allowlisted public website files", () => 
     const configuration = JSON.parse(fs.readFileSync(path.join(outputRoot, "staticwebapp.config.json"), "utf8"));
     assert.equal(configuration.routes, undefined);
     assert.equal(configuration.responseOverrides["404"].rewrite, "/404.html");
-    assertLocalReferencesExist(outputRoot, files);
+    assertLocalReferencesExist(outputRoot, files, new Set([
+      "registration/index.html",
+      "registration/start-list.html"
+    ]));
+  } finally {
+    fs.rmSync(outputRoot, { recursive: true, force: true });
+  }
+});
+
+test("production registration staging resolves the public registration links", () => {
+  const outputRoot = temporaryDirectory("production-registration-artifact");
+  try {
+    const { appFiles } = stageRegistrationProduction({ outputRoot });
+    assertLocalReferencesExist(path.join(outputRoot, "app"), appFiles);
   } finally {
     fs.rmSync(outputRoot, { recursive: true, force: true });
   }
