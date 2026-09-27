@@ -43,33 +43,14 @@
       <li><strong>Entries on the day</strong><span>None</span></li>
     </ul>
     <p class="notice"><strong data-registration-opening-message>Check the current entry status on the registration page.</strong> The closing date will be confirmed separately.</p>
-  </div>
-  <!-- Previous registration form retained for reference only. It is not confirmed for 2026.
-  <main>
-    <div class="space">
-      <h1> Entry</h1>
-      <div class="responsive-iframe">
-        <iframe id="google-form-iframe" src="https://docs.google.com/forms/d/e/1FAIpQLScJVbcf-X41_TTRfElqdz5rljLNUQk_PRaWVoQZ9hwH1U98Cg/viewform?embedded=true" style="width:100%; height:3400px; border:none;" Loading…> </iframe>
+    <div class="actions" aria-label="Registration actions">
+      <a class="button" href="registration/index.html">Enter the 2026 race</a>
+      <a class="button button--quiet" href="registration/start-list.html">View the start list</a>
     </div>
-    
   </div>
-  -->
-    
   </main>
 
   <!-- Footer -->
   <iframe class="footer-iframe" src="components/footer/footer.html" title="Site footer" scrolling="no"></iframe>
-
-  <script>
-    const iframe = document.getElementById('google-form-iframe');
-  
-    iframe?.addEventListener('load', () => {
-      // Check if the iframe's URL has changed (indicating form submission)
-      if (iframe.src.includes('formResponse')) {
-        // Scroll to the top of the page
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    });
-  </script>
 </body>
 </html>
