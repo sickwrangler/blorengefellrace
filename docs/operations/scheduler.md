@@ -48,4 +48,6 @@ Do not manually invoke scheduled domain operations unless a reviewed, supported 
 
 ## Deployment boundary
 
-The production GitHub workflow validates and stages the 17-file scheduler package but its current deploy step publishes only the Static Web App and managed API. Scheduler package deployment is therefore a separate controlled infrastructure release, not an automatic consequence of merging ordinary website/API changes. Confirm deployed scheduler compatibility whenever scheduler/shared-domain code changes.
+The production GitHub workflow validates and stages the scheduler package but its current deploy step publishes only the Static Web App and managed API. Scheduler package deployment is therefore a separate controlled infrastructure release, not an automatic consequence of merging ordinary website/API changes. Confirm deployed scheduler compatibility whenever scheduler/shared-domain code changes.
+
+After the 27 September 2026 Table-property incident, the previously deployed scheduler was found to predate the serializer fix. A scheduler-only ZIP made from reviewed commit `72bd238` was validated against its exact allowlist, verified to contain 30,000-character chunking, hashed before upload, and deployed separately. Azure recorded successful deployment `a4e11ff0-db4c-4f1c-96fc-bec98ef30415` at 17:08 UTC; settings and system-assigned identity hashes were unchanged. Future releases must record source commit, artifact checksum, Azure deployment ID/timestamp and a natural timer execution.

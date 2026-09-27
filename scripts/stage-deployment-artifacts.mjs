@@ -96,6 +96,7 @@ const PRODUCTION_API_COPIES = Object.freeze([
   ["api/src/production-config.mjs", "src/production-config.mjs"],
   ["api/src/production-providers.mjs", "src/production-providers.mjs"],
   ["api/src/production-storage.mjs", "src/production-storage.mjs"],
+  ["registration/server/production-storage-codec.mjs", "src/shared/server/production-storage-codec.mjs"],
   ["registration/declarations.mjs", "src/shared/declarations.mjs"],
   ["registration/server/production-auth.mjs", "src/shared/server/auth.mjs"],
   ["registration/server/communications.mjs", "src/shared/server/communications.mjs"],

@@ -8,6 +8,8 @@ The repository defines backup format `blorenge-registration-backup-v1`: creation
 
 The code declares manual pre-launch/significant-change/pre-race backups and a daily 02:00 UTC policy while active. However, the backup service module is not in the current managed API or 17-file scheduler deployment allowlist. Therefore **automatic daily production snapshot creation is not currently verified**. The private container and previously controlled snapshots are not proof of a recurring job. Blob contents were intentionally not listed during this documentation audit because the operator identity has no standing data-plane access.
 
+Until an automatic backup subsystem is separately approved, use the manual validated procedure **daily while registration volume is high**, and after a materially significant operational change or incident. A serializer change does not change the `blorenge-registration-backup-v1` envelope: the snapshot stores validated logical state, not Azure Table chunk properties, so the existing checksum/upload/download procedure remains valid. Do not create a snapshot merely because this document changed; every production snapshot still requires the explicit backup gate and temporary least-privilege RBAC.
+
 ## Controlled snapshot procedure
 
 Prerequisites: explicit approval, production identity confirmed, private temporary directory, no output/logging of state, and a reason for the snapshot. Closing registration is prudent before high-risk/bulk work; a read-only snapshot during stable operation need not mutate state.

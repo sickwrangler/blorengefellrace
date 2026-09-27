@@ -1,10 +1,10 @@
-import { actorForRequest } from "./auth.mjs";
+import { actorForRequest, authorize } from "./auth.mjs";
 import { transitionRegistrationState } from "./phase3-domain.mjs";
 
 const response = (status, body, headers = {}) => ({ status, body, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
 const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "NOT_FOUND" ? 404 : result.code === "LINK_UNAVAILABLE" ? 410 : result.code === "INVALID_WEBHOOK_SIGNATURE" ? 400 : ["PAYMENTS_UNAVAILABLE", "INTEGRATION_NOT_CONFIGURED", "PRODUCTION_STATE_UNAVAILABLE"].includes(result.code) ? 503 : 409, result);
 
-export function createProductionApi({ service, phase3Integrations, repository }) {
+export function createProductionApi({ service, phase3Integrations, repository, storageDiagnostics = null }) {
   const attempts = new Map();
   return async function handle({ method, pathname, headers = {}, body = {}, hostname = "", query = {} }) {
     const actor = actorForRequest({ environment: "production", hostname, headers });
@@ -59,6 +59,11 @@ export function createProductionApi({ service, phase3Integrations, repository })
 
     if (method === "GET" && pathname === "/api/v2/registration/status") return response(200, { ok: true, ...(await service.status()) });
     if (method === "GET" && pathname === "/api/v2/private-access") return resultResponse(await service.inspectPrivateAccess(headers["x-private-invitation"], query.purpose));
+    if (method === "GET" && pathname === "/api/v2/organiser/storage-metrics") {
+      if (!authorize(actor, "read")) return resultResponse({ ok: false, code: "FORBIDDEN" });
+      if (!storageDiagnostics) return resultResponse({ ok: false, code: "NOT_FOUND" });
+      return resultResponse({ ok: true, metrics: await storageDiagnostics() });
+    }
     if (method === "GET" && pathname === "/api/v2/organiser/snapshot") return resultResponse(await service.snapshot(actor, query));
     if (method === "GET" && pathname === "/api/v2/organiser/private-invitations") return resultResponse(await service.privateInvitations(actor));
     if (method === "POST" && pathname === "/api/v2/organiser/private-invitations") return resultResponse(await service.createPrivateInvitation(actor, body), 201);

@@ -13,6 +13,7 @@ export const PRODUCTION_SCHEDULER_COPIES = Object.freeze([
   ["scheduler/src/production-scheduler.mjs", "src/production-scheduler.mjs"],
   ["scheduler/src/functions/registration-production-scheduler.mjs", "src/functions/registration-production-scheduler.mjs"],
   ["api/src/production-storage.mjs", "src/production-storage.mjs"],
+  ["registration/server/production-storage-codec.mjs", "src/shared/server/production-storage-codec.mjs"],
   ["registration/declarations.mjs", "src/shared/declarations.mjs"],
   ["registration/server/production-auth.mjs", "src/shared/server/auth.mjs"],
   ["registration/server/communications.mjs", "src/shared/server/communications.mjs"],

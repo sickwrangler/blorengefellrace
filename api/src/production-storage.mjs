@@ -1,36 +1,10 @@
-import { gzipSync, gunzipSync } from "node:zlib";
 import { AzureSASCredential, TableClient } from "@azure/data-tables";
 import { applyProductionRuntimeConfiguration, createProductionBootstrap, validateProductionState } from "./shared/server/production-bootstrap.mjs";
+import { decodeProductionState, measureProductionEntityMetadata, productionStateEntity } from "./shared/server/production-storage-codec.mjs";
 
 const ROW_KEY = "registration-state";
-// Azure Table stores strings as UTF-16 with a 64 KiB property limit, so keep
-// each Base64 chunk below 32,000 characters with headroom for service encoding.
-const CHUNK_SIZE = 30_000;
 
-export function encodeProductionState(state) {
-  validateProductionState(state);
-  const encoded = gzipSync(Buffer.from(JSON.stringify(state))).toString("base64");
-  const chunks = [];
-  for (let index = 0; index < encoded.length; index += CHUNK_SIZE) chunks.push(encoded.slice(index, index + CHUNK_SIZE));
-  if (!chunks.length || chunks.length > 200) throw new Error("Production registration state exceeds its storage limit.");
-  return chunks;
-}
-
-export function decodeProductionState(entity) {
-  const count = Number(entity.chunkCount);
-  if (!Number.isInteger(count) || count < 1 || count > 200 || entity.format !== "gzip-json-v1") throw new Error("Stored production registration state is invalid.");
-  const encoded = Array.from({ length: count }, (_, index) => entity[`chunk${String(index).padStart(3, "0")}`]).join("");
-  return validateProductionState(JSON.parse(gunzipSync(Buffer.from(encoded, "base64")).toString("utf8")));
-}
-
-function entityFor(partitionKey, state) {
-  const chunks = encodeProductionState(state);
-  const entity = { partitionKey, rowKey: ROW_KEY, chunkCount: chunks.length, format: "gzip-json-v1", schemaVersion: state.schemaVersion, environment: "production", operationalState: state.registrationState };
-  chunks.forEach((chunk, index) => { entity[`chunk${String(index).padStart(3, "0")}`] = chunk; });
-  return entity;
-}
-
-export function createProductionAzureTableTransport({ accountName, tableName, sasToken = "", credential = null, partitionKey, under18EntriesEnabled = false }) {
+export function createProductionAzureTableTransport({ accountName, tableName, sasToken = "", credential = null, partitionKey, under18EntriesEnabled = false, telemetry = console }) {
   if (!/^[a-z0-9]{3,24}$/.test(accountName) || /dev|test/i.test(accountName) || !tableName || /development|test/i.test(tableName) || !partitionKey || /dev|test/i.test(partitionKey) || (!sasToken && !credential)) throw new Error("Production storage settings are incomplete or reference development resources.");
   const authentication = credential ?? new AzureSASCredential(sasToken.startsWith("?") ? sasToken.slice(1) : sasToken);
   const client = new TableClient(`https://${accountName}.table.core.windows.net`, tableName, authentication);
@@ -42,7 +16,7 @@ export function createProductionAzureTableTransport({ accountName, tableName, sa
       return { state: applyProductionRuntimeConfiguration(decodeProductionState(entity), { under18EntriesEnabled }), etag: entity.etag };
     } catch (error) {
       if (error?.statusCode !== 404) throw error;
-      try { await client.createEntity(entityFor(partitionKey, baseline())); }
+      try { await client.createEntity(productionStateEntity(partitionKey, baseline()).entity); }
       catch (createError) { if (createError?.statusCode !== 409) throw createError; }
       const entity = await client.getEntity(partitionKey, ROW_KEY);
       return { state: applyProductionRuntimeConfiguration(decodeProductionState(entity), { under18EntriesEnabled }), etag: entity.etag };
@@ -51,8 +25,30 @@ export function createProductionAzureTableTransport({ accountName, tableName, sa
 
   async function submitTransaction({ after, etag }) {
     validateProductionState(after);
-    await client.updateEntity(entityFor(partitionKey, after), "Replace", { etag });
+    const encoded = productionStateEntity(partitionKey, after);
+    const { chunkLengths: _chunkLengths, compressedJsonBytes: _compressedJsonBytes, ...safeMeasurements } = encoded.measurements;
+    try {
+      await client.updateEntity(encoded.entity, "Replace", { etag });
+      telemetry.info?.("registration_state_write_succeeded", { environment: "production", ...safeMeasurements });
+    } catch (error) {
+      const conflict = error?.statusCode === 409 || error?.statusCode === 412;
+      const event = conflict ? "registration_state_write_conflict" : "registration_state_write_failed";
+      const log = conflict ? telemetry.info : telemetry.error;
+      log?.call(telemetry, event, {
+        environment: "production",
+        operationCategory: "table_replace",
+        statusCode: Number(error?.statusCode) || null,
+        errorCategory: String(error?.code || error?.name || "storage_error").slice(0, 80),
+        ...safeMeasurements
+      });
+      throw error;
+    }
   }
 
-  return { loadPartition, submitTransaction };
+  async function storageMetadata() {
+    const entity = await client.getEntity(partitionKey, ROW_KEY);
+    return measureProductionEntityMetadata(entity);
+  }
+
+  return { loadPartition, submitTransaction, storageMetadata };
 }

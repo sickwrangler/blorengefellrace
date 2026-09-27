@@ -11,9 +11,9 @@
 
 Do not paste runner fields, secure URLs, tokens or message bodies into traces. ACS operational tables can contain recipient/delivery metadata; access them only for support and avoid broad export.
 
-## Deployed alert rules
+## Alert rules
 
-All four rules are enabled, severity 1, evaluated every five minutes over a 15-minute window.
+The original four rules plus the storage-hardening rules are defined at severity 1 and evaluated every five minutes over a 15-minute window. Confirm deployment state in Azure after each infrastructure release.
 
 | Rule | Plain-English meaning | Immediate response |
 |---|---|---|
@@ -21,12 +21,19 @@ All four rules are enabled, severity 1, evaluated every five minutes over a 15-m
 | `registration-persistent-5xx-c1b64c` | Three or more registration API 5xx responses in a five-minute bucket | Check API/storage/providers; pause if ongoing |
 | `registration-email-failures-c1b64c` | Looks for transactional email failure-after-retry marker | Diagnose ACS; payment/entry remains authoritative |
 | `registration-scheduler-heartbeat-c1b64c` | Intended to alert when last success is older than 75 minutes | Check execution metric and Function state immediately |
+| `registration-state-write-failures-c1b64c` | Explicit non-conflict state-write failure marker | Inspect Table status/error and pause if repeated or integrity is uncertain |
+| `registration-order-creation-5xx-c1b64c` | Two or more safe order-creation failure markers in five minutes | Check managed API and Table; ordinary validation 4xx does not count |
+| `registration-table-sas-expiry-c1b64c` | SAS expiry metadata missing or within 30/14/7 days | Verify stored-policy metadata and renew through the controlled process |
+| `registration-table-write-failures-c1b64c` | Three or more failed `UpdateEntity` operations in 15 minutes | Treat as the direct write-path incident signal; check conflicts versus service/size failures |
+| `registration-managed-api-failures-c1b64c` | Two or more managed Function errors in 15 minutes | Broad fallback for API errors when route traces are unavailable |
 
 Application Insights also has enabled smart detector `FailureAnomaliesDetector` (`Failure Anomalies - appi-blorenge-registration-prod-c1b64c`), evaluated every minute at severity Sev3. Treat it as a general unusual-failure signal rather than a registration-domain invariant check.
 
 ### Verified limitation
 
 On 26 September, scheduler execution-count metrics showed two executions per hour, but the expected completion trace was absent from a three-hour Application Insights query. The heartbeat rule is based on that trace and its query may not fire when there are no trace rows at all. Treat this alert as **configured but not independently proven end-to-end**. Until corrected in a separately reviewed infrastructure change, check Function metrics/invocations directly.
+
+Managed Static Web Apps exposes `FunctionErrors` without a route dimension. The metric alert is therefore deliberately broader than `/api/v4/orders`. The route-specific trace rule is preferable when trace ingestion is present; the platform metric is the reliable fallback. Neither rule alerts on ordinary validation 4xx.
 
 ## What normal looks like
 

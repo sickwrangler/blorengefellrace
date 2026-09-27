@@ -8,23 +8,30 @@ import { createProductionAzureTableTransport } from "../production-storage.mjs";
 import { createProductionEmailAdapter, createProductionStripeGateway } from "../production-providers.mjs";
 
 const configuration = loadProductionConfiguration();
-const repository = createAzureTableRepository(createProductionAzureTableTransport({
+const sasDaysRemaining = configuration.storageSasExpiryAt ? Math.floor((new Date(configuration.storageSasExpiryAt).valueOf() - Date.now()) / 86_400_000) : null;
+if (sasDaysRemaining === null) console.warn("registration_table_sas_expiry_unknown", { environment: "production" });
+else if (sasDaysRemaining <= 7) console.error("registration_table_sas_expiry_7_days", { environment: "production", daysRemaining: sasDaysRemaining });
+else if (sasDaysRemaining <= 14) console.warn("registration_table_sas_expiry_14_days", { environment: "production", daysRemaining: sasDaysRemaining });
+else if (sasDaysRemaining <= 30) console.warn("registration_table_sas_expiry_30_days", { environment: "production", daysRemaining: sasDaysRemaining });
+const storageTransport = createProductionAzureTableTransport({
   accountName: configuration.storageAccount,
   tableName: configuration.tableName,
   sasToken: configuration.tableSasToken,
   partitionKey: configuration.eventPartition,
   under18EntriesEnabled: configuration.under18EntriesEnabled
-}));
+});
+const repository = createAzureTableRepository(storageTransport);
 const emailAdapter = createProductionEmailAdapter(configuration);
 const stripeGateway = createProductionStripeGateway(configuration);
 const phase3Integrations = new Phase3IntegrationService({ repository, stripeGateway, emailAdapter, publicBaseUrl: configuration.publicBaseUrl, environment: "production", orderConfiguration: { maxRunnersPerOrder: configuration.maxRunnersPerOrder } });
-const handle = createProductionApi({ service: new ProductionRegistrationService({ repository, emailAdapter, stripeMode: stripeGateway?.mode ?? "disabled" }), phase3Integrations, repository });
+const handle = createProductionApi({ service: new ProductionRegistrationService({ repository, emailAdapter, stripeMode: stripeGateway?.mode ?? "disabled" }), phase3Integrations, repository, storageDiagnostics: storageTransport.storageMetadata });
 
 const handler = async (request, context) => {
+  let pathname = "";
   try {
     const contentLength = Number(request.headers.get("content-length") || 0);
     if (contentLength > 65_536) return { status: 413, jsonBody: { ok: false, code: "PAYLOAD_TOO_LARGE" } };
-    const headers = Object.fromEntries(request.headers.entries()); const url = new URL(request.url); let body = {};
+    const headers = Object.fromEntries(request.headers.entries()); const url = new URL(request.url); pathname = url.pathname; let body = {};
     if (request.method === "POST") {
       const rawBody = await request.text();
       if (Buffer.byteLength(rawBody, "utf8") > 65_536) return { status: 413, jsonBody: { ok: false, code: "PAYLOAD_TOO_LARGE" } };
@@ -34,6 +41,7 @@ const handler = async (request, context) => {
     const result = await handle({ method: request.method, pathname: url.pathname, headers, body, hostname: url.hostname, query: Object.fromEntries(url.searchParams) });
     return { status: result.status, headers: result.headers, body: JSON.stringify(result.body) };
   } catch (error) {
+    if (request.method === "POST" && pathname === "/api/v4/orders") context.error("registration_order_creation_5xx", { environment: "production" });
     context.error("Production registration request failed", { category: error?.name ?? "Error" });
     return { status: 503, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }, body: JSON.stringify({ ok: false, code: "PRODUCTION_STATE_UNAVAILABLE" }) };
   }
