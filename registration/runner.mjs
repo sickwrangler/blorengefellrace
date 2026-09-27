@@ -80,6 +80,9 @@ function validationErrors() {
   if (data.declarationTiming === "now" && guardianRequired()) {
     if (errors.declarationName) { errors.guardianDeclarationName = errors.declarationName; delete errors.declarationName; }
     if (!data.completedByParentOrLegalGuardian) errors.completedByParentOrLegalGuardian = "A parent or legal guardian must confirm they are completing this declaration.";
+    const guardianName = data.guardianDeclarationName.trim().toLowerCase();
+    const runnerName = `${data.firstName} ${data.lastName}`.trim().toLowerCase();
+    if (guardianName && guardianName === runnerName) errors.guardianDeclarationName = "Enter the parent or legal guardian's full name, not the runner's name.";
   } else if (data.declarationTiming === "now" && !data.completedByNamedRunner) errors.completedByNamedRunner = "The named runner must confirm they are completing this declaration themselves.";
   return errors;
 }

@@ -64,10 +64,16 @@ test("adult emails are unique within an order and across active entries after no
 
 test("16- and 17-year-old runners require a parent or legal guardian declaration", async () => {
   const { orders } = setup(); const created = await createOrder(orders);
-  const junior = runner(1, { dateOfBirth: "2009-12-01" });
-  const wrongSigner = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: declaration(1) }, start); assert.equal(wrongSigner.code, "GUARDIAN_MUST_COMPLETE_DECLARATION");
-  const guardian = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: { ...declaration(1), typedFullName: "Guardian Example", signatoryRole: "Parent / Legal Guardian", completedByNamedRunner: false, completedByParentOrLegalGuardian: true } }, start);
-  assert.equal(guardian.ok, true); assert.equal(guardian.order.registrations[0].declaration.status, "complete");
+  const tooYoung = await orders.addRunner(created.orderToken, { runner: runner(15, { dateOfBirth: "2010-11-29" }), declarationMode: "later", declaration: null }, start); assert.equal(tooYoung.code, "VALIDATION_ERROR"); assert.match(tooYoung.errors.dateOfBirth, /at least 16/);
+  for (const [number, dateOfBirth] of [[16, "2009-11-29"], [17, "2008-11-29"]]) {
+    const junior = runner(number, { dateOfBirth });
+    const wrongRole = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: declaration(number) }, start); assert.equal(wrongRole.code, "GUARDIAN_MUST_COMPLETE_DECLARATION");
+    const selfSigned = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: { ...declaration(number), signatoryRole: "Parent / Legal Guardian", completedByNamedRunner: false, completedByParentOrLegalGuardian: true } }, start); assert.equal(selfSigned.code, "GUARDIAN_NAME_MATCHES_RUNNER");
+    const guardian = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: { ...declaration(number), typedFullName: `Guardian ${number} Example`, signatoryRole: "Parent / Legal Guardian", completedByNamedRunner: false, completedByParentOrLegalGuardian: true } }, start);
+    assert.equal(guardian.ok, true);
+  }
+  const adult = await orders.addRunner(created.orderToken, { runner: runner(18, { dateOfBirth: "2007-11-29" }), declarationMode: "now", declaration: declaration(18) }, start);
+  assert.equal(adult.ok, true);
 });
 
 test("declaration may be completed now only by the named runner or deferred without blocking Checkout", async () => {
@@ -231,8 +237,9 @@ test("a deferred junior declaration records parent or legal guardian evidence", 
   await current.orders.webhook({ id: "evt_junior_paid", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_test_junior", metadata: { orderId: created.order.id } } } }, start);
   const message = current.sent.find((item) => item.template === "entry_confirmed_declaration_required"); const token = new URL(message.data.secureUrl).hash.split("token=")[1];
   const inspected = await current.orders.inspectDeclaration(token); assert.equal(inspected.registration.runner.requiresGuardianDeclaration, true);
+  const rejected = await current.orders.completeDeclaration(token, { accepted: true, typedFullName: "Runner 1 Example", completedByNamedRunner: false, completedByParentOrLegalGuardian: true }, start); assert.equal(rejected.code, "GUARDIAN_NAME_MATCHES_RUNNER");
   const completed = await current.orders.completeDeclaration(token, { accepted: true, typedFullName: "Guardian Example", completedByNamedRunner: false, completedByParentOrLegalGuardian: true }, start); assert.equal(completed.ok, true);
-  const state = await current.repository.read(); assert.equal(state.declarations[0].signatoryRole, "Parent / Legal Guardian"); assert.equal(state.declarations[0].typedFullName, "Guardian Example");
+  const state = await current.repository.read(); assert.equal(state.declarations[0].signatoryRole, "Parent / Legal Guardian"); assert.equal(state.declarations[0].typedFullName, "Guardian Example"); assert.equal(state.declarations[0].declarationVersion, "21/02/23"); assert.equal(state.declarations[0].completedAt, start.toISOString());
 });
 
 test("order, management and declaration credentials remain isolated and hashed at rest", async () => {

@@ -159,6 +159,7 @@ function validateDeclaration(state, runner, mode, declaration) {
   if (age < 18) {
     if (declaration.signatoryRole !== "Parent / Legal Guardian" || declaration.completedByParentOrLegalGuardian !== true) return { ok: false, code: "GUARDIAN_MUST_COMPLETE_DECLARATION" };
     if (!normalizeText(declaration.typedFullName)) return { ok: false, code: "DECLARATION_NAME_REQUIRED" };
+    if (normalizeText(declaration.typedFullName).toLowerCase() === fullName(runner).toLowerCase()) return { ok: false, code: "GUARDIAN_NAME_MATCHES_RUNNER" };
   } else {
     if (declaration.signatoryRole !== "Competitor" || declaration.completedByNamedRunner !== true) return { ok: false, code: "RUNNER_MUST_COMPLETE_DECLARATION" };
     if (normalizeText(declaration.typedFullName).toLowerCase() !== fullName(runner).toLowerCase()) return { ok: false, code: "DECLARATION_NAME_MISMATCH" };
