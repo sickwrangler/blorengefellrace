@@ -51,4 +51,3 @@ export function createStorageForecastState(runnerCount, { lifecycleHistory = fal
   }
   return state;
 }
-

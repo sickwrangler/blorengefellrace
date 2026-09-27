@@ -44,4 +44,3 @@ node --test tests/registration-production-storage.test.mjs
 ```
 
 The manual development Azure proof is `api/scripts/prove-development-table-storage.mjs`. It requires the explicit `SYNTHETIC_ONLY` guard and development SAS settings supplied only in the process environment. It refuses resource names that do not contain `dev` or `test`, creates UUID-scoped synthetic partitions, verifies multi-chunk read/Replace and 10-/20-way ETag concurrency, then deletes its entities. Never pass production settings to it and never put credentials in shell history or documentation.
-

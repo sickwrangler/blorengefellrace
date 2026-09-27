@@ -104,4 +104,3 @@ try {
     try { await cleanup(); } catch { /* best-effort cleanup; caller can use reported partition prefix */ }
   }
 }
-

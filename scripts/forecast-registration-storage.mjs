@@ -8,4 +8,3 @@ const report = scenarios.map(([runners, lifecycleHistory]) => {
   return { scenario: lifecycleHistory ? `${runners}+history` : String(runners), ...measurements };
 });
 console.log(JSON.stringify({ conservativeSafeEntityBytes: PRODUCTION_TABLE_SAFE_ENTITY_BYTES, scenarios: report }, null, 2));
-
