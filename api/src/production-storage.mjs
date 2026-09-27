@@ -3,7 +3,9 @@ import { AzureSASCredential, TableClient } from "@azure/data-tables";
 import { applyProductionRuntimeConfiguration, createProductionBootstrap, validateProductionState } from "./shared/server/production-bootstrap.mjs";
 
 const ROW_KEY = "registration-state";
-const CHUNK_SIZE = 60_000;
+// Azure Table stores strings as UTF-16 with a 64 KiB property limit, so keep
+// each Base64 chunk below 32,000 characters with headroom for service encoding.
+const CHUNK_SIZE = 30_000;
 
 export function encodeProductionState(state) {
   validateProductionState(state);

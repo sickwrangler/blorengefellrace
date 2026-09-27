@@ -22,6 +22,14 @@ const organiser = { authenticated: true, role: "organiser", actorType: "entra_or
 const email = { kind: "disabled", externalDelivery: false, async send() { return { delivery: "disabled", externalCall: false }; } };
 const env = (extra = {}) => ({ REGISTRATION_ENVIRONMENT: "production", REGISTRATION_STORAGE_ACCOUNT: "stblorengeregprodabc", REGISTRATION_TABLE: "RegistrationProduction", REGISTRATION_EVENT_PARTITION: "blorenge-2026-live", REGISTRATION_TABLE_SAS_TOKEN: "review-only-placeholder", REGISTRATION_PUBLIC_BASE_URL: "https://www.blorengefellrace.cymru", STRIPE_ENABLED: "false", ACS_EMAIL_ENABLED: "false", ...extra });
 
+test("production state chunks remain below the Azure Table UTF-16 string-property limit", () => {
+  const source = fs.readFileSync(new URL("../api/src/production-storage.mjs", import.meta.url), "utf8");
+  const configured = source.match(/const CHUNK_SIZE = ([\d_]+);/);
+  assert.ok(configured, "production storage chunk size must be explicit and reviewable");
+  const chunkSize = Number(configured[1].replaceAll("_", ""));
+  assert.ok(chunkSize > 0 && chunkSize <= 30_000, `unsafe Azure Table string chunk size: ${chunkSize}`);
+});
+
 test("production bootstrap is CLOSED, exact, empty and junior-gated", () => {
   const state = createProductionBootstrap(); assert.equal(validateProductionState(state), state);
   assert.equal(state.environment, "production"); assert.equal(state.registrationState, "CLOSED"); assert.equal(state.phase3RegistrationState, "CLOSED"); assert.equal(state.event.capacity, 120); assert.equal(state.event.entryFeePence, 600); assert.equal(state.event.wfraMemberPricePence, 400); assert.equal(state.event.under18EntriesEnabled, false);
