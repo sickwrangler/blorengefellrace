@@ -33,9 +33,9 @@ User-engagement diagnostics are disabled, and the Azure-managed domain has engag
 
 ## Managed-domain limit and custom-domain plan
 
-Microsoft currently documents the Azure-managed domain limit as **5 send operations per minute and 10 per hour**, with no quota increase. Custom domains start at **30 per minute and 100 per hour** and can request higher limits. The Azure-managed domain is therefore unsuitable for a busy registration opening even when retry logic is correct.
+Microsoft currently documents the Azure-managed domain limit as **5 send operations per minute and 10 per hour**, with no quota increase. Custom domains start at **30 per minute and 100 per hour** and can request higher limits. The Azure-managed domain cannot absorb a busy registration-opening burst, but it can remain appropriate for this capped event when delayed confirmation is acceptable and the recovery backlog is drained below the documented quota.
 
-Before switching production, add a customer-managed domain or preferably a dedicated sending subdomain under `blorengefellrace.cymru`, then publish the exact Azure-provided records:
+If higher or immediate throughput becomes necessary, add a customer-managed domain or preferably a dedicated sending subdomain under `blorengefellrace.cymru`, then publish the exact Azure-provided records:
 
 - domain-ownership TXT record;
 - SPF TXT record;
@@ -49,7 +49,7 @@ Do not copy example record values into live DNS. Verify Domain, SPF, DKIM and DK
 
 The protected organiser API exposes a read-only aggregate health view and a dry-run recovery preview. The preview includes only counts and a fingerprint; it sends nothing. A recovery execution requires that exact current fingerprint plus the literal confirmation `SEND 1 RECOVERY EMAIL`, handles at most one registration, and refuses to run when the hourly external-attempt budget is exhausted. `REGISTRATION_EMAIL_RECOVERY_MAX_PER_HOUR` configures that budget and defaults to 8; keep it below the provider quota with room for normal transactional mail.
 
-Only active, paid, confirmed registrations with no successful `entry_confirmed` or `entry_confirmed_declaration_required` receipt qualify. Successful confirmations are excluded. Recovery creates fresh management/declaration tokens as needed, invalidates superseded tokens, selects the current template from declaration status, stores an audited receipt and never changes payment or place state. Repeat the dry run after every execution. Bulk recovery must not start without an explicit production approval based on the current dry-run count.
+Only active, paid, confirmed registrations with no successful `entry_confirmed` or `entry_confirmed_declaration_required` receipt qualify. Successful confirmations are excluded. That state-derived plan acts as the durable recovery queue: an item remains eligible until a successful receipt exists. Recovery creates fresh management/declaration tokens as needed, invalidates superseded tokens, selects the current template from declaration status, stores an audited receipt and never changes payment or place state. Repeat the dry run after every execution. Bulk recovery must not start without an explicit production approval based on the current dry-run count.
 
 ## Email not received
 
