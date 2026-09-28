@@ -17,6 +17,8 @@ export const PRODUCTION_SCHEDULER_COPIES = Object.freeze([
   ["registration/declarations.mjs", "src/shared/declarations.mjs"],
   ["registration/server/production-auth.mjs", "src/shared/server/auth.mjs"],
   ["registration/server/communications.mjs", "src/shared/server/communications.mjs"],
+  ["registration/server/acs-email-delivery.mjs", "src/shared/server/acs-email-delivery.mjs"],
+  ["registration/server/email-health.mjs", "src/shared/server/email-health.mjs"],
   ["registration/server/email-templates.mjs", "src/shared/server/email-templates.mjs"],
   ["registration/server/order-service.mjs", "src/shared/server/order-service.mjs"],
   ["registration/server/phase3-domain.mjs", "src/shared/server/phase3-domain.mjs"],

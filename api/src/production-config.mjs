@@ -29,6 +29,7 @@ export function loadProductionConfiguration(environment = process.env) {
     stripeEnabled, emailEnabled,
     under18EntriesEnabled: enabled(environment.REGISTRATION_UNDER18_ENABLED),
     maxRunnersPerOrder: Number(environment.REGISTRATION_MAX_RUNNERS_PER_ORDER || 5),
+    emailRecoveryMaxPerHour: Number(environment.REGISTRATION_EMAIL_RECOVERY_MAX_PER_HOUR || 8),
     stripeSecretKey: stripeEnabled ? required(environment, "STRIPE_SECRET_KEY") : null,
     stripeWebhookSecret: stripeEnabled ? required(environment, "STRIPE_WEBHOOK_SIGNING_SECRET") : null,
     emailEndpoint: emailEnabled ? required(environment, "ACS_EMAIL_ENDPOINT") : null,

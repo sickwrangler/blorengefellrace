@@ -19,7 +19,10 @@ The original four rules plus the storage-hardening rules are defined at severity
 |---|---|---|
 | `registration-critical-failures-c1b64c` | Looks for Stripe reconciliation, refund, capacity, waiting-list, backup or invalid-state failure markers | Pause if payment/capacity/state integrity may be affected; reconcile provider and state |
 | `registration-persistent-5xx-c1b64c` | Three or more registration API 5xx responses in a five-minute bucket | Check API/storage/providers; pause if ongoing |
-| `registration-email-failures-c1b64c` | Looks for transactional email failure-after-retry marker | Diagnose ACS; payment/entry remains authoritative |
+| `registration-email-failures-c1b64c` | Looks for a transactional email failure after bounded retry | Diagnose ACS; payment/entry remains authoritative |
+| `registration-email-throttling-c1b64c` | Application observed ACS 429 throttling after SDK handling | Pause if new confirmations are at risk; respect provider limits |
+| `registration-confirmation-missing-c1b64c` | Scheduler reconciliation found a paid confirmed entry with no confirmation receipt | Run aggregate dry run; never blindly resend |
+| `registration-email-failed-backlog-c1b64c` | Scheduler reconciliation found failed communications, including oldest age | Diagnose provider then use controlled recovery |
 | `registration-scheduler-heartbeat-c1b64c` | Intended to alert when last success is older than 75 minutes | Check execution metric and Function state immediately |
 | `registration-state-write-failures-c1b64c` | Explicit non-conflict state-write failure marker | Inspect Table status/error and pause if repeated or integrity is uncertain |
 | `registration-order-creation-5xx-c1b64c` | Two or more safe order-creation failure markers in five minutes | Check managed API and Table; ordinary validation 4xx does not count |
@@ -28,6 +31,8 @@ The original four rules plus the storage-hardening rules are defined at severity
 | `registration-managed-api-failures-c1b64c` | Two or more managed Function errors in 15 minutes | Broad fallback for API errors when route traces are unavailable |
 
 Application Insights also has enabled smart detector `FailureAnomaliesDetector` (`Failure Anomalies - appi-blorenge-registration-prod-c1b64c`), evaluated every minute at severity Sev3. Treat it as a general unusual-failure signal rather than a registration-domain invariant check.
+
+The four new email queries above are defined in the reviewed production Bicep change. They are not live until that infrastructure diff is separately approved and deployed. ACS delivery diagnostics remain live independently.
 
 ### Verified limitation
 

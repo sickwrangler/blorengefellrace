@@ -23,6 +23,13 @@
       <div><span>Accepted</span><strong id="summary-accepted">0</strong></div><div><span>Waiting list</span><strong id="summary-waiting">0</strong></div><div><span>Payments needing attention</span><strong id="summary-payments">0</strong></div><div><span>Declaration required</span><strong id="summary-declarations">0</strong></div><div><span>Remaining places</span><strong id="summary-remaining">120</strong></div>
     </section>
 
+    <section class="prototype-card" aria-labelledby="email-health-title">
+      <div class="detail-heading"><div><p class="eyebrow">Transactional communications</p><h2 id="email-health-title">Email health</h2></div></div>
+      <p>Successful delivery is based on the recorded delivery result, not merely an attempted send time.</p>
+      <dl class="email-health-grid"><div><dt>Expected confirmations</dt><dd id="email-expected">—</dd></div><div><dt>Sent</dt><dd id="email-sent">—</dd></div><div><dt>Failed</dt><dd id="email-failed">—</dd></div><div><dt>Missing</dt><dd id="email-missing">—</dd></div></dl>
+      <p id="email-health-note" class="helper-text">Loading email health…</p>
+    </section>
+
     <section id="private-access" class="prototype-card" aria-labelledby="private-access-title">
       <div class="detail-heading"><div><p class="eyebrow">Phase 3 foundation</p><h2 id="private-access-title">Private access</h2></div></div>
       <p>Create a single-use private link for controlled testing. Creating a link does not open registration, bypass capacity or send anything externally.</p>
@@ -50,7 +57,7 @@
       <div class="detail-heading"><div><p class="eyebrow">Selected test entry</p><h2 id="detail-title"></h2><p id="detail-reference"></p></div><button id="close-detail" class="text-button" type="button">Close details</button></div>
       <dl id="entry-details" class="review-list"></dl>
       <h3>Available actions</h3><div id="entry-actions" class="form-actions"></div>
-      <div id="message-preview" hidden><h3>Captured message previews</h3><ul id="entry-messages" class="message-list"></ul></div>
+      <div id="message-preview"><h3>Email history</h3><ul id="entry-messages" class="message-list"></ul></div>
       <div><h3>Audit history</h3><ol id="entry-audit" class="message-list"><li>Loading audit history…</li></ol></div>
     </section>
 

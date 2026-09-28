@@ -1,9 +1,11 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
 import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, validateProductionRunner } from "./phase3-domain.mjs";
-import { deliverRegistrationCommunication } from "./communications.mjs";
+import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
+import { confirmationRecoveryPlan, reconcileEmailHealth, recoveryFingerprint } from "./email-health.mjs";
 
 export const DEFAULT_MAX_RUNNERS_PER_ORDER = 5;
+export const DEFAULT_EMAIL_RECOVERY_MAX_PER_HOUR = 8;
 export const DECLARATION_REMINDER_POLICY = Object.freeze({ afterPaymentDays: 7 });
 const SYNTHETIC_EMAIL = /@(example\.(?:com|org|net)|[^@]+\.invalid)$/i;
 const iso = (value = new Date()) => new Date(value).toISOString();
@@ -40,7 +42,7 @@ function audit(state, action, subjectId, detail = {}, at = new Date(), actor = {
 }
 
 function ensureCollections(state) {
-  for (const name of ["orders", "orderTokens", "declarations", "declarationTokens", "declarationRecoveryAttempts", "processedPaymentEvents"]) state[name] ??= [];
+  for (const name of ["orders", "orderTokens", "declarations", "declarationTokens", "declarationRecoveryAttempts", "processedPaymentEvents", "emailOutbox"]) state[name] ??= [];
 }
 
 function orderForToken(state, token) {
@@ -182,6 +184,38 @@ export function issueDeclarationToken(state, registrationId, at = new Date()) {
   return value;
 }
 
+function prepareManagementToken(state, registrationId, at = new Date()) {
+  const value = opaqueToken(); const token = { id: id("management"), registrationId, tokenHash: hashToken(value), issuedAt: iso(at), invalidatedAt: null };
+  state.managementTokens.push(token);
+  return { id: token.id, value };
+}
+
+function prepareDeclarationToken(state, registrationId, at = new Date()) {
+  const value = opaqueToken(); const token = { id: id("declaration_token"), registrationId, purpose: "runner_declaration", tokenHash: hashToken(value), issuedAt: iso(at), revokedAt: null };
+  state.declarationTokens.push(token);
+  return { id: token.id, value };
+}
+
+function tokenSetStillValid(state, attempt) {
+  const managementValid = !attempt.managementTokenId || state.managementTokens.some((item) => item.id === attempt.managementTokenId && !item.invalidatedAt);
+  const declarationValid = !attempt.declarationTokenId || state.declarationTokens.some((item) => item.id === attempt.declarationTokenId && !item.revokedAt);
+  return managementValid && declarationValid;
+}
+
+function prepareOutboxAttempt(state, { registrationId = null, orderId = null, sourceEventId = null, purpose, idempotencyKey, message, managementTokenId = null, declarationTokenId = null, invalidatePriorTokensOnSuccess = false }, at = new Date()) {
+  ensureCollections(state);
+  const existing = state.emailOutbox.find((item) => item.idempotencyKey === idempotencyKey && item.status !== "superseded");
+  if (existing) return existing;
+  const attempt = {
+    id: id("email_outbox"), registrationId, orderId, sourceEventId, purpose, idempotencyKey,
+    status: "prepared", message, managementTokenId, declarationTokenId,
+    invalidatePriorTokensOnSuccess, attemptTimestamps: [], providerReference: null,
+    failureCategory: null, retryAfterAt: null, createdAt: iso(at), updatedAt: iso(at)
+  };
+  state.emailOutbox.push(attempt);
+  return attempt;
+}
+
 function recordDigitalDeclaration(state, registration, runner, input, completionMethod, at = new Date()) {
   if (declarationFor(state, registration.id)) return { ok: true, duplicate: true, declaration: declarationFor(state, registration.id) };
   const checked = validateDeclaration(state, runner, "now", input);
@@ -195,9 +229,9 @@ function recordDigitalDeclaration(state, registration, runner, input, completion
 }
 
 export class OrderRegistrationService {
-  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "", maxRunnersPerOrder = DEFAULT_MAX_RUNNERS_PER_ORDER, reminderPolicy = DECLARATION_REMINDER_POLICY, draftRetentionHours = null }) {
+  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "", maxRunnersPerOrder = DEFAULT_MAX_RUNNERS_PER_ORDER, emailRecoveryMaxPerHour = DEFAULT_EMAIL_RECOVERY_MAX_PER_HOUR, reminderPolicy = DECLARATION_REMINDER_POLICY, draftRetentionHours = null }) {
     this.repository = repository; this.stripeGateway = stripeGateway; this.emailAdapter = emailAdapter;
-    this.publicBaseUrl = String(publicBaseUrl).replace(/\/$/, ""); this.maxRunnersPerOrder = Math.min(DEFAULT_MAX_RUNNERS_PER_ORDER, Number.isInteger(maxRunnersPerOrder) && maxRunnersPerOrder > 0 ? maxRunnersPerOrder : DEFAULT_MAX_RUNNERS_PER_ORDER); this.reminderPolicy = reminderPolicy; this.draftRetentionHours = Number.isInteger(draftRetentionHours) && draftRetentionHours > 0 ? draftRetentionHours : null;
+    this.publicBaseUrl = String(publicBaseUrl).replace(/\/$/, ""); this.maxRunnersPerOrder = Math.min(DEFAULT_MAX_RUNNERS_PER_ORDER, Number.isInteger(maxRunnersPerOrder) && maxRunnersPerOrder > 0 ? maxRunnersPerOrder : DEFAULT_MAX_RUNNERS_PER_ORDER); this.emailRecoveryMaxPerHour = Math.min(50, Number.isInteger(emailRecoveryMaxPerHour) && emailRecoveryMaxPerHour > 0 ? emailRecoveryMaxPerHour : DEFAULT_EMAIL_RECOVERY_MAX_PER_HOUR); this.reminderPolicy = reminderPolicy; this.draftRetentionHours = Number.isInteger(draftRetentionHours) && draftRetentionHours > 0 ? draftRetentionHours : null;
   }
   declarationUrl(token, managementToken = null) {
     const secure = new URLSearchParams();
@@ -219,6 +253,117 @@ export class OrderRegistrationService {
       });
       return { ok: false, code: "EMAIL_DELIVERY_FAILED" };
     }
+  }
+
+  async deliverPreparedOutboxAttempt(attemptId, at = new Date()) {
+    const leaseId = id("email_lease");
+    const claimed = await this.repository.transaction((state) => {
+      ensureCollections(state); const attempt = state.emailOutbox.find((item) => item.id === attemptId);
+      if (!attempt) return { ok: false, code: "EMAIL_OUTBOX_NOT_FOUND" };
+      if (attempt.status === "sent") return { ok: true, duplicate: true, sent: 0, attemptId };
+      if (attempt.status === "sending") return { ok: true, duplicate: true, inProgress: true, sent: 0, attemptId };
+      const retryable = ["throttled", "provider_5xx", "request_timeout", "network", "email_provider_error", "Error"].includes(attempt.failureCategory);
+      if (attempt.status === "failed" && !retryable) return { ok: true, duplicate: true, permanentFailure: true, sent: 0, attemptId };
+      if (attempt.retryAfterAt && new Date(attempt.retryAfterAt) > new Date(at)) return { ok: true, duplicate: true, retryNotDue: true, sent: 0, attemptId };
+      if (!attempt.message || !tokenSetStillValid(state, attempt)) {
+        attempt.status = "superseded"; attempt.updatedAt = iso(at);
+        audit(state, "email_outbox_superseded", attempt.registrationId ?? attempt.orderId, { purpose: attempt.purpose }, at, { actorType: "system" });
+        return { ok: true, superseded: true, sent: 0, attemptId };
+      }
+      attempt.status = "sending"; attempt.leaseId = leaseId; attempt.sendStartedAt = iso(at); attempt.updatedAt = iso(at);
+      return { ok: true, attemptId, message: attempt.message, deliveryIdempotencyKey: `email-outbox:${attempt.id}` };
+    });
+    if (!claimed.ok || claimed.duplicate || claimed.superseded) return claimed;
+
+    let delivered;
+    try {
+      delivered = await this.emailAdapter.send({ ...claimed.message, deliveryIdempotencyKey: claimed.deliveryIdempotencyKey });
+    } catch (error) {
+      delivered = { delivery: "failed", providerReference: null, externalCall: true, retryCount: 0, failureCategory: String(error?.name || "email_provider_error").slice(0, 80) };
+    }
+
+    const finalized = await this.repository.transaction((state) => {
+      ensureCollections(state); const attempt = state.emailOutbox.find((item) => item.id === attemptId);
+      if (!attempt) return { ok: false, code: "EMAIL_OUTBOX_NOT_FOUND" };
+      if (attempt.status === "sent") return { ok: true, duplicate: true, sent: 0, attemptId };
+      if (attempt.status !== "sending" || attempt.leaseId !== leaseId) return { ok: false, code: "EMAIL_OUTBOX_LEASE_CHANGED" };
+      const accepted = delivered.delivery === "sent" || (state.environment !== "production" && !["failed", "disabled"].includes(delivered.delivery));
+      const finalDelivery = accepted ? delivered : { ...delivered, delivery: "failed" };
+      recordRegistrationCommunication(state, attempt.message, finalDelivery, { idempotencyKey: attempt.idempotencyKey, at, updateExisting: true });
+      attempt.attemptTimestamps.push(iso(at)); attempt.providerReference = delivered.providerReference ?? null; attempt.failureCategory = accepted ? null : delivered.failureCategory ?? "email_provider_error"; attempt.updatedAt = iso(at); attempt.leaseId = null;
+      if (accepted) {
+        attempt.status = "sent"; attempt.sentAt = iso(at); attempt.retryAfterAt = null;
+        if (attempt.invalidatePriorTokensOnSuccess && attempt.registrationId) {
+          for (const token of state.managementTokens.filter((item) => item.registrationId === attempt.registrationId && item.id !== attempt.managementTokenId && !item.invalidatedAt)) token.invalidatedAt = iso(at);
+          for (const token of state.declarationTokens.filter((item) => item.registrationId === attempt.registrationId && item.id !== attempt.declarationTokenId && !item.revokedAt)) { token.revokedAt = iso(at); token.revokedReason = "superseded"; }
+        }
+        if (attempt.purpose === "initial_confirmation" && attempt.declarationTokenId) {
+          const registration = state.registrations.find((item) => item.id === attempt.registrationId); if (registration) registration.declarationInitialSentAt = iso(at);
+        }
+        audit(state, "email_outbox_sent", attempt.registrationId ?? attempt.orderId, { purpose: attempt.purpose, template: attempt.message.template }, at, { actorType: "system" });
+        if (attempt.purpose === "confirmation_recovery") audit(state, "confirmation_email_recovery_attempted", attempt.registrationId, { template: attempt.message.template, delivery: "sent", attemptId: attempt.id }, at, { actorType: "system" });
+        attempt.message = null;
+      } else {
+        attempt.status = "failed"; attempt.failedAt = iso(at);
+        attempt.retryAfterAt = Number.isFinite(delivered.retryAfterMs) ? iso(new Date(new Date(at).valueOf() + delivered.retryAfterMs)) : null;
+        const retryable = ["throttled", "provider_5xx", "request_timeout", "network", "email_provider_error", "Error"].includes(attempt.failureCategory);
+        if (!retryable) {
+          for (const token of state.managementTokens.filter((item) => item.id === attempt.managementTokenId && !item.invalidatedAt)) token.invalidatedAt = iso(at);
+          for (const token of state.declarationTokens.filter((item) => item.id === attempt.declarationTokenId && !item.revokedAt)) { token.revokedAt = iso(at); token.revokedReason = "delivery_failed"; }
+          attempt.message = null;
+        }
+        audit(state, "email_outbox_failed", attempt.registrationId ?? attempt.orderId, { purpose: attempt.purpose, template: attempt.message?.template ?? claimed.message.template, failureCategory: attempt.failureCategory }, at, { actorType: "system" });
+        if (attempt.purpose === "confirmation_recovery") audit(state, "confirmation_email_recovery_attempted", attempt.registrationId, { template: attempt.message?.template ?? claimed.message.template, delivery: "failed", attemptId: attempt.id }, at, { actorType: "system" });
+      }
+      return { ok: true, deliveryFailed: !accepted, sent: accepted ? 1 : 0, attemptId, providerReference: attempt.providerReference };
+    });
+    return finalized.deliveryFailed ? { ...finalized, ok: false, code: "EMAIL_DELIVERY_FAILED" } : finalized;
+  }
+
+  async emailHealth(actor, at = new Date()) {
+    if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" };
+    const state = await this.repository.read();
+    return { ok: true, health: reconcileEmailHealth(state, at) };
+  }
+
+  async previewConfirmationRecovery(actor, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    const state = await this.repository.read(); const plan = confirmationRecoveryPlan(state); const health = reconcileEmailHealth(state, at);
+    return { ok: true, dryRun: true, previewFingerprint: recoveryFingerprint(plan), recovery: health.recovery, expectedConfirmations: health.expectedConfirmations, initialConfirmations: health.initialConfirmations };
+  }
+
+  async recoverOneConfirmation(actor, input = {}, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    const prepared = await this.repository.transaction((state) => {
+      ensureCollections(state);
+      const plan = confirmationRecoveryPlan(state); const fingerprint = recoveryFingerprint(plan);
+      if (!plan.length) return { ok: true, sent: 0, remaining: 0, duplicate: true };
+      if (input.previewFingerprint !== fingerprint || input.confirmation !== "SEND 1 RECOVERY EMAIL") return { ok: false, code: "CONFIRMATION_REQUIRED" };
+      const outboxKeys = new Set(state.emailOutbox.map((item) => item.idempotencyKey));
+      const legacyAttempts = (state.communications ?? []).filter((receipt) => receipt.externalCall && !outboxKeys.has(receipt.idempotencyKey) && new Date(receipt.attemptedAt ?? receipt.sentAt ?? receipt.createdAt) >= new Date(new Date(at).valueOf() - 3_600_000));
+      const outboxAttempts = state.emailOutbox.flatMap((item) => item.attemptTimestamps ?? []).filter((timestamp) => new Date(timestamp) >= new Date(new Date(at).valueOf() - 3_600_000));
+      const externalAttempts = legacyAttempts.length + outboxAttempts.length;
+      if (externalAttempts >= this.emailRecoveryMaxPerHour) return { ok: false, code: "EMAIL_RATE_BUDGET_EXHAUSTED", retryAfterSeconds: 3_600 };
+      const candidate = plan[0]; const registration = state.registrations.find((item) => item.id === candidate.registrationId); const runner = runnerFor(state, registration);
+      if (!registration || !runner) return { ok: false, code: "NOT_FOUND" };
+      const existing = [...state.emailOutbox].reverse().find((item) => item.registrationId === registration.id && item.purpose === "confirmation_recovery" && ["prepared", "sending", "failed"].includes(item.status) && item.message && tokenSetStillValid(state, item));
+      if (existing) return { ok: true, prepared: true, attemptId: existing.id };
+      const management = prepareManagementToken(state, registration.id, at);
+      const data = { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.value)}` };
+      let declarationToken = null;
+      if (candidate.expectedTemplate === "entry_confirmed_declaration_required") {
+        declarationToken = prepareDeclarationToken(state, registration.id, at);
+        data.secureUrl = this.declarationUrl(declarationToken.value, management.value);
+      }
+      const key = `registration:${registration.id}:confirmation-recovery:${fingerprint.slice(0, 16)}`;
+      const attempt = prepareOutboxAttempt(state, { registrationId: registration.id, purpose: "confirmation_recovery", idempotencyKey: key, message: { registrationId: registration.id, template: candidate.expectedTemplate, intendedRecipientAddress: runner.email, data }, managementTokenId: management.id, declarationTokenId: declarationToken?.id ?? null, invalidatePriorTokensOnSuccess: true }, at);
+      audit(state, "confirmation_email_recovery_prepared", registration.id, { reason: candidate.reason, template: candidate.expectedTemplate, attemptId: attempt.id }, at, actor);
+      return { ok: true, prepared: true, attemptId: attempt.id };
+    });
+    if (!prepared.ok || !prepared.attemptId) return prepared;
+    const delivery = await this.deliverPreparedOutboxAttempt(prepared.attemptId, at);
+    const remaining = confirmationRecoveryPlan(await this.repository.read()).length;
+    return delivery.ok ? { ...delivery, remaining } : { ...delivery, remaining };
   }
 
   createOrder(input, at = new Date(), invitationToken = null) {
@@ -369,9 +514,10 @@ export class OrderRegistrationService {
   }
 
   async webhook(event, at = new Date()) {
-    return this.repository.transaction(async (state) => {
+    const prepared = await this.repository.transaction((state) => {
       ensureCollections(state);
-      if (!event?.id || state.processedPaymentEvents.some((item) => item.id === event.id)) return event?.id ? { ok: true, duplicate: true } : { ok: false, code: "UNSUPPORTED_EVENT" };
+      if (!event?.id) return { ok: false, code: "UNSUPPORTED_EVENT" };
+      if (state.processedPaymentEvents.some((item) => item.id === event.id)) return { ok: true, duplicate: true, outboxAttemptIds: state.emailOutbox.filter((item) => item.sourceEventId === event.id).map((item) => item.id) };
       const object = event.data?.object ?? {};
       const payment = state.payments.find((item) => item.orderId && (item.checkoutSessionId === object.id || item.paymentIntentId === (object.payment_intent?.id ?? object.payment_intent)));
       if (!payment) return { ok: false, code: "PAYMENT_NOT_FOUND" };
@@ -383,17 +529,26 @@ export class OrderRegistrationService {
         else {
           payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.sessionId === object.id ? { ...attempt, status: "completed", completedAt: iso(at) } : attempt);
           payment.status = "paid"; payment.actualPaidAmountPence = paid; payment.paymentIntentId = typeof object.payment_intent === "string" ? object.payment_intent : object.payment_intent?.id; payment.completedAt = iso(at); payment.webhookReconciliationState = "reconciled"; order.status = "paid"; order.paidAt = iso(at);
+          const outboxAttemptIds = [];
           for (const registration of registrations) {
             registration.placeStatus = "confirmed"; registration.entryStatus = "accepted"; registration.updatedAt = iso(at);
-            const runner = runnerFor(state, registration); const management = issueManagementToken(state, registration.id, { actorType: "system" }, at);
+            const runner = runnerFor(state, registration); const management = prepareManagementToken(state, registration.id, at);
             if (declarationView(state, registration).status === "pending") {
-              const declarationToken = issueDeclarationToken(state, registration.id, at);
-              await this.communicateWithoutRollingBackState(state, { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, secureUrl: this.declarationUrl(declarationToken, management.token), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed-pending`, at);
-              registration.declarationInitialSentAt = iso(at);
-            } else await this.communicateWithoutRollingBackState(state, { registrationId: registration.id, template: "entry_confirmed", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` } }, `order:${order.id}:registration:${registration.id}:confirmed`, at);
+              const declarationToken = prepareDeclarationToken(state, registration.id, at);
+              const attempt = prepareOutboxAttempt(state, { registrationId: registration.id, orderId: order.id, sourceEventId: event.id, purpose: "initial_confirmation", idempotencyKey: `order:${order.id}:registration:${registration.id}:confirmed-pending`, message: { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, secureUrl: this.declarationUrl(declarationToken.value, management.value), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.value)}` } }, managementTokenId: management.id, declarationTokenId: declarationToken.id, invalidatePriorTokensOnSuccess: true }, at);
+              outboxAttemptIds.push(attempt.id);
+            } else {
+              const attempt = prepareOutboxAttempt(state, { registrationId: registration.id, orderId: order.id, sourceEventId: event.id, purpose: "initial_confirmation", idempotencyKey: `order:${order.id}:registration:${registration.id}:confirmed`, message: { registrationId: registration.id, template: "entry_confirmed", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.value)}` } }, managementTokenId: management.id, invalidatePriorTokensOnSuccess: true }, at);
+              outboxAttemptIds.push(attempt.id);
+            }
           }
-          if (registrations.length > 1) await this.communicateWithoutRollingBackState(state, { orderId: order.id, template: "order_payment_confirmed", intendedRecipientAddress: order.purchaserEmail, data: { runnerCount: registrations.length, amountPence: order.totalPence } }, `order:${order.id}:purchaser-confirmed`, at);
+          if (registrations.length > 1) {
+            const attempt = prepareOutboxAttempt(state, { orderId: order.id, sourceEventId: event.id, purpose: "purchaser_confirmation", idempotencyKey: `order:${order.id}:purchaser-confirmed`, message: { orderId: order.id, template: "order_payment_confirmed", intendedRecipientAddress: order.purchaserEmail, data: { runnerCount: registrations.length, amountPence: order.totalPence } } }, at);
+            outboxAttemptIds.push(attempt.id);
+          }
           audit(state, "order_payment_confirmed", order.id, { runnerCount: registrations.length, totalPence: order.totalPence }, at);
+          payment.updatedAt = iso(at); order.updatedAt = iso(at); state.processedPaymentEvents.push({ id: event.id, type: event.type, processedAt: iso(at) });
+          return { ok: true, orderStatus: order.status, paymentStatus: payment.status, confirmed: registrations.length, outboxAttemptIds };
         }
       } else if (["checkout.session.expired", "checkout.session.async_payment_failed"].includes(event.type)) {
         if (payment.status !== "paid") { payment.status = event.type === "checkout.session.expired" ? "expired" : "failed"; payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.sessionId === object.id ? { ...attempt, status: payment.status, expiredAt: iso(at) } : attempt); order.status = "checkout_expired"; registrations.forEach((registration) => { registration.placeStatus = "none"; registration.entryStatus = "draft"; }); audit(state, "order_checkout_released", order.id, { runnerCount: registrations.length }, at); }
@@ -407,8 +562,12 @@ export class OrderRegistrationService {
         audit(state, "stripe_refund_failed", registrationId ?? order.id, {}, at);
       } else return { ok: false, code: "UNSUPPORTED_EVENT" };
       payment.updatedAt = iso(at); order.updatedAt = iso(at); state.processedPaymentEvents.push({ id: event.id, type: event.type, processedAt: iso(at) });
-      return { ok: true, orderStatus: order.status, paymentStatus: payment.status, confirmed: registrations.filter((item) => item.placeStatus === "confirmed").length };
+      return { ok: true, orderStatus: order.status, paymentStatus: payment.status, confirmed: registrations.filter((item) => item.placeStatus === "confirmed").length, outboxAttemptIds: [] };
     });
+    if (!prepared.ok) return prepared;
+    const deliveries = [];
+    for (const attemptId of prepared.outboxAttemptIds ?? []) deliveries.push(await this.deliverPreparedOutboxAttempt(attemptId, at));
+    return { ...prepared, emailFailures: deliveries.filter((item) => !item.ok && item.code === "EMAIL_DELIVERY_FAILED").length };
   }
 
   async inspectDeclaration(token) {

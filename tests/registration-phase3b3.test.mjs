@@ -316,7 +316,7 @@ test("Stripe webhook converges after storage failure without duplicate payment, 
   assert.equal(final.registrations.filter((item) => item.placeStatus === "confirmed").length, 1);
   assert.equal(final.processedPaymentEvents.filter((item) => item.id === event.id).length, 1);
   assert.equal(final.communications.filter((item) => item.template === "entry_confirmed_declaration_required").length, 1);
-  assert.equal(providerEffects.size, 1); assert.equal(sendCalls, 2);
+  assert.equal(providerEffects.size, 1); assert.equal(sendCalls, 1);
 });
 
 test("email provider failure cannot roll back authoritative paid state and resend remains independent", async () => {

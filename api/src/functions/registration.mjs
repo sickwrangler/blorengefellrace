@@ -41,6 +41,7 @@ const phase3Integrations = new Phase3IntegrationService({
   publicBaseUrl,
   orderConfiguration: {
     maxRunnersPerOrder: positiveInteger("REGISTRATION_MAX_RUNNERS_PER_ORDER", 5),
+    emailRecoveryMaxPerHour: positiveInteger("REGISTRATION_EMAIL_RECOVERY_MAX_PER_HOUR", 8),
     reminderPolicy: { afterPaymentDays: positiveInteger("REGISTRATION_DECLARATION_REMINDER_DAYS", 7) },
     draftRetentionHours: positiveInteger("REGISTRATION_DRAFT_RETENTION_HOURS")
   }

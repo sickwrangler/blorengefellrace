@@ -15,6 +15,7 @@
 # Generated managed-API copies and dependencies
 /api/src/shared/
 /api/node_modules/
+/scheduler/node_modules/
 
 # Deterministic deployment staging output
 /.deployment/

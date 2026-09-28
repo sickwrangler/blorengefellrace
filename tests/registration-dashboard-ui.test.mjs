@@ -33,3 +33,14 @@ test("provider-proof refund controls are explicit and mode-aware", () => {
   assert.match(script, /This will return real money when Stripe is live/);
   assert.match(script, /Revoke proof access/);
 });
+
+test("organiser dashboard reports aggregate email health and receipt delivery semantics", () => {
+  const page = fs.readFileSync("registration/dashboard.html", "utf8");
+  const script = fs.readFileSync("registration/dashboard.mjs", "utf8");
+  assert.match(page, /id="email-health-title">Email health/);
+  for (const id of ["email-expected", "email-sent", "email-failed", "email-missing"]) assert.match(page, new RegExp(`id="${id}"`));
+  assert.match(script, /prototype\.emailHealth\(\)/);
+  assert.match(script, /message\.delivery === "sent" \? "Sent"/);
+  assert.match(script, /Recipient \$\{message\.intendedRecipientAddress/);
+  assert.doesNotMatch(script, /strong\.textContent = message\.subject/);
+});

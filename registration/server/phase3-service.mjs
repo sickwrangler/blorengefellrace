@@ -4,6 +4,7 @@ import { authorizePrivateInvitation, createNextWaitingListOffer, decideRefund, d
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken } from "./order-service.mjs";
+import { reconcileEmailHealth } from "./email-health.mjs";
 
 const hashToken = (value) => crypto.createHash("sha256").update(String(value ?? "")).digest("hex");
 const iso = (value = new Date()) => new Date(value).toISOString();
@@ -378,7 +379,8 @@ export class Phase3IntegrationService {
     }).then(async (result) => {
       if (!result.ok) return result;
       const orderResult = await this.orders.runScheduledWork(at);
-      return { ...result, declarationReminders: orderResult.declarationReminders, abandonedOrders: orderResult.abandonedOrders };
+      const emailHealth = reconcileEmailHealth(await this.repository.read(), at);
+      return { ...result, declarationReminders: orderResult.declarationReminders, abandonedOrders: orderResult.abandonedOrders, emailHealth: { failed: emailHealth.initialConfirmations.failed, missing: emailHealth.initialConfirmations.missing, backlog: emailHealth.failedCommunicationBacklog, oldestFailedAgeMinutes: emailHealth.oldestFailedCommunicationAgeMinutes } };
     });
   }
 }
