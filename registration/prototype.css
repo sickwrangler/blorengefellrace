@@ -11,6 +11,10 @@ body { min-width: 0; }
 .status-grid, .summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: 1.5rem 0; }
 .status-grid div { padding: .8rem; border: 1px solid var(--colour-stone); }
 .summary-grid div { padding: 1rem; border: 1px solid var(--colour-stone-dark); background: var(--colour-paper-light); }
+.email-health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .75rem; margin: 1rem 0; }
+.email-health-grid div { padding: .8rem; border: 1px solid var(--colour-stone-dark); background: var(--colour-paper); }
+.email-health-grid dt { color: var(--colour-ink-soft); font-size: .82rem; }
+.email-health-grid dd { margin: .2rem 0 0; font-size: 1.5rem; font-weight: 750; }
 .status-grid span, .status-grid strong, .summary-grid span, .summary-grid strong { display: block; }
 .summary-grid strong { color: var(--colour-forest-dark); font-family: var(--font-display); font-size: 1.8rem; }
 .status-grid span, .hint { color: var(--colour-ink-soft); font-size: .78rem; }

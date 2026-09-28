@@ -35,6 +35,9 @@ export function createProductionApi({ service, phase3Integrations, repository, s
       if (body.confirmation !== `CHANGE ${body.expectedState} TO ${body.state}`) return resultResponse({ ok: false, code: "CONFIRMATION_REQUIRED" });
       return resultResponse(await repository.transaction((state) => transitionRegistrationState(state, body.state, actor, { expectedState: body.expectedState })));
     }
+    if (method === "GET" && pathname === "/api/v4/organiser/email-health") return resultResponse(await phase3Integrations.orders.emailHealth(actor));
+    if (method === "GET" && pathname === "/api/v4/organiser/email-recovery/preview") return resultResponse(await phase3Integrations.orders.previewConfirmationRecovery(actor));
+    if (method === "POST" && pathname === "/api/v4/organiser/email-recovery/execute-one") return resultResponse(await phase3Integrations.orders.recoverOneConfirmation(actor, body));
 
     if (method === "POST" && pathname === "/api/v3/stripe/webhook") return resultResponse(await phase3Integrations.webhook(body.rawBody, headers["stripe-signature"]));
     if (method === "GET" && pathname === "/api/v3/registration/status") return response(200, phase3Integrations.integrationStatus());

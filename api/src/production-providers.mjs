@@ -4,6 +4,7 @@ import { EmailClient } from "@azure/communication-email";
 import { DefaultAzureCredential } from "@azure/identity";
 import { createStripeGateway } from "./shared/server/phase3-integrations.mjs";
 import { renderRegistrationEmail } from "./shared/server/email-templates.mjs";
+import { sendAcsEmailWithRetry } from "./shared/server/acs-email-delivery.mjs";
 
 export function createProductionStripeGateway(configuration) {
   if (!configuration.stripeEnabled) return null;
@@ -19,11 +20,12 @@ export function createDisabledProductionEmailAdapter() {
   });
 }
 
-export function createProductionEmailAdapter(configuration, credential = new DefaultAzureCredential()) {
+export function createProductionEmailAdapter(configuration, credential = new DefaultAzureCredential(), { client: suppliedClient = null, telemetry = console, retry = {} } = {}) {
   if (!configuration.emailEnabled) return createDisabledProductionEmailAdapter();
-  const client = configuration.emailConnectionString
-    ? new EmailClient(configuration.emailConnectionString)
-    : new EmailClient(configuration.emailEndpoint, credential);
+  const sdkOptions = { retryOptions: { maxRetries: 0 } };
+  const client = suppliedClient ?? (configuration.emailConnectionString
+    ? new EmailClient(configuration.emailConnectionString, sdkOptions)
+    : new EmailClient(configuration.emailEndpoint, credential, sdkOptions));
   return Object.freeze({
     kind: "acs-production",
     externalDelivery: true,
@@ -31,18 +33,17 @@ export function createProductionEmailAdapter(configuration, credential = new Def
       const rendered = renderRegistrationEmail(message.template, { ...message.data, intendedRecipientAddress: message.intendedRecipientAddress });
       const digest = crypto.createHash("sha256").update(String(message.deliveryIdempotencyKey)).digest("hex");
       const operationId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
-      try {
-        const poller = await client.beginSend({
+      return sendAcsEmailWithRetry({
+        client,
+        request: {
           senderAddress: configuration.emailSender,
           recipients: { to: [{ address: message.intendedRecipientAddress }] },
           content: { subject: rendered.subject, plainText: rendered.text, html: rendered.html }
-        }, { operationId });
-        const result = await poller.pollUntilDone();
-        if (result.status !== "Succeeded") return { delivery: "failed", providerReference: result.id ?? null, externalCall: true };
-        return { delivery: "sent", providerReference: result.id, externalCall: true };
-      } catch {
-        return { delivery: "failed", providerReference: null, externalCall: true };
-      }
+        },
+        operationId,
+        telemetry,
+        ...retry
+      });
     }
   });
 }

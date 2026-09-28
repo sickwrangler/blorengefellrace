@@ -24,7 +24,10 @@ export async function deliverRegistrationCommunication(state, email, message, { 
     providerReference: delivered.providerReference ?? null,
     externalCall: delivered.externalCall === true,
     createdAt: iso(at),
-    sentAt: delivered.externalCall ? iso(at) : null
+    attemptedAt: delivered.externalCall ? iso(at) : null,
+    sentAt: delivered.delivery === "sent" ? iso(at) : null,
+    retryCount: delivered.retryCount ?? 0,
+    failureCategory: delivered.failureCategory ?? null
   };
   state.communications.push(receipt);
   return { ok: true, duplicate: false, receipt };

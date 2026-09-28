@@ -164,6 +164,14 @@ For serious or unclear incidents: **PAUSE/CLOSE new registrations before repairi
 - **Do not:** roll back payments or mass-resend blindly.
 - **Escalate:** Azure Communication Services support for provider outage.
 
+### Managed-domain throttling or confirmation backlog
+
+- **Symptoms:** accepted registrations materially exceed successful initial-confirmation receipts; ACS accepted-send records stop at the managed-domain quota; application retry telemetry reports `throttled`.
+- **Contain:** use `OPEN → PAUSED` when continuing traffic is likely to create more missing required email. Never use `CLOSED_FINAL` for temporary containment.
+- **Inspect:** aggregate Email Health counts, dry-run recovery count, ACS send/status buckets and the documented domain quota. Do not query or export recipient fields for general reconciliation.
+- **Recover:** migrate to a verified custom domain and prove delivery first; then obtain explicit approval for the guarded one-at-a-time recovery operation. Refresh the dry run after every attempt.
+- **Do not:** resend successful confirmations, use `sentAt` alone as proof, invalidate links outside the supported recovery transaction, or treat an email failure as a failed registration/payment.
+
 ## 19. Stripe unavailable
 
 - **Symptoms:** session/refund/API failures or Stripe incident.

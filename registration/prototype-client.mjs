@@ -134,6 +134,9 @@ export const prototype = {
   async resendDeclaration(registrationId) { try { return await phase4Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/declaration/resend`, { method: "POST" }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
   async recordPaperDeclaration(registrationId) { try { return await phase4Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/declaration/paper`, { method: "POST" }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
   async organiserTransfer(registrationId, input) { try { return await phase4Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/transfer`, { method: "POST", body: JSON.stringify(input) }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
+  async emailHealth() { try { return await phase4Api("/organiser/email-health", {}, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
+  async previewEmailRecovery() { try { return await phase4Api("/organiser/email-recovery/preview", {}, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
+  async executeOneEmailRecovery(input) { try { return await phase4Api("/organiser/email-recovery/execute-one", { method: "POST", body: JSON.stringify(input) }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
   async integrationStatus() {
     if (!usesApi) return { ok: true, stripe: "disabled", paymentsAvailable: false, email: "captured-only", externalEmailAvailable: false };
     try { return await phase3Api("/registration/status"); }

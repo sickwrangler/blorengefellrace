@@ -100,6 +100,8 @@ const PRODUCTION_API_COPIES = Object.freeze([
   ["registration/declarations.mjs", "src/shared/declarations.mjs"],
   ["registration/server/production-auth.mjs", "src/shared/server/auth.mjs"],
   ["registration/server/communications.mjs", "src/shared/server/communications.mjs"],
+  ["registration/server/acs-email-delivery.mjs", "src/shared/server/acs-email-delivery.mjs"],
+  ["registration/server/email-health.mjs", "src/shared/server/email-health.mjs"],
   ["registration/server/email-templates.mjs", "src/shared/server/email-templates.mjs"],
   ["registration/server/order-service.mjs", "src/shared/server/order-service.mjs"],
   ["registration/server/phase3-domain.mjs", "src/shared/server/phase3-domain.mjs"],
@@ -129,6 +131,8 @@ const DEVELOPMENT_API_COPIES = Object.freeze([
   ["registration/server/development-email.mjs", "src/shared/server/development-email.mjs"],
   ["registration/server/email-templates.mjs", "src/shared/server/email-templates.mjs"],
   ["registration/server/communications.mjs", "src/shared/server/communications.mjs"],
+  ["registration/server/acs-email-delivery.mjs", "src/shared/server/acs-email-delivery.mjs"],
+  ["registration/server/email-health.mjs", "src/shared/server/email-health.mjs"],
   ["registration/server/repositories.mjs", "src/shared/server/repositories.mjs"],
   ["registration/server/service.mjs", "src/shared/server/service.mjs"]
 ]);
@@ -275,7 +279,6 @@ function productionBrowserTransform(file, source) {
       .replace(/\s*<details class="technical-details">\s*<summary id="progress-title">[\s\S]*?<\/details>/, "")
       .replace(/\s*<div class="reset-row"><button id="reset-test"[\s\S]*?<\/div>/, "")
       .replace(/\s*<details class="technical-details"><summary>Technical details<\/summary>[\s\S]*?<\/details>/, "")
-      .replace(/\s*<div id="message-preview"[\s\S]*?<\/div>/, "")
       .replaceAll("Manage synthetic registration operations in the isolated development environment.", "Manage Blorenge Fell Race registrations.")
       .replaceAll("Payments unavailable · Email captured only", "Payments disabled · Email disabled")
       .replaceAll("Create a single-use private link for controlled testing.", "Create a limited-use private registration link.")
@@ -293,12 +296,11 @@ function productionBrowserTransform(file, source) {
   }
   if (file === "registration/dashboard.mjs") {
     value = value
-      .replace("renderList(); renderProgress(); await renderPrivateInvitations();", "renderList(); await renderPrivateInvitations();")
+      .replace("renderList(); renderProgress(); await Promise.all([renderPrivateInvitations(), renderEmailHealth()]);", "renderList(); await Promise.all([renderPrivateInvitations(), renderEmailHealth()]);")
       .replace(/\n\s*document\.querySelector\("#technical-environment"\)[^\n]+\n\s*document\.querySelector\("#technical-storage"\)[^\n]+\n\s*document\.querySelector\("#technical-schema"\)[^\n]+/, "")
       .replace(/\n\s*if \(!currentState\.testProgress\.organiserViewed[\s\S]*?\n\s*}\n/, "\n")
-      .replace("renderActions(item); renderMessages(item);", "renderActions(item);")
       .replace(/\n\s*if \(available\.includes\("messages"\)\)[^\n]+/, "")
-      .replace(/\nfunction renderMessages\([\s\S]*?\nfunction renderProgress\([\s\S]*?\n}\n\nfor \(const selector/, "\n\nfor (const selector")
+      .replace(/\nfunction renderProgress\([\s\S]*?\n}\n\nfor \(const selector/, "\n\nfor (const selector")
       .replace(/\n?document\.querySelector\("#reset-test"\)\?\.addEventListener\([^\n]+\n/, "\n")
       .replaceAll("Payments unavailable · Email captured only", "Payments disabled · Email disabled")
       .replaceAll("Email captured only", "Email disabled")

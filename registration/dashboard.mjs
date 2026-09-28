@@ -40,7 +40,7 @@ async function render() {
   document.querySelector("#technical-storage").textContent = snapshot.diagnostics.storageType;
   document.querySelector("#technical-schema").textContent = snapshot.diagnostics.schemaVersion;
   if (snapshot.recovery) showNotice(snapshot.recovery.message, true);
-  renderList(); renderProgress(); await renderPrivateInvitations();
+  renderList(); renderProgress(); await Promise.all([renderPrivateInvitations(), renderEmailHealth()]);
   const selected = currentState.registrations.find((item) => item.testReference === selectedReference);
   if (selected) {
     renderDetail(selected);
@@ -52,6 +52,20 @@ async function render() {
   } else {
     document.querySelector("#entry-detail").hidden = true;
     if (selectedReference) { selectedReference = null; history.replaceState(null, "", "dashboard.html"); }
+  }
+}
+async function renderEmailHealth() {
+  try {
+    const result = await prototype.emailHealth(); const health = result?.health;
+    if (!result?.ok || !health) { document.querySelector("#email-health-note").textContent = "Email health is unavailable."; return; }
+    document.querySelector("#email-expected").textContent = health.expectedConfirmations;
+    document.querySelector("#email-sent").textContent = health.initialConfirmations.sent;
+    document.querySelector("#email-failed").textContent = health.initialConfirmations.failed;
+    document.querySelector("#email-missing").textContent = health.initialConfirmations.missing;
+    const backlog = health.failedCommunicationBacklog;
+    document.querySelector("#email-health-note").textContent = backlog ? `${backlog} failed communication${backlog === 1 ? "" : "s"} require review. Recovery sends require a separate dry run and explicit confirmation.` : "No failed communication backlog is recorded.";
+  } catch {
+    document.querySelector("#email-health-note").textContent = "Email health is unavailable.";
   }
 }
 async function renderPrivateInvitations() {
@@ -200,9 +214,14 @@ async function cancelEntry(id, releaseRaceNumber) {
   showNotice(message, !result.ok); await render();
 }
 function renderMessages(item) {
-  const messages = currentState.communications.filter((message) => message.registrationId === item.id); const list = document.querySelector("#entry-messages"); list.replaceChildren(); document.querySelector("#message-preview").hidden = true;
-  for (const message of messages) { const li = document.createElement("li"); const strong = document.createElement("strong"); strong.textContent = message.subject; const copy = document.createElement("p"); copy.textContent = message.body; li.append(strong, copy); list.append(li); }
-  if (!messages.length) { const li = document.createElement("li"); li.textContent = "No messages have been captured for this test entry."; list.append(li); }
+  const messages = currentState.communications.filter((message) => message.registrationId === item.id); const list = document.querySelector("#entry-messages"); list.replaceChildren();
+  for (const message of messages) {
+    const li = document.createElement("li"); const strong = document.createElement("strong"); const label = String(message.template ?? "email").replaceAll("_", " ");
+    const status = message.delivery === "sent" ? "Sent" : message.delivery === "failed" ? "Failed" : "Pending"; strong.textContent = `${label} — ${status}`;
+    const detail = document.createElement("p"); const timestamp = message.createdAt ? new Date(message.createdAt).toLocaleString() : "Time unavailable"; const provider = message.providerReference ? ` · Provider reference ${message.providerReference}` : "";
+    detail.textContent = `${timestamp} · Recipient ${message.intendedRecipientAddress || "not recorded"}${provider}`; li.append(strong, detail); list.append(li);
+  }
+  if (!messages.length) { const li = document.createElement("li"); li.textContent = "No email history is recorded for this entry."; list.append(li); }
 }
 function renderProgress() {
   const reference = currentState.testProgress.submittedReference;

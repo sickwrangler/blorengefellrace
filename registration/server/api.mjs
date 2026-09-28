@@ -26,6 +26,9 @@ export function createApi({ service, phase3Integrations = null, environment = "l
     if (method === "POST" && declarationAction) return resultResponse(await (declarationAction[2] === "resend" ? phase3Integrations.orders.resendDeclaration(actor, decodeURIComponent(declarationAction[1])) : phase3Integrations.orders.recordPaperDeclaration(actor, decodeURIComponent(declarationAction[1]))));
     const organiserTransfer = pathname.match(/^\/api\/v4\/organiser\/registrations\/([^/]+)\/transfer$/);
     if (method === "POST" && organiserTransfer) return resultResponse(await phase3Integrations.organiserTransfer(actor, decodeURIComponent(organiserTransfer[1]), body));
+    if (method === "GET" && pathname === "/api/v4/organiser/email-health") return resultResponse(await phase3Integrations.orders.emailHealth(actor));
+    if (method === "GET" && pathname === "/api/v4/organiser/email-recovery/preview") return resultResponse(await phase3Integrations.orders.previewConfirmationRecovery(actor));
+    if (method === "POST" && pathname === "/api/v4/organiser/email-recovery/execute-one") return resultResponse(await phase3Integrations.orders.recoverOneConfirmation(actor, body));
     if (method === "POST" && pathname === "/api/v3/stripe/webhook") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.webhook(body.rawBody, headers["stripe-signature"]));

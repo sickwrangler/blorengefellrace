@@ -2,8 +2,10 @@ import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
 import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, validateProductionRunner } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
+import { confirmationRecoveryPlan, reconcileEmailHealth, recoveryFingerprint } from "./email-health.mjs";
 
 export const DEFAULT_MAX_RUNNERS_PER_ORDER = 5;
+export const DEFAULT_EMAIL_RECOVERY_MAX_PER_HOUR = 8;
 export const DECLARATION_REMINDER_POLICY = Object.freeze({ afterPaymentDays: 7 });
 const SYNTHETIC_EMAIL = /@(example\.(?:com|org|net)|[^@]+\.invalid)$/i;
 const iso = (value = new Date()) => new Date(value).toISOString();
@@ -195,9 +197,9 @@ function recordDigitalDeclaration(state, registration, runner, input, completion
 }
 
 export class OrderRegistrationService {
-  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "", maxRunnersPerOrder = DEFAULT_MAX_RUNNERS_PER_ORDER, reminderPolicy = DECLARATION_REMINDER_POLICY, draftRetentionHours = null }) {
+  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "", maxRunnersPerOrder = DEFAULT_MAX_RUNNERS_PER_ORDER, emailRecoveryMaxPerHour = DEFAULT_EMAIL_RECOVERY_MAX_PER_HOUR, reminderPolicy = DECLARATION_REMINDER_POLICY, draftRetentionHours = null }) {
     this.repository = repository; this.stripeGateway = stripeGateway; this.emailAdapter = emailAdapter;
-    this.publicBaseUrl = String(publicBaseUrl).replace(/\/$/, ""); this.maxRunnersPerOrder = Math.min(DEFAULT_MAX_RUNNERS_PER_ORDER, Number.isInteger(maxRunnersPerOrder) && maxRunnersPerOrder > 0 ? maxRunnersPerOrder : DEFAULT_MAX_RUNNERS_PER_ORDER); this.reminderPolicy = reminderPolicy; this.draftRetentionHours = Number.isInteger(draftRetentionHours) && draftRetentionHours > 0 ? draftRetentionHours : null;
+    this.publicBaseUrl = String(publicBaseUrl).replace(/\/$/, ""); this.maxRunnersPerOrder = Math.min(DEFAULT_MAX_RUNNERS_PER_ORDER, Number.isInteger(maxRunnersPerOrder) && maxRunnersPerOrder > 0 ? maxRunnersPerOrder : DEFAULT_MAX_RUNNERS_PER_ORDER); this.emailRecoveryMaxPerHour = Math.min(50, Number.isInteger(emailRecoveryMaxPerHour) && emailRecoveryMaxPerHour > 0 ? emailRecoveryMaxPerHour : DEFAULT_EMAIL_RECOVERY_MAX_PER_HOUR); this.reminderPolicy = reminderPolicy; this.draftRetentionHours = Number.isInteger(draftRetentionHours) && draftRetentionHours > 0 ? draftRetentionHours : null;
   }
   declarationUrl(token, managementToken = null) {
     const secure = new URLSearchParams();
@@ -219,6 +221,44 @@ export class OrderRegistrationService {
       });
       return { ok: false, code: "EMAIL_DELIVERY_FAILED" };
     }
+  }
+
+  async emailHealth(actor, at = new Date()) {
+    if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" };
+    const state = await this.repository.read();
+    return { ok: true, health: reconcileEmailHealth(state, at) };
+  }
+
+  async previewConfirmationRecovery(actor, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    const state = await this.repository.read(); const plan = confirmationRecoveryPlan(state); const health = reconcileEmailHealth(state, at);
+    return { ok: true, dryRun: true, previewFingerprint: recoveryFingerprint(plan), recovery: health.recovery, expectedConfirmations: health.expectedConfirmations, initialConfirmations: health.initialConfirmations };
+  }
+
+  async recoverOneConfirmation(actor, input = {}, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    return this.repository.transaction(async (state) => {
+      ensureCollections(state);
+      const plan = confirmationRecoveryPlan(state); const fingerprint = recoveryFingerprint(plan);
+      if (!plan.length) return { ok: true, sent: 0, remaining: 0, duplicate: true };
+      if (input.previewFingerprint !== fingerprint || input.confirmation !== "SEND 1 RECOVERY EMAIL") return { ok: false, code: "CONFIRMATION_REQUIRED" };
+      const externalAttempts = (state.communications ?? []).filter((receipt) => receipt.externalCall && new Date(receipt.attemptedAt ?? receipt.sentAt ?? receipt.createdAt) >= new Date(new Date(at).valueOf() - 3_600_000));
+      if (externalAttempts.length >= this.emailRecoveryMaxPerHour) return { ok: false, code: "EMAIL_RATE_BUDGET_EXHAUSTED", retryAfterSeconds: 3_600 };
+      const candidate = plan[0]; const registration = state.registrations.find((item) => item.id === candidate.registrationId); const runner = runnerFor(state, registration);
+      if (!registration || !runner) return { ok: false, code: "NOT_FOUND" };
+      const management = issueManagementToken(state, registration.id, actor, at);
+      const data = { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.token)}` };
+      if (candidate.expectedTemplate === "entry_confirmed_declaration_required") {
+        const declarationToken = issueDeclarationToken(state, registration.id, at);
+        data.secureUrl = this.declarationUrl(declarationToken, management.token);
+      }
+      const key = `registration:${registration.id}:confirmation-recovery:${fingerprint.slice(0, 16)}`;
+      const delivery = await this.communicateWithoutRollingBackState(state, { registrationId: registration.id, template: candidate.expectedTemplate, intendedRecipientAddress: runner.email, data }, key, at);
+      const deliveryState = delivery.receipt?.delivery ?? "failed";
+      audit(state, "confirmation_email_recovery_attempted", registration.id, { reason: candidate.reason, template: candidate.expectedTemplate, delivery: deliveryState }, at, actor);
+      const remaining = confirmationRecoveryPlan(state).length;
+      return { ok: true, deliveryFailed: deliveryState !== "sent", sent: deliveryState === "sent" ? 1 : 0, remaining };
+    }).then((result) => result.committedError ?? (result.deliveryFailed ? { ...result, ok: false, code: "EMAIL_DELIVERY_FAILED" } : result));
   }
 
   createOrder(input, at = new Date(), invitationToken = null) {
