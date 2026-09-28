@@ -1,13 +1,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { sendAcsEmailWithRetry } from "../registration/server/acs-email-delivery.mjs";
 import { confirmationRecoveryPlan, reconcileEmailHealth } from "../registration/server/email-health.mjs";
 import { OrderRegistrationService } from "../registration/server/order-service.mjs";
-import { createMemoryRepository } from "../registration/server/repositories.mjs";
+import { createAzureTableRepository, createMemoryRepository } from "../registration/server/repositories.mjs";
 import { createDatabase } from "../registration/server/service.mjs";
+import { capacitySummary } from "../registration/server/phase3-domain.mjs";
+import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
 
 const at = new Date("2026-09-28T08:00:00Z");
 const organiser = { authenticated: true, role: "administrator", actorType: "organiser", id: "synthetic-organiser" };
+const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
+
+function etagConflictRepository(initialState, conflictSubmitCalls = []) {
+  let stored = structuredClone(initialState); let etag = 1; let submits = 0;
+  const conflicts = new Set(conflictSubmitCalls);
+  const repository = createAzureTableRepository({
+    async loadPartition() { return { state: structuredClone(stored), etag: String(etag) }; },
+    async submitTransaction({ after }) {
+      submits += 1;
+      if (conflicts.has(submits)) {
+        stored.auditEvents.push({ id: `concurrent-${submits}`, action: "unrelated_concurrent_write", occurredAt: at.toISOString(), environment: stored.environment }); etag += 1;
+        const error = new Error("synthetic ETag conflict"); error.statusCode = 412; throw error;
+      }
+      stored = structuredClone(after); etag += 1;
+    },
+    retryDelay: async () => {}
+  });
+  return { repository, submits: () => submits };
+}
 
 function providerError(statusCode, retryAfter = null) {
   const error = new Error(`provider ${statusCode}`); error.statusCode = statusCode;
@@ -64,8 +86,8 @@ function recoveryState() {
     { id: "payment-unpaid", registrationIds: ["registration-unpaid"], status: "checkout_pending", refundedRegistrationIds: [] }
   );
   state.communications.push({ id: "communication-complete", idempotencyKey: "initial-complete", registrationId: "registration-complete", template: "entry_confirmed", delivery: "sent", providerReference: "provider-complete", externalCall: true, createdAt: at.toISOString(), sentAt: at.toISOString() });
-  state.managementTokens.push({ id: "old-management", registrationId: "registration-pending", tokenHash: "old", issuedAt: at.toISOString(), invalidatedAt: null });
-  state.declarationTokens.push({ id: "old-declaration", registrationId: "registration-pending", tokenHash: "old", issuedAt: at.toISOString(), revokedAt: null });
+  state.managementTokens.push({ id: "old-management", registrationId: "registration-pending", tokenHash: sha256("old-management-token"), issuedAt: at.toISOString(), invalidatedAt: null });
+  state.declarationTokens.push({ id: "old-declaration", registrationId: "registration-pending", purpose: "runner_declaration", tokenHash: sha256("old-declaration-token"), issuedAt: at.toISOString(), revokedAt: null });
   return state;
 }
 
@@ -96,6 +118,11 @@ test("failed recovery records failure without undoing paid registration", async 
   assert.equal(result.code, "EMAIL_DELIVERY_FAILED"); const final = await repository.read();
   assert.equal(final.payments.find((item) => item.id === "payment-pending").status, "paid"); assert.equal(final.registrations.find((item) => item.id === "registration-pending").placeStatus, "confirmed");
   assert.equal(final.communications.filter((item) => item.registrationId === "registration-pending" && item.delivery === "failed").length, 2);
+  assert.equal(final.managementTokens.find((item) => item.id === "old-management").invalidatedAt, null);
+  assert.equal(final.declarationTokens.find((item) => item.id === "old-declaration").revokedAt, null);
+  const phase3 = new Phase3IntegrationService({ repository, emailAdapter: { async send() {} }, publicBaseUrl: "https://development.example" });
+  assert.equal((await phase3.managementEntry("old-management-token")).ok, true);
+  assert.equal((await orders.inspectDeclaration("old-declaration-token")).ok, true);
 });
 
 test("recovery honours the configured hourly external-attempt budget", async () => {
@@ -106,4 +133,43 @@ test("recovery honours the configured hourly external-attempt budget", async () 
   const preview = await orders.previewConfirmationRecovery(organiser, at);
   const result = await orders.recoverOneConfirmation(organiser, { previewFingerprint: preview.previewFingerprint, confirmation: "SEND 1 RECOVERY EMAIL" }, at);
   assert.equal(result.ok, false); assert.equal(result.code, "EMAIL_RATE_BUDGET_EXHAUSTED"); assert.equal(sends, 0);
+});
+
+test("recovery ACS success followed by finalisation ETag conflict keeps one valid emailed token set", async () => {
+  const prepared = etagConflictRepository(recoveryState(), [3]); const sent = [];
+  const emailAdapter = { async send(message) { sent.push(message); return { delivery: "sent", externalCall: true, providerReference: "provider-once" }; } };
+  const orders = new OrderRegistrationService({ repository: prepared.repository, publicBaseUrl: "https://development.example", emailAdapter });
+  const preview = await orders.previewConfirmationRecovery(organiser, at);
+  const result = await orders.recoverOneConfirmation(organiser, { previewFingerprint: preview.previewFingerprint, confirmation: "SEND 1 RECOVERY EMAIL" }, at);
+  assert.equal(result.ok, true); assert.equal(sent.length, 1); assert.ok(prepared.submits() >= 4);
+  const secure = new URL(sent[0].data.secureUrl); const declarationToken = new URLSearchParams(secure.hash.slice(1)).get("token"); const managementToken = new URLSearchParams(secure.hash.slice(1)).get("manage");
+  assert.equal((await orders.inspectDeclaration(declarationToken)).ok, true);
+  const phase3 = new Phase3IntegrationService({ repository: prepared.repository, emailAdapter, publicBaseUrl: "https://development.example" });
+  assert.equal((await phase3.managementEntry(managementToken)).ok, true);
+  const final = await prepared.repository.read();
+  assert.equal(final.communications.filter((item) => item.registrationId === "registration-pending" && item.delivery === "sent").length, 1);
+  assert.equal(final.emailOutbox.filter((item) => item.status === "sent").length, 1);
+  assert.equal((await orders.previewConfirmationRecovery(organiser, at)).recovery.required, 0);
+});
+
+test("normal Stripe confirmation commits credentials before send and survives prepare and finalisation conflicts", async () => {
+  const state = createDatabase({ environment: "development", registrationState: "test", capacity: 120 });
+  state.runners.push({ id: "runner-stripe", firstName: "Stripe", lastName: "Runner", email: "stripe-runner@example.com", dateOfBirth: "1990-01-01", raceCategory: "Female" });
+  state.registrations.push({ id: "registration-stripe", runnerId: "runner-stripe", entryStatus: "accepted", placeStatus: "payment_reserved", declarationStatus: "pending", createdAt: at.toISOString(), updatedAt: at.toISOString() });
+  state.orders.push({ id: "order-stripe", purchaserEmail: "purchaser@example.com", registrationIds: ["registration-stripe"], status: "checkout_pending", totalPence: 600, createdAt: at.toISOString(), updatedAt: at.toISOString() });
+  state.payments.push({ id: "payment-stripe", orderId: "order-stripe", registrationIds: ["registration-stripe"], status: "checkout_pending", expectedAmountPence: 600, actualPaidAmountPence: null, currency: "gbp", checkoutSessionId: "cs_conflict", checkoutAttempts: [{ sessionId: "cs_conflict", status: "active" }], refundedRegistrationIds: [] });
+  const prepared = etagConflictRepository(state, [1, 4]); const sent = [];
+  const emailAdapter = { async send(message) { sent.push(message); return { delivery: "sent", externalCall: true, providerReference: "provider-stripe-once" }; } };
+  const orders = new OrderRegistrationService({ repository: prepared.repository, emailAdapter, publicBaseUrl: "https://development.example" });
+  const event = { id: "evt-conflict", type: "checkout.session.completed", data: { object: { id: "cs_conflict", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_conflict" } } };
+  const result = await orders.webhook(event, at); assert.equal(result.ok, true); assert.equal(sent.length, 1);
+  const secure = new URL(sent[0].data.secureUrl); const parameters = new URLSearchParams(secure.hash.slice(1)); const declarationToken = parameters.get("token"); const managementToken = parameters.get("manage");
+  assert.equal((await orders.inspectDeclaration(declarationToken)).ok, true);
+  const phase3 = new Phase3IntegrationService({ repository: prepared.repository, emailAdapter, publicBaseUrl: "https://development.example" });
+  assert.equal((await phase3.managementEntry(managementToken)).ok, true);
+  const final = await prepared.repository.read();
+  assert.equal(final.payments.length, 1); assert.equal(final.payments[0].status, "paid"); assert.equal(capacitySummary(final).confirmed, 1);
+  assert.equal(final.processedPaymentEvents.filter((item) => item.id === event.id).length, 1);
+  assert.equal(final.communications.filter((item) => item.registrationId === "registration-stripe").length, 1);
+  assert.equal((await orders.webhook(event, at)).duplicate, true); assert.equal(sent.length, 1);
 });

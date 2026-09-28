@@ -51,6 +51,10 @@ The protected organiser API exposes a read-only aggregate health view and a dry-
 
 Only active, paid, confirmed registrations with no successful `entry_confirmed` or `entry_confirmed_declaration_required` receipt qualify. Successful confirmations are excluded. That state-derived plan acts as the durable recovery queue: an item remains eligible until a successful receipt exists. Recovery creates fresh management/declaration tokens as needed, invalidates superseded tokens, selects the current template from declaration status, stores an audited receipt and never changes payment or place state. Repeat the dry run after every execution. Bulk recovery must not start without an explicit production approval based on the current dry-run count.
 
+Confirmation delivery uses a three-phase durable outbox. The first ETag-guarded transaction commits the exact secure-token hashes and a private prepared payload before any provider call. A second transaction claims that durable attempt, then ACS receives the already-committed payload using an operation ID derived from the outbox-attempt ID. A final ETag-guarded transaction records the provider result and communication receipt; retries of that final transaction do not call ACS again. Existing valid management/declaration tokens remain valid during preparation and provider failure, and are superseded only after provider acceptance. Successfully finalised payloads are removed from the outbox record. A `sending` attempt left by process interruption must be reconciled against ACS before an operator changes or retries it; it is not automatically resent.
+
+Because an unsent/retryable attempt must reproduce exactly the same secure links, its prepared payload exists temporarily inside the private production state. It is never returned by public or organiser snapshot APIs, logged, or included in repository source. Normal production state access and backup controls apply.
+
 ## Email not received
 
 1. Confirm the runner email is correct in the organiser dashboard without copying it into tickets/chat.

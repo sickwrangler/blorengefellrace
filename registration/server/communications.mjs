@@ -12,7 +12,14 @@ export async function deliverRegistrationCommunication(state, email, message, { 
   const existing = state.communications.find((item) => item.idempotencyKey === idempotencyKey);
   if (existing) return { ok: true, duplicate: true, receipt: existing };
   const delivered = await email.send({ ...message, deliveryIdempotencyKey: idempotencyKey });
-  const receipt = {
+  return recordRegistrationCommunication(state, message, delivered, { idempotencyKey, at });
+}
+
+export function recordRegistrationCommunication(state, message, delivered, { idempotencyKey, at = new Date(), updateExisting = false } = {}) {
+  state.communications ??= [];
+  const existing = state.communications.find((item) => item.idempotencyKey === idempotencyKey);
+  if (existing && !updateExisting) return { ok: true, duplicate: true, receipt: existing };
+  const values = {
     id: `communication_${crypto.randomUUID()}`,
     idempotencyKey,
     registrationId: message.registrationId ?? null,
@@ -29,6 +36,7 @@ export async function deliverRegistrationCommunication(state, email, message, { 
     retryCount: delivered.retryCount ?? 0,
     failureCategory: delivered.failureCategory ?? null
   };
-  state.communications.push(receipt);
+  const receipt = existing ? Object.assign(existing, { ...values, id: existing.id, createdAt: existing.createdAt }) : values;
+  if (!existing) state.communications.push(receipt);
   return { ok: true, duplicate: false, receipt };
 }

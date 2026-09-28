@@ -27,6 +27,8 @@ At the verified baseline, the allowlists contain 71 application files and 18 API
 
 Deployment does not normally change/delete registrations. Authoritative state is separate in Azure Table `RegistrationProduction`, partition `blorenge-2026-live`. Stripe payment/refund records are external. App settings, secrets, ACS resources, scheduler configuration and operational state are not changed by ordinary content deployment.
 
+The merge-to-`main` Static Web Apps workflow validates and stages the browser site, managed API and external scheduler artifacts, but deploys only the browser site and managed API. Changes under `scheduler/` require a separate controlled deployment to the production Function App. Changes under `infrastructure/registration-production/`, including monitoring alerts, require a separate reviewed Bicep infrastructure deployment. A successful Static Web Apps merge deployment must not be described as having deployed either of those components.
+
 Rolling code back does not roll back Table data or Stripe. Review schema/domain compatibility and reconcile providers before a revert. Never force-push `main`.
 
 ## Scheduler deployment
