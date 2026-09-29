@@ -91,6 +91,52 @@ function recoveryState() {
   return state;
 }
 
+function recoveryCampaignState(count) {
+  const state = createDatabase({ environment: "production", registrationState: "OPEN", capacity: 120 });
+  for (let index = 1; index <= count; index += 1) {
+    const runnerId = `campaign-runner-${index}`, registrationId = `campaign-registration-${index}`;
+    state.runners.push({ id: runnerId, firstName: "Recovery", lastName: `Runner ${index}`, email: `runner-${index}@example.com` });
+    state.registrations.push({ id: registrationId, runnerId, entryStatus: "accepted", placeStatus: "confirmed", declarationStatus: "complete" });
+    state.payments.push({ id: `campaign-payment-${index}`, registrationIds: [registrationId], status: "paid", refundedRegistrationIds: [] });
+  }
+  return state;
+}
+
+test("scheduled recovery sends one bounded batch per UTC hour and completes permanently", async () => {
+  const repository = createMemoryRepository(recoveryCampaignState(6)); const delivered = [];
+  const service = new Phase3IntegrationService({ repository, publicBaseUrl: "https://www.blorengefellrace.cymru", environment: "production", emailAdapter: { async send(message) { delivered.push(message.registrationId); return { delivery: "sent", externalCall: true, providerReference: `provider-${delivered.length}` }; } } });
+  const first = await service.runScheduledConfirmationRecovery(organiser, { maxMessages: 4 }, at);
+  assert.deepEqual({ ok: first.ok, status: first.status, sent: first.sent, remaining: first.remaining }, { ok: true, status: "active", sent: 4, remaining: 2 });
+  const duplicateHour = await service.runScheduledConfirmationRecovery(organiser, { maxMessages: 4 }, new Date("2026-09-28T08:30:00Z"));
+  assert.equal(duplicateHour.status, "already_run_this_hour"); assert.equal(delivered.length, 4);
+  const second = await service.runScheduledConfirmationRecovery(organiser, { maxMessages: 4 }, new Date("2026-09-28T09:00:01Z"));
+  assert.deepEqual({ ok: second.ok, status: second.status, sent: second.sent, remaining: second.remaining }, { ok: true, status: "completed", sent: 2, remaining: 0 });
+  const afterCompletion = await service.runScheduledConfirmationRecovery(organiser, { maxMessages: 4 }, new Date("2026-09-28T10:00:00Z"));
+  assert.equal(afterCompletion.status, "completed"); assert.equal(delivered.length, 6); assert.equal(new Set(delivered).size, 6);
+  const final = await repository.read(); const campaign = final.scheduledWork.find((item) => item.type === "confirmation_email_recovery_campaign");
+  assert.equal(campaign.status, "completed"); assert.equal(campaign.sent, 6); assert.equal(campaign.lastKnownRemaining, 0);
+});
+
+test("scheduled recovery respects the shared rolling attempt budget and resumes later", async () => {
+  const state = recoveryCampaignState(1);
+  for (let index = 0; index < 8; index += 1) state.communications.push({ id: `recent-${index}`, idempotencyKey: `recent-${index}`, template: "management_link_recovery", delivery: "sent", externalCall: true, attemptedAt: at.toISOString(), createdAt: at.toISOString() });
+  const repository = createMemoryRepository(state); let sends = 0;
+  const service = new Phase3IntegrationService({ repository, publicBaseUrl: "https://www.blorengefellrace.cymru", environment: "production", emailAdapter: { async send() { sends += 1; return { delivery: "sent", externalCall: true }; } } });
+  const budgeted = await service.runScheduledConfirmationRecovery(organiser, { maxMessages: 4 }, at);
+  assert.equal(budgeted.ok, true); assert.equal(budgeted.status, "active"); assert.equal(budgeted.sent, 0); assert.equal(sends, 0);
+  const resumed = await service.runScheduledConfirmationRecovery(organiser, { maxMessages: 4 }, new Date("2026-09-28T09:00:01Z"));
+  assert.equal(resumed.status, "completed"); assert.equal(resumed.sent, 1); assert.equal(sends, 1);
+});
+
+test("scheduled recovery pauses after a provider failure and does not retry automatically", async () => {
+  const repository = createMemoryRepository(recoveryCampaignState(2)); let sends = 0;
+  const service = new Phase3IntegrationService({ repository, publicBaseUrl: "https://www.blorengefellrace.cymru", environment: "production", emailAdapter: { async send() { sends += 1; return { delivery: "failed", failureCategory: "throttled", externalCall: true }; } } });
+  const failed = await service.runScheduledConfirmationRecovery(organiser, { maxMessages: 4 }, at);
+  assert.equal(failed.ok, false); assert.equal(failed.status, "paused"); assert.equal(failed.code, "EMAIL_DELIVERY_FAILED"); assert.equal(sends, 1);
+  const later = await service.runScheduledConfirmationRecovery(organiser, { maxMessages: 4 }, new Date("2026-09-28T09:30:00Z"));
+  assert.equal(later.status, "paused"); assert.equal(sends, 1);
+});
+
 test("email health counts only paid confirmed registrations and does not resend success", () => {
   const state = recoveryState(); state.communications.push({ id: "other", idempotencyKey: "other", registrationId: "registration-complete", template: "refund_completed", delivery: "failed", createdAt: at.toISOString() });
   const health = reconcileEmailHealth(state, at); const plan = confirmationRecoveryPlan(state);

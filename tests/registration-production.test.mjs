@@ -201,6 +201,29 @@ test("production scheduler is harmless while CLOSED and empty", async () => {
   } };
   const handler = createProductionSchedulerHandler({ service, environment: env(), clock: () => new Date("2026-10-01T12:00:00Z"), logger: { log() {}, error() {} } });
   const result = await handler(); assert.equal(result.ok, true); assert.equal(result.reminders, 0); assert.equal(result.expiredOffers, 0);
+  assert.equal(result.emailRecovery.status, "disabled");
+});
+
+test("production scheduler recovery is explicit and tightly bounded", async () => {
+  const calls = [];
+  const service = {
+    async runScheduledWork() { return { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, nextOfferCreated: false }; },
+    async runScheduledConfirmationRecovery(actor, options) { calls.push({ actor, options }); return { ok: true, status: "active", sent: 4, remaining: 35 }; }
+  };
+  const handler = createProductionSchedulerHandler({ service, environment: env({ REGISTRATION_EMAIL_RECOVERY_ENABLED: "true", REGISTRATION_EMAIL_RECOVERY_BATCH_SIZE: "4" }), clock: () => new Date("2026-10-01T12:00:00Z"), logger: { log() {}, error() {} } });
+  const result = await handler(); assert.equal(result.emailRecovery.sent, 4); assert.equal(calls.length, 1);
+  assert.equal(authorizeProduction(calls[0].actor, "manage"), true); assert.deepEqual(calls[0].options, { maxMessages: 4 });
+  assert.throws(() => createProductionSchedulerHandler({ service, environment: env({ REGISTRATION_EMAIL_RECOVERY_ENABLED: "yes" }) }), /explicitly true or false/);
+  assert.throws(() => createProductionSchedulerHandler({ service, environment: env({ REGISTRATION_EMAIL_RECOVERY_BATCH_SIZE: "5" }) }), /integer from 1 to 4/);
+});
+
+test("production scheduler surfaces a paused recovery campaign as a failed invocation", async () => {
+  const service = {
+    async runScheduledWork() { return { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, nextOfferCreated: false }; },
+    async runScheduledConfirmationRecovery() { return { ok: false, status: "paused", sent: 0, code: "EMAIL_DELIVERY_FAILED" }; }
+  };
+  const handler = createProductionSchedulerHandler({ service, environment: env({ REGISTRATION_EMAIL_RECOVERY_ENABLED: "true" }), clock: () => new Date("2026-10-01T12:00:00Z"), logger: { log() {}, error() {} } });
+  await assert.rejects(handler(), /recovery paused/);
 });
 
 test("production artifacts are exact and physically exclude browser test controls", () => {
