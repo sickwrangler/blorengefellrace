@@ -23,6 +23,8 @@ Each run uses a system-assigned managed identity to:
 - abandon old drafts only if draft retention is explicitly configured;
 - persist last-success/result metadata.
 
+The scheduler can also run a finite confirmation-email recovery campaign when `REGISTRATION_EMAIL_RECOVERY_ENABLED` is explicitly `true`. The campaign claims no more than one batch per UTC hour, sends at most four confirmations per batch, and remains subject to the shared rolling limit of eight external email attempts per hour (including ordinary transactional email). It uses the durable email outbox and provider idempotency keys, permanently completes when the recovery queue reaches zero, and pauses for operator review on failed, in-progress or ambiguous delivery. Only aggregate campaign status is stored or logged.
+
 Checkout creation, payment webhook reconciliation, refund execution, runner submission and organiser edits are synchronous API work. They do not wait for the scheduler.
 
 ## Health check

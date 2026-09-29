@@ -367,6 +367,7 @@ export class Phase3IntegrationService {
       const scheduledEmail = { send: (message) => this.communicate(state, message, `scheduled:${message.template}:${hashToken(message.intendedRecipientAddress)}:${message.data?.expiresAt ?? iso(at)}`, at) };
       const result = await processScheduledRegistrationWork(state, { email: scheduledEmail, at, actor, offerUrl: (token) => `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(token)}` });
       state.schedulerStatus = {
+        ...state.schedulerStatus,
         lastSuccessfulRunAt: iso(at),
         lastResult: {
           reminders: result.reminders,
@@ -382,5 +383,68 @@ export class Phase3IntegrationService {
       const emailHealth = reconcileEmailHealth(await this.repository.read(), at);
       return { ...result, declarationReminders: orderResult.declarationReminders, abandonedOrders: orderResult.abandonedOrders, emailHealth: { failed: emailHealth.initialConfirmations.failed, missing: emailHealth.initialConfirmations.missing, backlog: emailHealth.failedCommunicationBacklog, oldestFailedAgeMinutes: emailHealth.oldestFailedCommunicationAgeMinutes } };
     });
+  }
+
+  async runScheduledConfirmationRecovery(actor, { maxMessages = 4 } = {}, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    if (!Number.isInteger(maxMessages) || maxMessages < 1 || maxMessages > 4) return { ok: false, code: "INVALID_RECOVERY_BATCH_SIZE" };
+    const hour = iso(at).slice(0, 13);
+    const claimed = await this.repository.transaction((state) => {
+      state.scheduledWork ??= [];
+      let campaign = state.scheduledWork.find((item) => item.type === "confirmation_email_recovery_campaign");
+      if (!campaign) {
+        campaign = { id: "confirmation_email_recovery_campaign", type: "confirmation_email_recovery_campaign", status: "active", createdAt: iso(at), lastStartedHour: null, completedAt: null, pausedAt: null, pauseCode: null, sent: 0 };
+        state.scheduledWork.push(campaign);
+      }
+      if (campaign.status === "completed" || campaign.status === "paused") return { ok: true, run: false, status: campaign.status, sent: 0 };
+      if (campaign.lastStartedHour === hour) return { ok: true, run: false, status: "already_run_this_hour", sent: 0 };
+      campaign.lastStartedHour = hour;
+      campaign.lastStartedAt = iso(at);
+      return { ok: true, run: true, status: "active", sent: 0 };
+    });
+    if (!claimed.run) return claimed;
+
+    let sent = 0;
+    let remaining = null;
+    let finalStatus = "active";
+    let pauseCode = null;
+    try {
+      for (let index = 0; index < maxMessages; index += 1) {
+        const preview = await this.orders.previewConfirmationRecovery(actor, at);
+        if (!preview.ok) { finalStatus = "paused"; pauseCode = preview.code ?? "PREVIEW_FAILED"; break; }
+        remaining = preview.recovery.required;
+        if (remaining === 0) { finalStatus = "completed"; break; }
+        const result = await this.orders.recoverOneConfirmation(actor, { previewFingerprint: preview.previewFingerprint, confirmation: "SEND 1 RECOVERY EMAIL" }, at);
+        remaining = result.remaining ?? remaining;
+        if (!result.ok) {
+          if (result.code === "EMAIL_RATE_BUDGET_EXHAUSTED") break;
+          finalStatus = "paused"; pauseCode = result.code ?? "RECOVERY_FAILED"; break;
+        }
+        if (result.sent !== 1) {
+          finalStatus = "paused";
+          pauseCode = result.inProgress ? "RECOVERY_IN_PROGRESS" : result.permanentFailure ? "PERMANENT_DELIVERY_FAILURE" : result.retryNotDue ? "RETRY_NOT_DUE" : "AMBIGUOUS_RECOVERY_RESULT";
+          break;
+        }
+        sent += 1;
+        if (remaining === 0) { finalStatus = "completed"; break; }
+      }
+    } catch {
+      finalStatus = "paused";
+      pauseCode = "UNEXPECTED_RECOVERY_FAILURE";
+    }
+
+    await this.repository.transaction((state) => {
+      const campaign = (state.scheduledWork ?? []).find((item) => item.type === "confirmation_email_recovery_campaign");
+      if (!campaign) return { ok: false, code: "RECOVERY_CAMPAIGN_MISSING" };
+      campaign.sent = (campaign.sent ?? 0) + sent;
+      campaign.lastFinishedAt = iso(at);
+      campaign.lastBatchSent = sent;
+      campaign.lastKnownRemaining = remaining;
+      if (finalStatus === "completed") { campaign.status = "completed"; campaign.completedAt = iso(at); }
+      if (finalStatus === "paused") { campaign.status = "paused"; campaign.pausedAt = iso(at); campaign.pauseCode = pauseCode; }
+      state.schedulerStatus = { ...state.schedulerStatus, confirmationRecovery: { status: campaign.status, lastFinishedAt: campaign.lastFinishedAt, lastBatchSent: sent, lastKnownRemaining: remaining, pauseCode: campaign.pauseCode } };
+      return { ok: true };
+    });
+    return { ok: finalStatus !== "paused", status: finalStatus, sent, remaining, code: pauseCode };
   }
 }
