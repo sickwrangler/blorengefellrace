@@ -23,6 +23,13 @@
       <div><span>Accepted</span><strong id="summary-accepted">0</strong></div><div><span>Waiting list</span><strong id="summary-waiting">0</strong></div><div><span>Payments needing attention</span><strong id="summary-payments">0</strong></div><div><span>Declaration required</span><strong id="summary-declarations">0</strong></div><div><span>Remaining places</span><strong id="summary-remaining">120</strong></div>
     </section>
 
+    <section class="prototype-card" aria-labelledby="waiting-list-operations-title">
+      <p class="eyebrow">Capacity management</p><h2 id="waiting-list-operations-title">Waiting list</h2>
+      <p>When a place is released, offer it to the next person in queue. The offer reserves that place for 48 hours and is sent by email.</p>
+      <div class="form-actions"><button id="offer-next-waiting-place" class="button button--quiet" type="button" disabled>Offer next available place</button></div>
+      <p id="waiting-list-operations-note" class="hint">There must be both a waiting runner and an available place.</p>
+    </section>
+
     <section class="prototype-card" aria-labelledby="email-health-title">
       <div class="detail-heading"><div><p class="eyebrow">Transactional communications</p><h2 id="email-health-title">Email health</h2></div></div>
       <p>Successful delivery is based on the recorded delivery result, not merely an attempted send time.</p>

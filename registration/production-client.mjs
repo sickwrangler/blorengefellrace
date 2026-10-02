@@ -1,7 +1,7 @@
 export const canTest = true;
 export const supportsManagedApi = true;
 const privateInvitationToken = new URLSearchParams(window.location.search).get("invite");
-const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : "registration";
+const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : new URLSearchParams(window.location.search).get("offer") === "1" ? "waiting_list_offer" : "registration";
 const MANAGEMENT_TOKEN_SESSION_KEY = "blorenge-management-token";
 const ORDER_TOKEN_SESSION_KEY = "blorenge-order-token";
 
@@ -19,6 +19,9 @@ export const prototype = {
   hasPrivateInvitation: Boolean(privateInvitationToken),
   inspectPrivateAccess(purpose = privateInvitationPurpose) { return privateInvitationToken ? v2(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }) : Promise.resolve({ ok: true }); },
   status() { return v2("/registration/status"); },
+  joinWaitingList(input) { return v3("/waiting-list/join", { method: "POST", body: JSON.stringify(input), headers: privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {} }); },
+  async acceptWaitingListOffer(input) { const result = await v3("/waiting-list/accept", { method: "POST", body: JSON.stringify(input), headers: { "x-private-invitation": privateInvitationToken } }); if (result.ok) this.rememberManagementToken(result.managementToken); return result; },
+  offerNextWaitingPlace() { return v3("/organiser/waiting-list/offer-next", { method: "POST" }); },
   rememberManagementToken(token) { if (token) sessionStorage.setItem(MANAGEMENT_TOKEN_SESSION_KEY, token); },
   forgetManagementToken() { sessionStorage.removeItem(MANAGEMENT_TOKEN_SESSION_KEY); },
   managementToken() { return sessionStorage.getItem(MANAGEMENT_TOKEN_SESSION_KEY); },

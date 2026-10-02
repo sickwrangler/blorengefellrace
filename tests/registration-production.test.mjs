@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { applyProductionRuntimeConfiguration, createProductionBootstrap, productionAvailability, validateProductionState } from "../registration/server/production-bootstrap.mjs";
 import { createMemoryRepository } from "../registration/server/repositories.mjs";
-import { capacitySummary, issuePrivateInvitation, transitionRegistrationState } from "../registration/server/phase3-domain.mjs";
+import { capacitySummary, createNextWaitingListOffer, issuePrivateInvitation, transitionRegistrationState } from "../registration/server/phase3-domain.mjs";
 import { authorize as authorizeProduction, staticWebAppActor } from "../registration/server/production-auth.mjs";
 import { OrderRegistrationService } from "../registration/server/order-service.mjs";
 import { createProductionBackupService, operationalDailyBackupDue, PRODUCTION_BACKUP_POLICY } from "../registration/server/production-backup.mjs";
@@ -81,6 +81,39 @@ test("production API omits development routes and protects aggregate storage dia
   const principal = Buffer.from(JSON.stringify({ userId: "configured-at-deployment", userRoles: ["authenticated", "organiser"] })).toString("base64");
   const diagnostic = await protectedApi({ method: "GET", pathname: "/api/v2/organiser/storage-metrics", hostname: "www.blorengefellrace.cymru", headers: { "x-ms-client-principal": principal } });
   assert.deepEqual(diagnostic.body, { ok: true, metrics: storageMetrics });
+});
+
+test("full production registration accepts minimal waiting-list joins and reports the queue", async () => {
+  const state = createProductionBootstrap(); transitionRegistrationState(state, "OPEN", organiser);
+  for (let number = 1; number <= state.event.capacity; number += 1) state.registrations.push({ id: `registration_${number}`, entryStatus: "accepted", placeStatus: "confirmed" });
+  const repository = createMemoryRepository(state);
+  const integrations = new Phase3IntegrationService({ repository, emailAdapter: email, publicBaseUrl: "https://www.blorengefellrace.cymru", environment: "production" });
+  const service = new ProductionRegistrationService({ repository, emailAdapter: email });
+  const api = createProductionApi({ service, phase3Integrations: integrations, repository });
+  const joined = await api({ method: "POST", pathname: "/api/v3/waiting-list/join", hostname: "www.blorengefellrace.cymru", body: { firstName: "Alys", lastName: "Runner", email: "alys@example.com", phone: "must-not-store" } });
+  assert.equal(joined.status, 201); assert.equal(joined.body.ok, true);
+  const stored = await repository.read();
+  assert.deepEqual(Object.keys(stored.waitingList[0]).sort(), ["email", "firstName", "id", "joinedAt", "lastName", "sequence", "status"]);
+  const status = await api({ method: "GET", pathname: "/api/v2/registration/status", hostname: "www.blorengefellrace.cymru" });
+  assert.deepEqual({ accepted: status.body.accepted, capacity: status.body.capacity, remaining: status.body.remaining, waiting: status.body.waiting }, { accepted: 120, capacity: 120, remaining: 0, waiting: 1 });
+  const duplicate = await api({ method: "POST", pathname: "/api/v3/waiting-list/join", hostname: "www.blorengefellrace.cymru", body: { firstName: "Alys", lastName: "Runner", email: "ALYS@example.com" } });
+  assert.equal(duplicate.body.ok, true); assert.equal(duplicate.body.duplicate, true); assert.equal((await repository.read()).waitingList.length, 1);
+
+  let offerToken;
+  await repository.transaction((current) => {
+    current.registrations.pop();
+    const offered = createNextWaitingListOffer(current, organiser, new Date("2026-10-02T09:00:00Z"));
+    assert.equal(offered.ok, true); offerToken = offered.token; return { ok: true };
+  });
+  const runner = { firstName: "Alys", lastName: "Runner", email: "alys@example.com", phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", acceptTerms: true, acceptPrivacy: true };
+  const declaration = { declarationIdentifier: state.event.declaration.identifier, declarationVersion: state.event.declaration.version, accepted: true, typedFullName: "Alys Runner", signatoryRole: "Competitor" };
+  const mismatch = await api({ method: "POST", pathname: "/api/v3/waiting-list/accept", hostname: "www.blorengefellrace.cymru", headers: { "x-private-invitation": offerToken }, body: { runner: { ...runner, email: "other@example.com" }, declaration } });
+  assert.equal(mismatch.body.code, "WAITING_LIST_EMAIL_MISMATCH");
+  const accepted = await api({ method: "POST", pathname: "/api/v3/waiting-list/accept", hostname: "www.blorengefellrace.cymru", headers: { "x-private-invitation": offerToken }, body: { runner, declaration } });
+  assert.equal(accepted.status, 201); assert.equal(accepted.body.ok, true); assert.ok(accepted.body.managementToken);
+  const final = await repository.read();
+  assert.equal(final.waitingList[0].status, "accepted"); assert.equal(final.waitingListOffers[0].status, "accepted");
+  assert.deepEqual(capacitySummary(final), { capacity: 120, confirmed: 119, paymentReserved: 1, offerReserved: 0, reserved: 120, remaining: 0, waiting: 0 });
 });
 
 test("production Entra authorization requires the literal organiser role", () => {

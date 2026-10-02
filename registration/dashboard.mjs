@@ -25,10 +25,15 @@ async function render() {
   const attention = active.filter((item) => ["created", "not_configured", "declined", "abandoned", "failed", "expired"].includes(item.paymentStatus)).length;
   const declarations = active.filter((item) => item.placeStatus === "confirmed" && item.declarationStatus === "pending").length;
   document.querySelector("#summary-accepted").textContent = accepted;
-  document.querySelector("#summary-waiting").textContent = waiting;
+  const waitingCount = snapshot.totals?.waiting ?? waiting;
+  const remainingPlaces = snapshot.totals?.remaining ?? Math.max(0, currentState.event.capacity - accepted - reserved);
+  document.querySelector("#summary-waiting").textContent = waitingCount;
   document.querySelector("#summary-payments").textContent = attention;
   document.querySelector("#summary-declarations").textContent = declarations;
-  document.querySelector("#summary-remaining").textContent = Math.max(0, currentState.event.capacity - accepted - reserved);
+  document.querySelector("#summary-remaining").textContent = remainingPlaces;
+  const offerButton = document.querySelector("#offer-next-waiting-place");
+  offerButton.disabled = waitingCount < 1 || remainingPlaces < 1;
+  document.querySelector("#waiting-list-operations-note").textContent = waitingCount < 1 ? "Nobody is currently waiting." : remainingPlaces < 1 ? `${waitingCount} ${waitingCount === 1 ? "person is" : "people are"} waiting; an offer can be sent after a place is released.` : `${waitingCount} ${waitingCount === 1 ? "person is" : "people are"} waiting and ${remainingPlaces} ${remainingPlaces === 1 ? "place is" : "places are"} available.`;
   const environment = currentState.environment === "production" ? "Production" : "Development";
   const currentOperationalState = currentState.phase3RegistrationState ?? "CLOSED";
   const stateLabel = currentOperationalState === "PRIVATE_LIVE" ? "Private" : currentOperationalState === "CLOSED_FINAL" ? "Closed" : `${currentOperationalState[0]}${currentOperationalState.slice(1).toLowerCase()}`;
@@ -235,6 +240,12 @@ function renderProgress() {
 }
 
 for (const selector of ["#search", "#entry-filter", "#payment-filter", "#declaration-filter"]) document.querySelector(selector)?.addEventListener("input", renderList);
+document.querySelector("#offer-next-waiting-place")?.addEventListener("click", async () => {
+  if (!window.confirm("Offer the available place to the next person on the waiting list? The place will be reserved for 48 hours and the runner will be emailed.")) return;
+  const result = await prototype.offerNextWaitingPlace();
+  showNotice(result.ok ? "The next waiting-list runner has been emailed a 48-hour place offer." : `A place offer could not be created: ${result.code}`, !result.ok);
+  await render();
+});
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
 document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });
