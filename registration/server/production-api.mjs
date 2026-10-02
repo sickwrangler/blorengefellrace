@@ -49,6 +49,7 @@ export function createProductionApi({ service, phase3Integrations, repository, s
     if (method === "POST" && pathname === "/api/v3/management/transfer") return resultResponse(await phase3Integrations.transfer(headers["x-management-token"], body));
     if (method === "POST" && pathname === "/api/v3/refunds/request") return resultResponse(await phase3Integrations.requestRefund(headers["x-management-token"]), 201);
     if (method === "POST" && pathname === "/api/v3/waiting-list/join") return resultResponse(await phase3Integrations.joinWaitingList(body, new Date(), headers["x-private-invitation"]), 201);
+    if (method === "POST" && pathname === "/api/v3/waiting-list/accept") return resultResponse(await phase3Integrations.acceptWaitingPlace(headers["x-private-invitation"], body, new Date()), 201);
     if (method === "POST" && pathname === "/api/v3/waiting-list/decline") return resultResponse(await phase3Integrations.declineWaitingPlace(headers["x-private-invitation"]));
     if (method === "POST" && pathname === "/api/v3/organiser/waiting-list/offer-next") return resultResponse(await phase3Integrations.offerNextWaitingPlace(actor));
     const resendManagement = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/resend-management$/);

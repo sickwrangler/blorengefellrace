@@ -13,6 +13,7 @@ test("PRIVATE_LIVE exposes registration only to valid registration access or an 
     assert.equal(runnerAccessDecision({ canTest: true, status, privateAccess: unavailable(code) }), "unavailable");
   }
   assert.equal(runnerAccessDecision({ canTest: true, status, privateAccess: { ok: true, purpose: "registration" } }), "available");
+  assert.equal(runnerAccessDecision({ canTest: true, status, privateAccess: { ok: true, purpose: "waiting_list_offer" } }), "available");
   assert.equal(runnerAccessDecision({ canTest: true, status, privateAccess: unavailable("INVITATION_USED"), recovered: { ok: true, order: { status: "draft" } } }), "available");
 });
 

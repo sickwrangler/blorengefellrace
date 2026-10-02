@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { authorizePrivateInvitation, calculateEntryPrice, expirePrivateInvitation, issuePrivateInvitation, PROVIDER_PROOF_INVITATION_HOURS, revokePrivateInvitation } from "./phase3-domain.mjs";
+import { authorizePrivateInvitation, calculateEntryPrice, capacitySummary, expirePrivateInvitation, issuePrivateInvitation, PROVIDER_PROOF_INVITATION_HOURS, revokePrivateInvitation } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 
 const now = () => new Date().toISOString();
@@ -39,8 +39,8 @@ function registrationView(state, registration) {
 }
 
 function totals(state) {
-  const accepted = state.registrations.filter((item) => item.entryStatus === "accepted" && active(item)).length;
-  return { state: state.registrationState, operationalState: state.registrationState, environment: "production", capacity: state.event.capacity, accepted, remaining: Math.max(0, state.event.capacity - accepted), waiting: state.registrations.filter((item) => item.entryStatus === "waiting_list" && active(item)).length, intendedOpeningDate: state.event.intendedOpeningDate ?? null, pricing: calculateEntryPrice(state.event) };
+  const capacity = capacitySummary(state);
+  return { state: state.registrationState, operationalState: state.registrationState, environment: "production", capacity: capacity.capacity, accepted: capacity.confirmed, remaining: capacity.remaining, waiting: capacity.waiting, intendedOpeningDate: state.event.intendedOpeningDate ?? null, pricing: calculateEntryPrice(state.event) };
 }
 
 function audit(state, actor, action, registrationId, before = null, after = null) {

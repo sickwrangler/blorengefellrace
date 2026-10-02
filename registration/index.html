@@ -24,12 +24,28 @@
 
     <div id="test-experience" hidden>
       <section id="test-landing" class="prototype-card prototype-intro">
-        <p class="eyebrow">2026 race entry</p><h2>Enter the Blorenge Fell Race</h2>
-        <p class="lede">In development, this journey accepts synthetic information only. It creates no real race entry, takes no money from a real payment method, and keeps payment sandboxed or disabled. Any enabled test email is redirected to an approved safe recipient.</p>
+        <p class="eyebrow">2026 race entry</p><h2 id="entry-landing-heading">Enter the Blorenge Fell Race</h2>
+        <p id="entry-landing-description" class="lede">In development, this journey accepts synthetic information only. It creates no real race entry, takes no money from a real payment method, and keeps payment sandboxed or disabled. Any enabled test email is redirected to an approved safe recipient.</p>
         <div class="status-grid" aria-live="polite"><div><span>Places</span><strong id="status-places">0 of 120</strong></div><div><span>Waiting list</span><strong id="status-waiting">0</strong></div><div><span>Entry fee</span><strong id="status-price">£6 standard · £4 Welsh Fell Runners Association member</strong></div></div>
         <div id="runner-recovery" class="form-alert" role="alert" hidden></div>
-        <label>Purchaser email address <span class="hint">Used for the group payment summary; synthetic address only</span><input id="purchaser-email" type="email" value="alex.runner@example.com" required></label>
-        <div class="form-actions"><button id="start-test" class="button" type="button">Start a test registration</button><a class="secondary-link" href="dashboard.html">View organiser test area</a></div>
+        <div id="entry-available-controls">
+          <label id="purchaser-email-control">Purchaser email address <span class="hint">Used for the group payment summary; synthetic address only</span><input id="purchaser-email" type="email" value="alex.runner@example.com" required></label>
+          <div class="form-actions"><button id="start-test" class="button" type="button">Start a test registration</button><a class="secondary-link" href="dashboard.html">View organiser test area</a></div>
+        </div>
+        <section id="waiting-list-panel" class="waiting-list-panel" aria-labelledby="waiting-list-heading" hidden>
+          <p class="eyebrow">Race capacity reached</p>
+          <h3 id="waiting-list-heading">Entries are full — join the waiting list</h3>
+          <p>There is no payment to join. If a place becomes available, we will email the next person with a secure, time-limited entry link.</p>
+          <form id="waiting-list-form" novalidate>
+            <div class="field-grid">
+              <label>First name <input name="firstName" autocomplete="given-name" required></label>
+              <label>Last name <input name="lastName" autocomplete="family-name" required></label>
+              <label>Email address <input name="email" type="email" autocomplete="email" required></label>
+            </div>
+            <div id="waiting-list-message" class="form-alert" role="status" tabindex="-1" hidden></div>
+            <div class="form-actions"><button id="join-waiting-list" class="button" type="submit">Join the waiting list</button></div>
+          </form>
+        </section>
         <button id="reset-test" class="text-button" type="button">Reset test</button>
       </section>
 

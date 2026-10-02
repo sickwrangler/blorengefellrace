@@ -9,7 +9,7 @@ export const isDevelopment = environment === "development";
 export const canTest = isLocal || isPreview || isDevelopment;
 const usesApi = isLocal || isDevelopment;
 const privateInvitationToken = new URLSearchParams(window.location.search).get("invite");
-const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : "registration";
+const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : new URLSearchParams(window.location.search).get("offer") === "1" ? "waiting_list_offer" : "registration";
 export const supportsManagedApi = usesApi;
 const storageAdapter = {
   getItem(key) { return window.localStorage.getItem(key); },
@@ -94,6 +94,21 @@ export const prototype = {
     }
     const snapshot = repositorySnapshot();
     return { ...statusSummary(snapshot.state), recovery: snapshot.recovery };
+  },
+  async joinWaitingList(input) {
+    if (!usesApi) return { ok: false, code: "API_UNAVAILABLE" };
+    try { return await phase3Api("/waiting-list/join", { method: "POST", body: JSON.stringify(input), headers: privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {} }); }
+    catch { return { ok: false, code: "API_UNAVAILABLE" }; }
+  },
+  async acceptWaitingListOffer(input) {
+    if (!usesApi || !privateInvitationToken) return { ok: false, code: "LINK_UNAVAILABLE" };
+    try { const result = await phase3Api("/waiting-list/accept", { method: "POST", body: JSON.stringify(input), headers: { "x-private-invitation": privateInvitationToken } }); if (result.ok) this.rememberManagementToken(result.managementToken); return result; }
+    catch { return { ok: false, code: "API_UNAVAILABLE" }; }
+  },
+  async offerNextWaitingPlace() {
+    if (!usesApi) return { ok: false, code: "API_UNAVAILABLE" };
+    try { return await phase3Api("/organiser/waiting-list/offer-next", { method: "POST" }, true); }
+    catch { return { ok: false, code: "API_UNAVAILABLE" }; }
   },
   submit(payload) {
     if (usesApi) return api("/registrations", { method: "POST", body: JSON.stringify(payload), headers: { "idempotency-key": submissionKey, ...(privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {}) } }).then((result) => { if (result.ok) { confirmationTokens.set(result.registration.id, result.confirmationToken); this.rememberManagementToken(result.managementToken); submissionKey = crypto.randomUUID(); } return result; }).catch(() => ({ ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable." }));

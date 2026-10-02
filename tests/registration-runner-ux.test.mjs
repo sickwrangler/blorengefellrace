@@ -52,6 +52,31 @@ test("runner membership wording introduces the association and links to joining 
   }
 });
 
+test("a full race presents an accessible waiting-list journey and organiser offer control", async () => {
+  const [html, runner, productionClient, dashboardHtml, dashboard] = await Promise.all([
+    read("registration/index.html"),
+    read("registration/runner.mjs"),
+    read("registration/production-client.mjs"),
+    read("registration/dashboard.html"),
+    read("registration/dashboard.mjs")
+  ]);
+
+  assert.match(html, /id="waiting-list-panel"[^>]*aria-labelledby="waiting-list-heading"[^>]*hidden/);
+  assert.match(html, /Entries are full — join the waiting list/);
+  assert.match(html, /There is no payment to join/);
+  for (const field of ["firstName", "lastName", "email"]) assert.match(html, new RegExp(`name="${field}"`));
+  assert.match(html, /id="waiting-list-message"[^>]*role="status"/);
+  assert.match(runner, /status\.remaining === 0/);
+  assert.match(runner, /prototype\.joinWaitingList/);
+  assert.match(runner, /already on the waiting list/);
+  assert.match(productionClient, /\/waiting-list\/join/);
+  assert.match(productionClient, /\/waiting-list\/accept/);
+  assert.match(runner, /prototype\.acceptWaitingListOffer/);
+  assert.match(dashboardHtml, /id="offer-next-waiting-place"/);
+  assert.match(dashboard, /prototype\.offerNextWaitingPlace/);
+  assert.match(dashboard, /48-hour place offer/);
+});
+
 test("declaration wording hides its version while retaining audit metadata", async () => {
   const [runner, declaration] = await Promise.all([
     read("registration/runner.mjs"),

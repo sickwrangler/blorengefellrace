@@ -69,6 +69,10 @@ export function createApi({ service, phase3Integrations = null, environment = "l
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.joinWaitingList(body), 201);
     }
+    if (method === "POST" && pathname === "/api/v3/waiting-list/accept") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.acceptWaitingPlace(headers["x-private-invitation"], body), 201);
+    }
     if (method === "POST" && pathname === "/api/v3/waiting-list/decline") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.declineWaitingPlace(headers["x-private-invitation"]));

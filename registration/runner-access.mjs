@@ -8,7 +8,7 @@ export function runnerAccessDecision({ canTest, status, privateAccess = null, re
 
   const recovering = recoverableOrder(recovered);
   if (status.operationalState === "PRIVATE_LIVE") {
-    const invited = privateAccess?.ok === true && privateAccess.purpose === "registration";
+    const invited = privateAccess?.ok === true && ["registration", "waiting_list_offer"].includes(privateAccess.purpose);
     return invited || recovering ? "available" : "unavailable";
   }
 

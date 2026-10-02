@@ -12,6 +12,7 @@ let stage = 1;
 let currentOrder = null;
 let submitting = false;
 let editingRegistrationId = null;
+const waitingListOffer = new URLSearchParams(location.search).get("offer") === "1";
 
 function runnerAgeOnRaceDay(dateOfBirth) {
   const birth = new Date(`${dateOfBirth}T00:00:00Z`); const race = new Date("2026-11-28T00:00:00Z");
@@ -135,15 +136,19 @@ function renderOrder() {
 }
 
 function showApiError(result) {
-  const messages = { DUPLICATE_ORDER_EMAIL: "Each runner needs a unique email address so we can send their declaration and entry-management link directly.", DUPLICATE_ACTIVE_ENTRY: "An active entry may already exist for this email address.", ORDER_RUNNER_LIMIT: "An order can contain up to five runners.", GROUP_CAPACITY_UNAVAILABLE: `This whole group cannot currently fit. ${result.availablePlaces ?? 0} place(s) remain; remove runner(s) to continue.`, RUNNER_MUST_COMPLETE_DECLARATION: "The named runner must personally complete the declaration. Leave the whole declaration blank if they will sign it later." };
+  const messages = { DUPLICATE_ORDER_EMAIL: "Each runner needs a unique email address so we can send their declaration and entry-management link directly.", DUPLICATE_ACTIVE_ENTRY: "An active entry may already exist for this email address.", ORDER_RUNNER_LIMIT: "An order can contain up to five runners.", GROUP_CAPACITY_UNAVAILABLE: `This whole group cannot currently fit. ${result.availablePlaces ?? 0} place(s) remain; remove runner(s) to continue.`, RUNNER_MUST_COMPLETE_DECLARATION: "The named runner must personally complete the declaration. Leave the whole declaration blank if they will sign it later.", WAITING_LIST_EMAIL_MISMATCH: "Use the same email address that received this waiting-list offer." };
   alert.textContent = result.message ?? messages[result.code] ?? runnerMessageForCode(result.code); alert.hidden = false; alert.focus(); if (result.errors) showErrors(result.errors);
 }
 
-async function refreshStatus() {
+async function refreshStatus(allowOfferedPlace = waitingListOffer) {
   const status = await prototype.status();
   if (!Number.isFinite(status.accepted) || !Number.isFinite(status.capacity)) return { environment: "production", operationalState: "CLOSED", unavailable: true };
-  document.querySelector("#status-places").textContent = `${status.accepted} / ${status.capacity}`; document.querySelector("#status-waiting").textContent = status.waiting; const standard = (status.pricing?.standardPricePence ?? 600) / 100; const member = (status.pricing?.wfraMemberPricePence ?? 400) / 100; document.querySelector("#status-price").textContent = `£${standard.toFixed(0)} standard · £${member.toFixed(0)} Welsh Fell Runners Association member`;
+  const placesTaken = status.capacity - status.remaining;
+  document.querySelector("#status-places").textContent = `${placesTaken} / ${status.capacity}`; document.querySelector("#status-waiting").textContent = status.waiting; const standard = (status.pricing?.standardPricePence ?? 600) / 100; const member = (status.pricing?.wfraMemberPricePence ?? 400) / 100; document.querySelector("#status-price").textContent = `£${standard.toFixed(0)} standard · £${member.toFixed(0)} Welsh Fell Runners Association member`;
   const recovery = document.querySelector("#runner-recovery"); recovery.hidden = !status.recovery; recovery.textContent = status.recovery?.message || ""; document.querySelector("#start-test").disabled = Boolean(status.recovery);
+  const full = status.remaining === 0 && !allowOfferedPlace;
+  document.querySelector("#entry-available-controls").hidden = full;
+  document.querySelector("#waiting-list-panel").hidden = !full;
   return status;
 }
 
@@ -165,18 +170,45 @@ async function beginOrRecover(recovered = null) {
 
 const accessCheckStatus = document.querySelector("#access-check-status");
 const showUnavailable = () => { accessCheckStatus.hidden = true; document.querySelector("#closed-panel").hidden = false; };
-const showExperience = async (recovered) => { accessCheckStatus.hidden = true; document.querySelector("#test-experience").hidden = false; await beginOrRecover(recovered); };
+const showExperience = async (recovered) => {
+  accessCheckStatus.hidden = true; document.querySelector("#test-experience").hidden = false;
+  if (waitingListOffer) {
+    document.querySelector("#entry-landing-heading").textContent = "A race place is available";
+    document.querySelector("#entry-landing-description").textContent = "Complete one runner's details and payment while this waiting-list offer is available.";
+    document.querySelector("#purchaser-email-control").hidden = true;
+    document.querySelector("#start-test").textContent = "Enter runner details";
+    document.querySelector("#submit-test").textContent = "Continue to payment";
+  }
+  await beginOrRecover(recovered);
+};
 
 if (!canTest) showUnavailable();
 else {
   const privateAccess = prototype.hasPrivateInvitation ? await prototype.inspectPrivateAccess() : null;
-  const recovered = await prototype.currentOrder();
-  const status = await refreshStatus();
+  const recovered = waitingListOffer ? { ok: false, code: "ORDER_TOKEN_INVALID" } : await prototype.currentOrder();
+  const status = await refreshStatus(waitingListOffer && privateAccess?.ok === true && privateAccess.purpose === "waiting_list_offer");
   if (runnerAccessDecision({ canTest, status, privateAccess, recovered }) === "available") await showExperience(recovered);
   else showUnavailable();
 }
 
-document.querySelector("#start-test")?.addEventListener("click", () => { const purchaser = document.querySelector("#purchaser-email"); if (!purchaser.checkValidity()) return purchaser.reportValidity(); document.querySelector("#test-landing").hidden = true; document.querySelector("#runner-flow").hidden = false; showStage(1); });
+document.querySelector("#start-test")?.addEventListener("click", () => { const purchaser = document.querySelector("#purchaser-email"); if (!waitingListOffer && !purchaser.checkValidity()) return purchaser.reportValidity(); document.querySelector("#test-landing").hidden = true; document.querySelector("#runner-flow").hidden = false; showStage(1); });
+document.querySelector("#waiting-list-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const waitingForm = event.currentTarget;
+  if (!waitingForm.checkValidity()) return waitingForm.reportValidity();
+  const button = document.querySelector("#join-waiting-list"); const message = document.querySelector("#waiting-list-message");
+  button.disabled = true; message.hidden = true;
+  const result = await prototype.joinWaitingList(Object.fromEntries(new FormData(waitingForm).entries()));
+  if (result.ok) {
+    waitingForm.reset(); message.classList.add("form-alert--success");
+    message.textContent = result.duplicate ? "This email address is already on the waiting list. We will get in touch if a place becomes available." : "You have joined the waiting list. Check your email for confirmation; we will contact you if a place becomes available.";
+    await refreshStatus();
+  } else {
+    message.classList.remove("form-alert--success");
+    message.textContent = result.code === "VALIDATION_ERROR" ? "Check your name and email address, then try again." : "We could not add you to the waiting list. Please try again.";
+  }
+  message.hidden = false; message.focus(); button.disabled = false;
+});
 document.querySelector("#details-continue")?.addEventListener("click", () => { if (validateStage(1)) { refreshSyntheticDeclarationName(); showStage(2); } });
 document.querySelector("#race-back")?.addEventListener("click", () => showStage(1));
 document.querySelector("#race-continue")?.addEventListener("click", () => { if (validateStage(2)) showStage(3); });
@@ -185,6 +217,14 @@ form.elements.wfraMember.addEventListener("change", updateMembershipFields); for
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault(); if (submitting || !validateStage(2)) return; submitting = true; let result;
+  if (waitingListOffer) {
+    result = await prototype.acceptWaitingListOffer(apiRunnerInput());
+    if (!result.ok) { submitting = false; return showApiError(result); }
+    const checkout = await prototype.checkout(result.managementToken);
+    submitting = false;
+    if (checkout.ok && checkout.checkoutUrl) return location.assign(checkout.checkoutUrl);
+    return location.assign("payment-return.html");
+  }
   if (!currentOrder) { result = await prototype.createOrder(document.querySelector("#purchaser-email").value); if (!result.ok) { submitting = false; return showApiError(result); } currentOrder = result.order; }
   result = editingRegistrationId ? await prototype.updateOrderRunner(editingRegistrationId, apiRunnerInput()) : await prototype.addOrderRunner(apiRunnerInput()); submitting = false; if (!result.ok) return showApiError(result);
   editingRegistrationId = null; document.querySelector("#submit-test").textContent = "Add runner to order";

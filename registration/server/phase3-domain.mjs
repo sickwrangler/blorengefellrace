@@ -330,6 +330,8 @@ export function acceptWaitingListOffer(state, invitationToken, input, at = new D
   if (!checked.ok) return checked;
   const offer = state.waitingListOffers.find((item) => item.invitationId === checked.invitation.id && item.status === "offered");
   if (!offer || new Date(offer.expiresAt) <= new Date(at)) return { ok: false, code: "OFFER_NOT_ACTIVE" };
+  const waiting = state.waitingList.find((item) => item.id === offer.waitingListId);
+  if (!waiting || String(input.runner?.email ?? "").trim().toLowerCase() !== waiting.email) return { ok: false, code: "WAITING_LIST_EMAIL_MISMATCH" };
   const errors = validateProductionRunner(input.runner ?? {}, { raceDate: state.event.raceDate, under18EntriesEnabled: state.event.under18EntriesEnabled !== false });
   if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
   const declarationCheck = validateDeclarationInput(state, input.declaration);
@@ -341,7 +343,7 @@ export function acceptWaitingListOffer(state, invitationToken, input, at = new D
   const runner = storeRunner(state, input.runner);
   // The active offer already reserves this place, so convert that reservation atomically.
   offer.status = "accepted"; offer.completedAt = iso(at);
-  const waiting = state.waitingList.find((item) => item.id === offer.waitingListId); if (waiting) waiting.status = "accepted";
+  waiting.status = "accepted";
   const registration = { id: shortId("reg"), runnerId: runner.id, entryStatus: "active", placeStatus: "payment_reserved", raceNumber: null, createdAt: iso(at), updatedAt: iso(at), deletedAt: null };
   state.registrations.push(registration);
   const pricing = calculateEntryPrice(state.event, input.runner);

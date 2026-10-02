@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { authorizePrivateInvitation, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
+import { acceptWaitingListOffer, authorizePrivateInvitation, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken } from "./order-service.mjs";
@@ -334,13 +334,21 @@ export class Phase3IntegrationService {
     });
   }
 
+  acceptWaitingPlace(invitationToken, input, at = new Date()) {
+    return this.repository.transaction((state) => {
+      const result = acceptWaitingListOffer(state, invitationToken, input, at);
+      if (!result.ok) return result;
+      return { ok: true, registrationId: result.registration.id, managementToken: result.managementToken, pricing: result.pricing };
+    });
+  }
+
   offerNextWaitingPlace(actor, at = new Date()) {
     if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
     return this.repository.transaction(async (state) => {
       const result = createNextWaitingListOffer(state, actor, at);
       if (!result.ok) return result;
       const waiting = state.waitingList.find((item) => item.id === result.offer.waitingListId);
-      await this.communicate(state, { waitingListId: waiting.id, template: "waiting_list_offer", intendedRecipientAddress: waiting.email, data: { runnerName: `${waiting.firstName} ${waiting.lastName}`, expiresAt: result.offer.expiresAt, secureUrl: `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(result.token)}` } }, `waiting-list:${result.offer.id}:offered`, at);
+      await this.communicate(state, { waitingListId: waiting.id, template: "waiting_list_offer", intendedRecipientAddress: waiting.email, data: { runnerName: `${waiting.firstName} ${waiting.lastName}`, expiresAt: result.offer.expiresAt, secureUrl: `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(result.token)}&offer=1` } }, `waiting-list:${result.offer.id}:offered`, at);
       return { ok: true, offer: { id: result.offer.id, status: result.offer.status, expiresAt: result.offer.expiresAt } };
     });
   }
@@ -355,7 +363,7 @@ export class Phase3IntegrationService {
       if (!result.ok) return result;
       if (result.nextOffer) {
         const next = state.waitingList.find((item) => item.id === result.nextOffer.offer.waitingListId);
-        await this.communicate(state, { waitingListId: next.id, template: "waiting_list_offer", intendedRecipientAddress: next.email, data: { runnerName: `${next.firstName} ${next.lastName}`, expiresAt: result.nextOffer.offer.expiresAt, secureUrl: `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(result.nextOffer.token)}` } }, `waiting-list:${result.nextOffer.offer.id}:offered`, at);
+        await this.communicate(state, { waitingListId: next.id, template: "waiting_list_offer", intendedRecipientAddress: next.email, data: { runnerName: `${next.firstName} ${next.lastName}`, expiresAt: result.nextOffer.offer.expiresAt, secureUrl: `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(result.nextOffer.token)}&offer=1` } }, `waiting-list:${result.nextOffer.offer.id}:offered`, at);
       }
       return { ok: true };
     });
@@ -365,7 +373,7 @@ export class Phase3IntegrationService {
     if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
     return this.repository.transaction(async (state) => {
       const scheduledEmail = { send: (message) => this.communicate(state, message, `scheduled:${message.template}:${hashToken(message.intendedRecipientAddress)}:${message.data?.expiresAt ?? iso(at)}`, at) };
-      const result = await processScheduledRegistrationWork(state, { email: scheduledEmail, at, actor, offerUrl: (token) => `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(token)}` });
+      const result = await processScheduledRegistrationWork(state, { email: scheduledEmail, at, actor, offerUrl: (token) => `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(token)}&offer=1` });
       state.schedulerStatus = {
         ...state.schedulerStatus,
         lastSuccessfulRunAt: iso(at),

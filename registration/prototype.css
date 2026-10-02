@@ -34,6 +34,8 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border: .15rem solid #
 .form-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.5rem; }
 .form-alert { margin-bottom: 1rem; padding: 1rem; border-left: .3rem solid #a12b21; background: #f9ddd7; }
 .form-alert--success { border-left-color: var(--colour-forest); background: #e1ebdd; }
+.waiting-list-panel { margin-top: 1.5rem; padding-top: 1.5rem; border-top: .25rem solid var(--colour-bracken); }
+.waiting-list-panel .form-alert { margin-top: 1rem; }
 .review-list { display: grid; grid-template-columns: minmax(8rem, .7fr) 1.3fr; margin: 0 0 1.5rem; }
 .review-list dt, .review-list dd { margin: 0; padding: .55rem; border-bottom: 1px solid var(--colour-stone); }
 .review-list dt { font-weight: 750; }
