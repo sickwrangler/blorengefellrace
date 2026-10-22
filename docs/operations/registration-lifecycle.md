@@ -52,3 +52,14 @@ One purchaser may add one to five runners. The order receives one combined Strip
 ## State versus entry operations
 
 Pausing or closing registration blocks new orders but leaves existing entries intact. Cancelling an entry is not the same as refunding it. Refunding is not the same as removing a race number. Race numbers are unique while active, can be removed explicitly, and may be released during cancellation. All supported organiser changes are audited.
+
+## Organiser exports
+
+The dashboard keeps two distinct downloads:
+
+- **Export race-day CSV** is the existing sanitised current-state file for timing and race-day systems. Its fields and API behaviour remain deliberately limited and unchanged.
+- **Export full registration workbook** is an organiser-only `.xlsx` containing private operational data. Store it securely and share it only with authorised race organisers.
+
+The workbook uses three sheets: `Summary`, `Current Entries` and `Transfer History`. Transfer rows are reconstructed only from actual `entry_transferred` and `organiser_entry_transferred` audit events, sorted globally by transfer date/time ascending. Each registration also receives a chronological sequence number so repeated transfers remain traceable. Missing historical runner records are labelled as unavailable and never inferred from unrelated data.
+
+The managed API uses ExcelJS 4.4.0 because it is a mature server-side workbook writer that supports typed dates, number formats, filters, frozen panes and in-memory output without macros. The package lock overrides its transitive `uuid` dependency to the patched 11.1.1 release; the production dependency audit must remain clear before deployment.

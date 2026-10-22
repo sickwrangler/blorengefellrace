@@ -7,6 +7,7 @@ import { Phase3IntegrationService } from "../shared/server/phase3-service.mjs";
 import { createAzureTableTransport } from "../storage.mjs";
 import { createDevelopmentEmailAdapter, createDevelopmentStripeGateway } from "../providers.mjs";
 import { createControlledDevelopmentEmail } from "../shared/server/development-email.mjs";
+import { createPrivateRegistrationWorkbook } from "../private-workbook.mjs";
 
 const required = (name) => {
   const value = process.env[name];
@@ -46,7 +47,7 @@ const phase3Integrations = new Phase3IntegrationService({
     draftRetentionHours: positiveInteger("REGISTRATION_DRAFT_RETENTION_HOURS")
   }
 });
-const handle = createApi({ service: new RegistrationService({ repository, paymentAdapter, emailAdapter: lifecycleEmailAdapter, publicBaseUrl }), phase3Integrations, environment: "development" });
+const handle = createApi({ service: new RegistrationService({ repository, paymentAdapter, emailAdapter: lifecycleEmailAdapter, publicBaseUrl }), phase3Integrations, environment: "development", privateWorkbookExporter: createPrivateRegistrationWorkbook });
 
 const handler = async (request, context) => {
   try {
@@ -65,7 +66,7 @@ const handler = async (request, context) => {
       }
     }
     const result = await handle({ method: request.method, pathname: url.pathname, headers, body, hostname: url.hostname, query: Object.fromEntries(url.searchParams) });
-    return { status: result.status, headers: result.headers, body: JSON.stringify(result.body) };
+    return { status: result.status, headers: result.headers, body: Buffer.isBuffer(result.body) || result.body instanceof Uint8Array ? result.body : JSON.stringify(result.body) };
   } catch (error) {
     context.error("Registration request failed", { category: error?.name ?? "Error" });
     return { status: 500, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }, body: JSON.stringify({ ok: false, code: "INTERNAL_ERROR" }) };

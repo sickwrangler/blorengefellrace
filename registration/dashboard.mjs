@@ -119,6 +119,7 @@ function renderList() {
     if (item.testReference === selectedReference) card.classList.add("entrant-card--selected");
     const heading = document.createElement("h3"); heading.textContent = `${item.runner.firstName} ${item.runner.lastName}`;
     const reference = document.createElement("p"); reference.className = "entrant-reference"; reference.textContent = item.testReference;
+    if (item.transfer?.transferred) { const marker = document.createElement("span"); marker.className = "status-badge status-badge--info"; marker.textContent = "Transferred"; reference.append(" · ", marker); }
     const facts = document.createElement("dl"); facts.className = "entrant-facts";
     for (const [label, value] of [["Club", item.runner.club], ["Entry", item.entryStatus.replace("_", " ")], ["Payment", item.paymentStatus.replaceAll("_", " ")], ["Declaration", item.declarationStatus === "complete" ? "Complete" : "Required"], ["Race number", item.raceNumber ?? "Not assigned"]]) {
       const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; facts.append(dt, dd);
@@ -139,6 +140,7 @@ function renderDetail(item) {
   document.querySelector("#detail-reference").textContent = item.testReference;
   const money = (value, currency = "gbp") => value == null ? "Not recorded" : `${new Intl.NumberFormat("en-GB", { style: "currency", currency: String(currency).toUpperCase() }).format(value / 100)} ${String(currency).toUpperCase()}`;
   const fields = { "Email address": item.runner.email, "Phone number": item.runner.phone, "Club": item.runner.club, "Race category": item.runner.genderCategory, "WFRA member?": item.runner.wfraMember ? "Yes (self-declared, not verified)" : "No", "WFRA membership number": item.runner.wfraMembershipNumber ?? "Not supplied", "Entry status": item.entryStatus.replace("_", " "), "Place status": item.placeStatus.replaceAll("_", " "), "Payment status": item.paymentStatus.replaceAll("_", " "), "Declaration": item.declarationStatus === "complete" ? `Complete · ${String(item.declarationCompletionMethod ?? "digital").replaceAll("_", " ")}` : "Required before the runner can start", "Cleared to start": item.clearedToStart ? "Yes" : "No", "Expected charge": money(item.pricing?.priceActuallyChargedPence ?? item.payment?.expectedAmountPence, item.payment?.currency), "Actual charge": money(item.payment?.actualPaidAmountPence, item.payment?.currency), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact name": item.runner.emergencyName, "Emergency contact phone number": item.runner.emergencyPhone, "Price calculated by server": item.pricing?.priceActuallyChargedPence == null ? "Not recorded" : `£${(item.pricing.priceActuallyChargedPence / 100).toFixed(2)} · ${item.pricing.adjustmentReason}` };
+  if (item.transfer?.transferred) Object.assign(fields, { "Transfer count": item.transfer.count, "Original runner": item.transfer.originalRunnerName || "Historical runner record unavailable", "Previous runner": item.transfer.previousRunnerName || "Historical runner record unavailable", "Latest transfer": item.transfer.latestAt ? new Date(item.transfer.latestAt).toLocaleString() : "Time unavailable" });
   document.querySelector("#entry-details").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
   renderActions(item); renderMessages(item);
 }
@@ -249,6 +251,12 @@ document.querySelector("#offer-next-waiting-place")?.addEventListener("click", a
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
 document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });
+document.querySelector("#export-private-workbook")?.addEventListener("click", async () => {
+  const result = await prototype.privateWorkbook();
+  if (!result.ok) { showNotice(`Private workbook unavailable: ${result.code}`, true); return; }
+  const url = URL.createObjectURL(result.blob); const link = document.createElement("a"); link.href = url; link.download = result.filename; link.click(); URL.revokeObjectURL(url);
+  showNotice("Private registration workbook downloaded. Store it securely and share it only with authorised race organisers.");
+});
 document.querySelector("#create-invitation")?.addEventListener("click", async () => {
   const expires = document.querySelector("#invitation-expiry");
   const kind = document.querySelector("#invitation-kind").value;
