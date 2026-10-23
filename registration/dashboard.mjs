@@ -25,7 +25,7 @@ async function render() {
   const attention = active.filter((item) => ["created", "not_configured", "declined", "abandoned", "failed", "expired"].includes(item.paymentStatus)).length;
   const declarations = active.filter((item) => item.placeStatus === "confirmed" && item.declarationStatus === "pending").length;
   document.querySelector("#summary-accepted").textContent = accepted;
-  const waitingCount = snapshot.totals?.waiting ?? waiting;
+  const waitingCount = currentState.waitingListSummary?.currentlyWaiting ?? snapshot.totals?.waiting ?? waiting;
   const remainingPlaces = snapshot.totals?.remaining ?? Math.max(0, currentState.event.capacity - accepted - reserved);
   document.querySelector("#summary-waiting").textContent = waitingCount;
   document.querySelector("#summary-payments").textContent = attention;
@@ -45,7 +45,7 @@ async function render() {
   document.querySelector("#technical-storage").textContent = snapshot.diagnostics.storageType;
   document.querySelector("#technical-schema").textContent = snapshot.diagnostics.schemaVersion;
   if (snapshot.recovery) showNotice(snapshot.recovery.message, true);
-  renderList(); renderProgress(); await Promise.all([renderPrivateInvitations(), renderEmailHealth()]);
+  renderWaitingList(); renderList(); renderProgress(); await Promise.all([renderPrivateInvitations(), renderEmailHealth()]);
   const selected = currentState.registrations.find((item) => item.testReference === selectedReference);
   if (selected) {
     renderDetail(selected);
@@ -58,6 +58,55 @@ async function render() {
     document.querySelector("#entry-detail").hidden = true;
     if (selectedReference) { selectedReference = null; history.replaceState(null, "", "dashboard.html"); }
   }
+}
+function waitingListStatus(item) {
+  if (item.offerStatus === "offered") return { label: "Offer sent", className: "status-badge--info" };
+  const labels = { waiting: "Waiting", accepted: "Accepted", declined: "Declined", expired: "Expired", offered: "Offer sent" };
+  const classNames = { waiting: "status-badge--positive", accepted: "status-badge--positive", declined: "status-badge--neutral", expired: "status-badge--neutral", offered: "status-badge--info" };
+  return { label: labels[item.status] ?? String(item.status || "Unknown").replaceAll("_", " "), className: classNames[item.status] ?? "status-badge--neutral" };
+}
+function formatWaitingTime(value, dateOnly = false) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return "—";
+  return dateOnly ? date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : date.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function filteredWaitingList() {
+  const search = document.querySelector("#waiting-list-search").value.trim().toLowerCase();
+  const filter = document.querySelector("#waiting-list-filter").value;
+  return (currentState.waitingList ?? []).filter((item) => {
+    const matchesSearch = !search || [item.firstName, item.lastName, item.email].some((value) => String(value ?? "").toLowerCase().includes(search));
+    const matchesFilter = !filter || (filter === "offered" ? item.offerStatus === "offered" : item.status === filter);
+    return matchesSearch && matchesFilter;
+  });
+}
+function renderWaitingList() {
+  const summary = currentState.waitingListSummary ?? { currentlyWaiting: 0, outstandingOffers: 0, accepted: 0, declined: 0, expired: 0 };
+  document.querySelector("#waiting-summary-waiting").textContent = summary.currentlyWaiting;
+  document.querySelector("#waiting-summary-offered").textContent = summary.outstandingOffers;
+  document.querySelector("#waiting-summary-accepted").textContent = summary.accepted;
+  document.querySelector("#waiting-summary-declined").textContent = summary.declined;
+  document.querySelector("#waiting-summary-expired").textContent = summary.expired;
+  const rows = document.querySelector("#waiting-list-rows"); rows.replaceChildren();
+  const items = filteredWaitingList();
+  for (const item of items) {
+    const row = document.createElement("tr");
+    if (item.status !== "waiting" && item.offerStatus !== "offered") row.classList.add("waiting-list-row--historical");
+    const position = document.createElement("td"); position.textContent = item.currentPosition ?? "—";
+    const name = document.createElement("td"); name.textContent = `${item.firstName} ${item.lastName}`.trim();
+    const email = document.createElement("td"); email.textContent = item.email;
+    const status = document.createElement("td"); const badge = document.createElement("span"); const statusView = waitingListStatus(item); badge.className = `status-badge ${statusView.className}`; badge.textContent = statusView.label; status.append(badge);
+    const joined = document.createElement("td"); joined.textContent = formatWaitingTime(item.joinedAt, true);
+    const offer = document.createElement("td");
+    const offerParts = [];
+    if (item.offerCreatedAt) offerParts.push(`Sent ${formatWaitingTime(item.offerCreatedAt)}`);
+    if (item.offerExpiresAt) offerParts.push(`${item.offerStatus === "expired" || item.status === "expired" ? "Expired" : "Expires"} ${formatWaitingTime(item.offerExpiresAt)}`);
+    if (item.offerCompletedAt) offerParts.push(`Completed ${formatWaitingTime(item.offerCompletedAt)}`);
+    if (item.entryReference) offerParts.push(`Entry ${item.entryReference}`);
+    offer.textContent = offerParts.join(" · ") || "—";
+    row.append(position, name, email, status, joined, offer); rows.append(row);
+  }
+  document.querySelector("#waiting-list-empty").hidden = items.length > 0;
 }
 async function renderEmailHealth() {
   try {
@@ -242,6 +291,7 @@ function renderProgress() {
 }
 
 for (const selector of ["#search", "#entry-filter", "#payment-filter", "#declaration-filter"]) document.querySelector(selector)?.addEventListener("input", renderList);
+for (const selector of ["#waiting-list-search", "#waiting-list-filter"]) document.querySelector(selector)?.addEventListener("input", renderWaitingList);
 document.querySelector("#offer-next-waiting-place")?.addEventListener("click", async () => {
   if (!window.confirm("Offer the available place to the next person on the waiting list? The place will be reserved for 48 hours and the runner will be emailed.")) return;
   const result = await prototype.offerNextWaitingPlace();
@@ -251,6 +301,12 @@ document.querySelector("#offer-next-waiting-place")?.addEventListener("click", a
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
 document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });
+document.querySelector("#export-waiting-list-csv")?.addEventListener("click", async () => {
+  const result = await prototype.waitingListCsv();
+  if (!result.ok) { showNotice(`Waiting-list CSV unavailable: ${result.code}`, true); return; }
+  const url = URL.createObjectURL(result.blob); const link = document.createElement("a"); link.href = url; link.download = result.filename; link.click(); URL.revokeObjectURL(url);
+  showNotice("Private waiting-list CSV downloaded. Store it securely and share it only with authorised race organisers.");
+});
 document.querySelector("#export-private-workbook")?.addEventListener("click", async () => {
   const result = await prototype.privateWorkbook();
   if (!result.ok) { showNotice(`Private workbook unavailable: ${result.code}`, true); return; }

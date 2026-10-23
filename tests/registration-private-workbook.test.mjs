@@ -168,7 +168,7 @@ test("private workbook contains the requested sheets, typed values, filters and 
   const bytes = await createPrivateRegistrationWorkbook(model);
   assert.ok(bytes.length > 5_000);
   const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(bytes);
-  assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Summary", "Current Entries", "Transfer History"]);
+  assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Summary", "Current Entries", "Transfer History", "Waiting List"]);
   const entries = workbook.getWorksheet("Current Entries");
   assert.equal(entries.getCell("A1").value, "PRIVATE OPERATIONAL DATA");
   assert.equal(entries.getCell("A4").value, "Entry reference");
@@ -186,6 +186,8 @@ test("private workbook contains the requested sheets, typed values, filters and 
   assert.equal(transfers.getCell("E5").value, 1);
   assert.equal(transfers.getCell("E6").value, 2);
   assert.ok(transfers.getCell("D5").value instanceof Date);
+  const waitingList = workbook.getWorksheet("Waiting List");
+  assert.equal(waitingList.rowCount, 4);
 });
 
 test("private workbook keeps every formula-shaped runner value as literal text", async () => {

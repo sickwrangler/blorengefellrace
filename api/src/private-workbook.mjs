@@ -31,6 +31,14 @@ const transferColumns = [
   ["From runner ID", "fromRunnerId", 38], ["To runner ID", "toRunnerId", 38]
 ];
 
+const waitingListColumns = [
+  ["Waiting list ID", "waitingListId", 38], ["Original sequence", "originalSequence", 18], ["Current position", "currentPosition", 17],
+  ["First name", "firstName", 16], ["Last name", "lastName", 18], ["Email", "email", 30], ["Status", "status", 16],
+  ["Joined", "joinedAt", 22], ["Offer status", "offerStatus", 16], ["Offer created", "offerCreatedAt", 22],
+  ["Reminder due", "offerReminderAt", 22], ["Offer expires", "offerExpiresAt", 22], ["Offer completed", "offerCompletedAt", 22],
+  ["Registration ID", "registrationId", 38], ["Entry reference", "entryReference", 18]
+];
+
 function addPrivacyHeading(sheet, classification, columnCount) {
   sheet.mergeCells(1, 1, 1, columnCount);
   const title = sheet.getCell(1, 1);
@@ -50,7 +58,7 @@ function styleDataSheet(sheet, columns, rows, classification) {
   addPrivacyHeading(sheet, classification, columns.length);
   const headerRow = 4;
   sheet.getRow(headerRow).values = columns.map(([label]) => label);
-  for (const row of rows) sheet.addRow(columns.map(([, key]) => row[key] ?? ""));
+  for (const row of rows) sheet.addRow(columns.map(([, key]) => row[key] ?? null));
   sheet.views = [{ state: "frozen", ySplit: headerRow, xSplit: 3 }];
   sheet.autoFilter = { from: { row: headerRow, column: 1 }, to: { row: headerRow, column: columns.length } };
   sheet.showGridLines = false;
@@ -84,12 +92,14 @@ export async function createPrivateRegistrationWorkbook(model) {
   const summaryRows = [
     ["Event", model.summary.event], ["Race date", model.summary.raceDate], ["Export generated at", model.summary.generatedAt],
     ["Registration operational state", model.summary.operationalState], ["Capacity", model.summary.capacity],
-    ["Current confirmed places", model.summary.confirmedPlaces], ["Waiting list count", model.summary.waitingListCount],
+    ["Current confirmed places", model.summary.confirmedPlaces], ["Currently waiting", model.summary.waitingListCount],
+    ["Outstanding waiting-list offers", model.summary.outstandingWaitingListOffers], ["Accepted from waiting list", model.summary.acceptedFromWaitingList],
+    ["Declined waiting-list offers", model.summary.declinedWaitingListOffers], ["Expired waiting-list offers", model.summary.expiredWaitingListOffers],
     ["Cancelled / released registrations", model.summary.cancelledReleasedCount], ["Registrations ever transferred", model.summary.registrationsEverTransferred],
     ["Total transfer events", model.summary.totalTransferEvents], ["Pending declarations", model.summary.pendingDeclarations],
     ["Cleared to start", model.summary.clearedToStartCount]
   ];
-  summary.addRows(summaryRows); summary.views = [{ state: "frozen", ySplit: 4 }]; summary.autoFilter = "A4:B16";
+  summary.addRows(summaryRows); summary.views = [{ state: "frozen", ySplit: 4 }]; summary.autoFilter = { from: { row: 4, column: 1 }, to: { row: summaryRows.length + 4, column: 2 } };
   summary.getRow(4).eachCell((cell) => { cell.font = HEADER_FONT; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${HEADER_FILL}` } }; cell.alignment = { horizontal: "center", vertical: "middle" }; });
   summary.getColumn(1).font = BODY_FONT; summary.getColumn(2).font = BODY_FONT;
   summary.getCell("B6").numFmt = DATE_FORMAT; summary.getCell("B7").numFmt = DATE_TIME_FORMAT;
@@ -107,6 +117,13 @@ export async function createPrivateRegistrationWorkbook(model) {
   const transferHeader = styleDataSheet(transfers, transferColumns, model.transferHistory, model.classification);
   const transferDateColumn = transferColumns.findIndex(([, key]) => key === "occurredAt") + 1;
   for (let row = transferHeader + 1; row <= transfers.rowCount; row += 1) transfers.getCell(row, transferDateColumn).numFmt = DATE_TIME_FORMAT;
+
+  const waitingList = workbook.addWorksheet("Waiting List");
+  const waitingHeader = styleDataSheet(waitingList, waitingListColumns, model.waitingList, model.classification);
+  const waitingColumn = Object.fromEntries(waitingListColumns.map(([, key], index) => [key, index + 1]));
+  for (let row = waitingHeader + 1; row <= waitingList.rowCount; row += 1) {
+    for (const key of ["joinedAt", "offerCreatedAt", "offerReminderAt", "offerExpiresAt", "offerCompletedAt"]) waitingList.getCell(row, waitingColumn[key]).numFmt = DATE_TIME_FORMAT;
+  }
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }

@@ -59,6 +59,17 @@ test("organiser dashboard separates the private workbook and marks transferred e
   assert.match(localServer, /Buffer\.isBuffer\(result\.body\)/);
 });
 
+test("organiser dashboard presents and exports a separate filterable waiting list", () => {
+  const html = fs.readFileSync("registration/dashboard.html", "utf8");
+  const source = fs.readFileSync("registration/dashboard.mjs", "utf8");
+  for (const id of ["waiting-summary-waiting", "waiting-summary-offered", "waiting-summary-accepted", "waiting-summary-declined", "waiting-summary-expired", "waiting-list-search", "waiting-list-filter", "waiting-list-rows", "export-waiting-list-csv"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const option of ["Waiting", "Offer outstanding", "Accepted", "Declined", "Expired"]) assert.match(html, new RegExp(`>${option}<`));
+  assert.match(source, /currentState\.waitingList/);
+  assert.match(source, /prototype\.waitingListCsv\(\)/);
+  assert.doesNotMatch(source, /currentState\.waitingListOffers/);
+  assert.match(html, /Private personal data for authorised organisers only/);
+});
+
 test("Azure Function entry modules lazy-load private workbook generation", () => {
   for (const filename of ["api/src/functions/registration.mjs", "api/src/functions/registration-production.mjs"]) {
     const source = fs.readFileSync(filename, "utf8");

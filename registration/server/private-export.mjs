@@ -11,6 +11,85 @@ const hasIdentifier = (value) => typeof value === "string" && value.trim().lengt
 const runnerName = (runner) => runner ? [runner.firstName, runner.lastName].filter(Boolean).join(" ").trim() : "Historical runner record unavailable";
 const runnerEmail = (runner) => runner?.email ?? "";
 const yesNo = (value) => value === true ? "Yes" : value === false ? "No" : "";
+const timestampValue = (value, fallback = Number.NEGATIVE_INFINITY) => asDate(value)?.valueOf() ?? fallback;
+const sequenceValue = (value) => typeof value === "number" && Number.isFinite(value)
+  ? value
+  : typeof value === "string" && value.trim() && Number.isFinite(Number(value)) ? Number(value) : null;
+
+function latestOfferFor(offers, waitingListId) {
+  return offers
+    .map((offer, sourceIndex) => ({ offer, sourceIndex }))
+    .filter(({ offer }) => offer.waitingListId === waitingListId)
+    .sort((left, right) => timestampValue(left.offer.createdAt) - timestampValue(right.offer.createdAt) || left.sourceIndex - right.sourceIndex)
+    .at(-1)?.offer ?? null;
+}
+
+function acceptedRegistrationFor(state, offer) {
+  if (!offer || offer.status !== "accepted") return null;
+  const event = (state.auditEvents ?? [])
+    .map((item, sourceIndex) => ({ item, sourceIndex }))
+    .filter(({ item }) => item.action === "waiting_list_offer_accepted" && item.subjectId === offer.id && hasIdentifier(item.after?.registrationId))
+    .sort((left, right) => timestampValue(eventTime(left.item)) - timestampValue(eventTime(right.item)) || left.sourceIndex - right.sourceIndex)
+    .at(-1)?.item;
+  return event ? (state.registrations ?? []).find((item) => item.id === event.after.registrationId) ?? null : null;
+}
+
+export function buildWaitingListView(state) {
+  const waiting = state.waitingList ?? [];
+  const offers = state.waitingListOffers ?? [];
+  const currentPositions = new Map(
+    waiting
+      .filter((item) => item.status === "waiting")
+      .sort((left, right) => (sequenceValue(left.sequence) ?? Number.MAX_SAFE_INTEGER) - (sequenceValue(right.sequence) ?? Number.MAX_SAFE_INTEGER)
+        || timestampValue(left.joinedAt, Number.MAX_SAFE_INTEGER) - timestampValue(right.joinedAt, Number.MAX_SAFE_INTEGER)
+        || String(left.id ?? "").localeCompare(String(right.id ?? "")))
+      .map((item, index) => [item.id, index + 1])
+  );
+
+  return waiting.map((item) => {
+    const offer = latestOfferFor(offers, item.id);
+    const registration = acceptedRegistrationFor(state, offer);
+    return {
+      waitingListId: item.id ?? "",
+      originalSequence: sequenceValue(item.sequence),
+      currentPosition: item.status === "waiting" ? currentPositions.get(item.id) ?? null : null,
+      firstName: item.firstName ?? "",
+      lastName: item.lastName ?? "",
+      email: item.email ?? "",
+      status: item.status ?? "",
+      joinedAt: item.joinedAt ?? "",
+      offerStatus: offer?.status ?? "",
+      offerCreatedAt: offer?.createdAt ?? "",
+      offerReminderAt: offer?.reminderAt ?? "",
+      offerExpiresAt: offer?.expiresAt ?? "",
+      offerCompletedAt: offer?.completedAt ?? "",
+      registrationId: registration?.id ?? "",
+      entryReference: registration?.testReference ?? ""
+    };
+  }).sort((left, right) => {
+    const group = (item) => item.offerStatus === "offered" ? 0 : item.status === "waiting" ? 1 : 2;
+    const groupDifference = group(left) - group(right);
+    if (groupDifference) return groupDifference;
+    if (group(left) === 0) return timestampValue(left.offerExpiresAt, Number.MAX_SAFE_INTEGER) - timestampValue(right.offerExpiresAt, Number.MAX_SAFE_INTEGER)
+      || Number(left.originalSequence ?? Number.MAX_SAFE_INTEGER) - Number(right.originalSequence ?? Number.MAX_SAFE_INTEGER);
+    if (group(left) === 1) return Number(left.currentPosition ?? Number.MAX_SAFE_INTEGER) - Number(right.currentPosition ?? Number.MAX_SAFE_INTEGER);
+    const leftActivity = timestampValue(left.offerCompletedAt || left.offerCreatedAt || left.joinedAt);
+    const rightActivity = timestampValue(right.offerCompletedAt || right.offerCreatedAt || right.joinedAt);
+    return rightActivity - leftActivity
+      || Number(left.originalSequence ?? Number.MAX_SAFE_INTEGER) - Number(right.originalSequence ?? Number.MAX_SAFE_INTEGER)
+      || String(left.waitingListId).localeCompare(String(right.waitingListId));
+  });
+}
+
+export function waitingListSummary(waitingList) {
+  return {
+    currentlyWaiting: waitingList.filter((item) => item.status === "waiting").length,
+    outstandingOffers: waitingList.filter((item) => item.offerStatus === "offered").length,
+    accepted: waitingList.filter((item) => item.status === "accepted").length,
+    declined: waitingList.filter((item) => item.status === "declined").length,
+    expired: waitingList.filter((item) => item.status === "expired").length
+  };
+}
 
 function transferInitiator(event) {
   if (event.action === "organiser_entry_transferred" || event.actorType === "organiser" || event.actorType === "entra_organiser") return "Organiser";
@@ -127,6 +206,8 @@ function currentEntry(state, registration, transferHistory) {
 
 export function buildPrivateWorkbookModel(state, generatedAt = new Date()) {
   const transferHistory = buildTransferHistory(state);
+  const waitingListProjection = buildWaitingListView(state);
+  const waitingSummary = waitingListSummary(waitingListProjection);
   const registrations = (state.registrations ?? []).filter((item) => !item.deletedAt);
   const currentEntries = registrations.map((registration) => currentEntry(state, registration, transferHistory));
   const active = registrations.filter((item) => !["cancelled", "place_released"].includes(item.entryStatus));
@@ -137,12 +218,27 @@ export function buildPrivateWorkbookModel(state, generatedAt = new Date()) {
     operationalState: state.registrationState ?? state.phase3RegistrationState ?? "",
     capacity: state.event?.capacity ?? null,
     confirmedPlaces: active.filter((item) => item.placeStatus === "confirmed").length,
-    waitingListCount: active.filter((item) => item.entryStatus === "waiting_list").length,
+    waitingListCount: waitingSummary.currentlyWaiting,
+    outstandingWaitingListOffers: waitingSummary.outstandingOffers,
+    acceptedFromWaitingList: waitingSummary.accepted,
+    declinedWaitingListOffers: waitingSummary.declined,
+    expiredWaitingListOffers: waitingSummary.expired,
     cancelledReleasedCount: registrations.filter((item) => ["cancelled", "place_released"].includes(item.entryStatus)).length,
     registrationsEverTransferred: new Set(transferHistory.map((item) => item.registrationId)).size,
     totalTransferEvents: transferHistory.length,
     pendingDeclarations: currentEntries.filter((item) => item.placeStatus === "confirmed" && item.declarationStatus !== "complete").length,
     clearedToStartCount: currentEntries.filter((item) => item.clearedToStart === "Yes").length
   };
-  return { classification: "PRIVATE OPERATIONAL DATA", currentEntries, transferHistory, summary };
+  const waitingList = waitingListProjection.map((item) => ({
+    ...item,
+    registrationId: item.registrationId || null,
+    entryReference: item.entryReference || null,
+    offerStatus: item.offerStatus || null,
+    joinedAt: asDate(item.joinedAt),
+    offerCreatedAt: asDate(item.offerCreatedAt),
+    offerReminderAt: asDate(item.offerReminderAt),
+    offerExpiresAt: asDate(item.offerExpiresAt),
+    offerCompletedAt: asDate(item.offerCompletedAt)
+  }));
+  return { classification: "PRIVATE OPERATIONAL DATA", currentEntries, transferHistory, waitingList, summary };
 }

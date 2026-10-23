@@ -55,11 +55,12 @@ Pausing or closing registration blocks new orders but leaves existing entries in
 
 ## Organiser exports
 
-The dashboard keeps two distinct downloads:
+The dashboard keeps three distinct downloads:
 
 - **Export race-day CSV** is the existing sanitised current-state file for timing and race-day systems. Its fields and API behaviour remain deliberately limited and unchanged.
+- **Export waiting list CSV** is an organiser-only personal-data export. It is sorted with outstanding offers first, then people currently waiting in current-position order, then historical accepted/declined/expired records with the newest relevant activity first.
 - **Export full registration workbook** is an organiser-only `.xlsx` containing private operational data. Store it securely and share it only with authorised race organisers.
 
-The workbook uses three sheets: `Summary`, `Current Entries` and `Transfer History`. Transfer rows are reconstructed only from actual `entry_transferred` and `organiser_entry_transferred` audit events, sorted globally by transfer date/time ascending. Each registration also receives a chronological sequence number so repeated transfers remain traceable. Missing historical runner records are labelled as unavailable and never inferred from unrelated data.
+The workbook uses four sheets: `Summary`, `Current Entries`, `Transfer History` and `Waiting List`. The waiting-list sheet uses the same projection and ordering as the dedicated CSV; neither export includes invitation identifiers, secure links, tokens or hashes. Transfer rows are reconstructed only from actual `entry_transferred` and `organiser_entry_transferred` audit events, sorted globally by transfer date/time ascending. Each registration also receives a chronological sequence number so repeated transfers remain traceable. Missing historical runner records are labelled as unavailable and never inferred from unrelated data.
 
 The managed API uses ExcelJS 4.4.0 because it is a mature server-side workbook writer that supports typed dates, number formats, filters, frozen panes and in-memory output without macros. The package lock overrides its transitive `uuid` dependency to the patched 11.1.1 release; the production dependency audit must remain clear before deployment.
