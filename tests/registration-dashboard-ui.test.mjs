@@ -44,3 +44,26 @@ test("organiser dashboard reports aggregate email health and receipt delivery se
   assert.match(script, /Recipient \$\{message\.intendedRecipientAddress/);
   assert.doesNotMatch(script, /strong\.textContent = message\.subject/);
 });
+
+test("organiser dashboard separates the private workbook and marks transferred entries", () => {
+  const html = fs.readFileSync("registration/dashboard.html", "utf8");
+  const source = fs.readFileSync("registration/dashboard.mjs", "utf8");
+  const localServer = fs.readFileSync("scripts/start-registration-phase2.mjs", "utf8");
+  assert.match(html, /id="export-csv"[^>]*>Export race-day CSV/);
+  assert.match(html, /id="export-private-workbook"[^>]*>Export full registration workbook/);
+  assert.match(html, /Private operational data including contact details and transfer history/);
+  assert.match(source, /item\.transfer\?\.transferred/);
+  assert.match(source, /marker\.textContent = "Transferred"/);
+  for (const label of ["Transfer count", "Original runner", "Previous runner", "Latest transfer"]) assert.ok(source.includes(`"${label}"`));
+  assert.match(localServer, /privateWorkbookExporter: createPrivateRegistrationWorkbook/);
+  assert.match(localServer, /Buffer\.isBuffer\(result\.body\)/);
+});
+
+test("Azure Function entry modules lazy-load private workbook generation", () => {
+  for (const filename of ["api/src/functions/registration.mjs", "api/src/functions/registration-production.mjs"]) {
+    const source = fs.readFileSync(filename, "utf8");
+    assert.doesNotMatch(source, /^import\s+\{\s*createPrivateRegistrationWorkbook\s*\}\s+from/m, filename);
+    assert.match(source, /await import\("\.\.\/private-workbook\.mjs"\)/, filename);
+    assert.match(source, /privateWorkbookExporter\s*\}/, filename);
+  }
+});

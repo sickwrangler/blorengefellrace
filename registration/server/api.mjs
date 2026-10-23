@@ -3,7 +3,7 @@ import { actorForRequest } from "./auth.mjs";
 const response = (status, body, headers = {}) => ({ status, body, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
 const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "NOT_FOUND" ? 404 : result.code === "LINK_UNAVAILABLE" ? 410 : result.code === "INVALID_WEBHOOK_SIGNATURE" ? 400 : ["PAYMENTS_UNAVAILABLE", "INTEGRATION_NOT_CONFIGURED"].includes(result.code) ? 503 : 409, result);
 
-export function createApi({ service, phase3Integrations = null, environment = "local" }) {
+export function createApi({ service, phase3Integrations = null, environment = "local", privateWorkbookExporter = null }) {
   const attempts = new Map();
   return async function handle({ method, pathname, headers = {}, body = {}, hostname = "127.0.0.1", query = {} }) {
     if (!pathname.startsWith("/api/v2/") && !pathname.startsWith("/api/v3/") && !pathname.startsWith("/api/v4/")) return response(404, { ok: false, code: "NOT_FOUND" });
@@ -122,6 +122,16 @@ export function createApi({ service, phase3Integrations = null, environment = "l
     if (method === "POST" && pathname === "/api/v2/organiser/import/synthetic-csv") return resultResponse(await service.importSyntheticCsv(actor, body.csv));
     if (method === "GET" && pathname === "/api/v2/organiser/export/public") return resultResponse(await service.exportPublic(actor));
     if (method === "GET" && pathname === "/api/v2/organiser/export/private") return resultResponse(await service.exportPrivate(actor));
+    if (method === "GET" && pathname === "/api/v2/organiser/export/private-workbook") {
+      const result = await service.exportPrivateWorkbook(actor);
+      if (!result.ok) return resultResponse(result);
+      if (!privateWorkbookExporter) return resultResponse({ ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return response(200, await privateWorkbookExporter(result.workbook), {
+        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "content-disposition": `attachment; filename="${result.filename}"`,
+        "x-content-type-options": "nosniff"
+      });
+    }
     if (method === "POST" && pathname === "/api/v2/organiser/reset") return resultResponse(await service.resetDevelopment(actor));
     const viewed = pathname.match(/^\/api\/v2\/organiser\/registrations\/reference\/([^/]+)\/viewed$/);
     if (method === "POST" && viewed) return resultResponse(await service.markViewed(actor, decodeURIComponent(viewed[1])));

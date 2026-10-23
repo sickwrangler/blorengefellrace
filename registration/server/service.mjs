@@ -3,6 +3,7 @@ import { EVENT, safeRegistrationState, validateRunner } from "../registration-co
 import { authorize } from "./auth.mjs";
 import { PRIVATE_INVITATION_KINDS, issuePrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, authorizePrivateInvitation, calculateEntryPrice } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
+import { buildPrivateWorkbookModel, buildTransferHistory, transferSummaryForRegistration } from "./private-export.mjs";
 
 const now = () => new Date().toISOString();
 const id = (prefix) => `${prefix}_${crypto.randomUUID()}`;
@@ -80,7 +81,7 @@ function entities(db, registration) {
   };
 }
 
-function view(db, registration, { runnerSafe = false } = {}) {
+function view(db, registration, { runnerSafe = false, transferHistory = buildTransferHistory(db) } = {}) {
   const { runner, emergency, payment, consent } = entities(db, registration);
   const completedDeclaration = [...(db.declarations ?? [])].reverse().find((item) => item.registrationId === registration.id && !item.revokedAt);
   const declarationStatus = completedDeclaration ? "complete" : registration.declarationStatus ?? (consent?.declaration ? "complete" : "pending");
@@ -94,7 +95,8 @@ function view(db, registration, { runnerSafe = false } = {}) {
     declaration: completedDeclaration ?? consent?.declaration,
     declarationStatus,
     declarationCompletionMethod: completedDeclaration?.completionMethod ?? registration.declarationCompletionMethod ?? (consent?.declaration ? "digital_during_entry" : null),
-    clearedToStart: declarationStatus === "complete" && registration.placeStatus === "confirmed" && registration.entryStatus !== "place_released"
+    clearedToStart: declarationStatus === "complete" && registration.placeStatus === "confirmed" && registration.entryStatus !== "place_released",
+    transfer: transferSummaryForRegistration(transferHistory, registration.id)
   };
   delete result.confirmationTokenHash;
   // Legacy Phase 2 fields can remain in old synthetic storage, but are retired
@@ -248,7 +250,7 @@ export class RegistrationService {
 
   async snapshot(actor, filters = {}) {
     if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" };
-    const db = await this.repository.read(); let registrations = db.registrations.filter((item) => !item.deletedAt).map((item) => view(db, item));
+    const db = await this.repository.read(); const transferHistory = buildTransferHistory(db); let registrations = db.registrations.filter((item) => !item.deletedAt).map((item) => view(db, item, { transferHistory }));
     const search = String(filters.search ?? "").toLowerCase(); if (search) registrations = registrations.filter((item) => [item.testReference, item.runner.firstName, item.runner.lastName, item.runner.email].some((value) => String(value).toLowerCase().includes(search)));
     if (filters.entry) registrations = registrations.filter((item) => item.entryStatus === filters.entry);
     if (filters.payment) registrations = registrations.filter((item) => item.paymentStatus === filters.payment);
@@ -337,6 +339,7 @@ export class RegistrationService {
   async auditHistory(actor, registrationId) { if (!authorize(actor, "audit")) return { ok: false, code: "FORBIDDEN" }; const db = await this.repository.read(); return { ok: true, events: db.auditEvents.filter((item) => item.registrationId === registrationId || item.subjectId === registrationId).map((item) => ({ ...item, timestamp: item.timestamp ?? item.occurredAt })) }; }
   async exportPublic(actor) { if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" }; const db = await this.repository.read(); const rows = db.registrations.filter((item) => !item.deletedAt).map((item) => { const entry = view(db, item); return [entry.testReference, entry.raceNumber, entry.runner.firstName, entry.runner.lastName, entry.runner.club, entry.runner.genderCategory, entry.entryStatus, entry.paymentStatus]; }); return { ok: true, filename: "synthetic-public-results.csv", csv: csv(["test_reference", "race_number", "first_name", "last_name", "club", "category", "entry_status", "mock_payment_status"], rows) }; }
   async exportPrivate(actor) { if (!authorize(actor, "export_private")) return { ok: false, code: "FORBIDDEN" }; const db = await this.repository.read(); const rows = db.registrations.filter((item) => !item.deletedAt).map((item) => { const entry = view(db, item); return [entry.id, entry.runner.firstName, entry.runner.lastName, entry.runner.email, entry.runner.phone, entry.entryStatus, entry.paymentStatus]; }); return { ok: true, warning: "PRIVATE SYNTHETIC OPERATIONAL EXPORT — store outside the public website", filename: `private-exports/synthetic-registration-${new Date().toISOString().slice(0, 10)}.csv`, csv: csv(["registration_id", "first_name", "last_name", "email", "phone", "entry_status", "mock_payment_status"], rows) }; }
+  async exportPrivateWorkbook(actor, generatedAt = new Date()) { if (!authorize(actor, "export_private")) return { ok: false, code: "FORBIDDEN" }; const db = await this.repository.read(); return { ok: true, filename: `blorenge-registration-private-${new Date(generatedAt).toISOString().slice(0, 10)}.xlsx`, workbook: buildPrivateWorkbookModel(db, generatedAt) }; }
   erase(actor, registrationId, mode = "anonymise") { if (!authorize(actor, "erase")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); return this.repository.transaction((db) => { const registration = db.registrations.find((item) => item.id === registrationId && !item.deletedAt); if (!registration) return { ok: false, code: "NOT_FOUND" }; const runner = entities(db, registration).runner; if (mode === "delete" && db.environment !== "local") return { ok: false, code: "DELETE_TEST_ONLY" }; if (mode === "delete") { registration.deletedAt = now(); db.emergencyContacts = db.emergencyContacts.filter((item) => item.registrationId !== registration.id); audit(db, actor, "record_deleted", registration.id); } else { Object.assign(runner, { firstName: "Anonymised", lastName: "Runner", email: `${registration.id}@deleted.invalid`, phone: "deleted", addressLine1: null, addressLine2: null, city: null, postcode: null, dateOfBirth: null, membershipNumber: null, wfraMembershipNumber: null, anonymisedAt: now() }); db.emergencyContacts = db.emergencyContacts.filter((item) => item.registrationId !== registration.id); audit(db, actor, "record_anonymised", registration.id); } return { ok: true }; }); }
   async resetDevelopment(actor) { if (!authorize(actor, "erase")) return { ok: false, code: "FORBIDDEN" }; const existing = await this.repository.read(); if (!['local', 'development'].includes(existing.environment)) return { ok: false, code: "DEVELOPMENT_ONLY" }; const next = createDatabase({ environment: existing.environment, registrationState: "test", capacity: existing.event.capacity }); next.testProgress.resetCompleted = true; await this.repository.reset(next); return { ok: true, state: next }; }
 }

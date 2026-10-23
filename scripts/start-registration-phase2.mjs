@@ -8,6 +8,7 @@ import { createMockPaymentAdapter, createCapturedEmailAdapter, assertSafeAdapter
 import { createApi } from "../registration/server/api.mjs";
 import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
 import { createControlledDevelopmentEmail } from "../registration/server/development-email.mjs";
+import { createPrivateRegistrationWorkbook } from "../api/src/private-workbook.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.env.REGISTRATION_PHASE2_PORT || 4173);
@@ -24,7 +25,7 @@ await repository.transaction((stored) => {
 });
 const service = new RegistrationService({ repository, paymentAdapter: adapters.payment, emailAdapter: adapters.email });
 const phase3Integrations = new Phase3IntegrationService({ repository, emailAdapter: createControlledDevelopmentEmail() });
-const api = createApi({ service, phase3Integrations, environment });
+const api = createApi({ service, phase3Integrations, environment, privateWorkbookExporter: createPrivateRegistrationWorkbook });
 const mime = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gpx": "application/gpx+xml" };
 
 async function requestBody(request) {
@@ -38,7 +39,7 @@ const server = http.createServer(async (request, res) => {
     if (url.pathname.startsWith("/api/v2/") || url.pathname.startsWith("/api/v3/") || url.pathname.startsWith("/api/v4/")) {
       const headers = Object.fromEntries(Object.entries(request.headers).map(([key, value]) => [key.toLowerCase(), value]));
       const result = await api({ method: request.method, pathname: url.pathname, headers, body: await requestBody(request), hostname: "127.0.0.1", query: Object.fromEntries(url.searchParams) });
-      res.writeHead(result.status, result.headers); res.end(JSON.stringify(result.body)); return;
+      res.writeHead(result.status, result.headers); res.end(Buffer.isBuffer(result.body) || result.body instanceof Uint8Array ? result.body : JSON.stringify(result.body)); return;
     }
     let pathname = decodeURIComponent(url.pathname); if (pathname === "/") pathname = "/index.html"; if (pathname.endsWith("/")) pathname += "index.html";
     const target = path.resolve(root, `.${pathname}`);

@@ -15,6 +15,17 @@ const v2 = (path, options) => request("v2", path, options);
 const v3 = (path, options) => request("v3", path, options);
 const v4 = (path, options) => request("v4", path, options);
 
+async function privateWorkbook() {
+  const response = await fetch("/api/v2/organiser/export/private-workbook", { cache: "no-store" });
+  if (!response.ok) {
+    const type = response.headers.get("content-type") ?? "";
+    return type.includes("application/json") ? response.json() : { ok: false, code: "API_UNAVAILABLE" };
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/i)?.[1] ?? `blorenge-registration-private-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  return { ok: true, filename, blob: await response.blob() };
+}
+
 export const prototype = {
   hasPrivateInvitation: Boolean(privateInvitationToken),
   inspectPrivateAccess(purpose = privateInvitationPurpose) { return privateInvitationToken ? v2(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }) : Promise.resolve({ ok: true }); },
@@ -62,6 +73,7 @@ export const prototype = {
   correctEntry(id, changes) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/correct`, { method: "POST", body: JSON.stringify(changes) }); },
   audit(id) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/audit`); },
   async csv() { const result = await v2("/organiser/export/public"); return result.csv ?? ""; },
+  privateWorkbook,
   privateInvitations() { return v2("/organiser/private-invitations"); },
   createPrivateInvitation(input) { return v2("/organiser/private-invitations", { method: "POST", body: JSON.stringify(input) }); },
   revokePrivateInvitation(id) { return v2(`/organiser/private-invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" }); },

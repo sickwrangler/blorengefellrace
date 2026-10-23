@@ -57,6 +57,18 @@ async function phase4Api(path, options = {}, organiser = false) {
   return response.json();
 }
 
+async function privateWorkbook() {
+  if (!usesApi) return { ok: false, code: "MANAGED_API_REQUIRED" };
+  const response = await fetch("/api/v2/organiser/export/private-workbook", { headers: isLocal ? { "x-development-organiser": "enabled" } : {}, cache: "no-store" });
+  if (!response.ok) {
+    const type = response.headers.get("content-type") ?? "";
+    return type.includes("application/json") ? response.json() : { ok: false, code: "API_UNAVAILABLE" };
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/i)?.[1] ?? `blorenge-registration-private-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  return { ok: true, filename, blob: await response.blob() };
+}
+
 async function localApiOrRepository(path, options, operation, organiser = false) {
   if (!canTest) return { ok: false, code: "PRODUCTION_CLOSED", message: "2026 entries are not yet open." };
   if (usesApi) {
@@ -243,6 +255,7 @@ export const prototype = {
     return repository.reset();
   },
   async csv() { if (usesApi) { const result = await api("/organiser/export/public", {}, true); return result.csv; } const { state } = await this.all(); return sanitizedCsv(state); },
+  privateWorkbook,
   async privateInvitations() { return usesApi ? api("/organiser/private-invitations", {}, true) : { ok: false, code: "MANAGED_API_REQUIRED", invitations: [] }; },
   async createPrivateInvitation(input) { return usesApi ? api("/organiser/private-invitations", { method: "POST", body: JSON.stringify(input) }, true) : { ok: false, code: "MANAGED_API_REQUIRED" }; },
   async revokePrivateInvitation(id) { return usesApi ? api(`/organiser/private-invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" }, true) : { ok: false, code: "MANAGED_API_REQUIRED" }; },

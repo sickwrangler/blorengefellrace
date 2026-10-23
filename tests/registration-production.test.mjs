@@ -102,7 +102,7 @@ test("full production registration accepts minimal waiting-list joins and report
   let offerToken;
   await repository.transaction((current) => {
     current.registrations.pop();
-    const offered = createNextWaitingListOffer(current, organiser, new Date("2026-10-02T09:00:00Z"));
+    const offered = createNextWaitingListOffer(current, organiser, new Date());
     assert.equal(offered.ok, true); offerToken = offered.token; return { ok: true };
   });
   const runner = { firstName: "Alys", lastName: "Runner", email: "alys@example.com", phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", acceptTerms: true, acceptPrivacy: true };

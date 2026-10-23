@@ -7,6 +7,11 @@ import { loadProductionConfiguration } from "../production-config.mjs";
 import { createProductionAzureTableTransport } from "../production-storage.mjs";
 import { createProductionEmailAdapter, createProductionStripeGateway } from "../production-providers.mjs";
 
+const privateWorkbookExporter = async (model) => {
+  const { createPrivateRegistrationWorkbook } = await import("../private-workbook.mjs");
+  return createPrivateRegistrationWorkbook(model);
+};
+
 const configuration = loadProductionConfiguration();
 const sasDaysRemaining = configuration.storageSasExpiryAt ? Math.floor((new Date(configuration.storageSasExpiryAt).valueOf() - Date.now()) / 86_400_000) : null;
 if (sasDaysRemaining === null) console.warn("registration_table_sas_expiry_unknown", { environment: "production" });
@@ -24,7 +29,7 @@ const repository = createAzureTableRepository(storageTransport);
 const emailAdapter = createProductionEmailAdapter(configuration);
 const stripeGateway = createProductionStripeGateway(configuration);
 const phase3Integrations = new Phase3IntegrationService({ repository, stripeGateway, emailAdapter, publicBaseUrl: configuration.publicBaseUrl, environment: "production", orderConfiguration: { maxRunnersPerOrder: configuration.maxRunnersPerOrder, emailRecoveryMaxPerHour: configuration.emailRecoveryMaxPerHour } });
-const handle = createProductionApi({ service: new ProductionRegistrationService({ repository, emailAdapter, stripeMode: stripeGateway?.mode ?? "disabled" }), phase3Integrations, repository, storageDiagnostics: storageTransport.storageMetadata });
+const handle = createProductionApi({ service: new ProductionRegistrationService({ repository, emailAdapter, stripeMode: stripeGateway?.mode ?? "disabled" }), phase3Integrations, repository, storageDiagnostics: storageTransport.storageMetadata, privateWorkbookExporter });
 
 const handler = async (request, context) => {
   let pathname = "";
@@ -39,7 +44,7 @@ const handler = async (request, context) => {
       else { try { body = rawBody ? JSON.parse(rawBody) : {}; } catch { return { status: 400, jsonBody: { ok: false, code: "INVALID_JSON" } }; } }
     }
     const result = await handle({ method: request.method, pathname: url.pathname, headers, body, hostname: url.hostname, query: Object.fromEntries(url.searchParams) });
-    return { status: result.status, headers: result.headers, body: JSON.stringify(result.body) };
+    return { status: result.status, headers: result.headers, body: Buffer.isBuffer(result.body) || result.body instanceof Uint8Array ? result.body : JSON.stringify(result.body) };
   } catch (error) {
     if (request.method === "POST" && pathname === "/api/v4/orders") context.error("registration_order_creation_5xx", { environment: "production" });
     context.error("Production registration request failed", { category: error?.name ?? "Error" });

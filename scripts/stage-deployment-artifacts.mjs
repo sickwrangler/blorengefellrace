@@ -96,6 +96,7 @@ const PRODUCTION_API_COPIES = Object.freeze([
   ["api/src/production-config.mjs", "src/production-config.mjs"],
   ["api/src/production-providers.mjs", "src/production-providers.mjs"],
   ["api/src/production-storage.mjs", "src/production-storage.mjs"],
+  ["api/src/private-workbook.mjs", "src/private-workbook.mjs"],
   ["registration/server/production-storage-codec.mjs", "src/shared/server/production-storage-codec.mjs"],
   ["registration/declarations.mjs", "src/shared/declarations.mjs"],
   ["registration/server/production-auth.mjs", "src/shared/server/auth.mjs"],
@@ -110,6 +111,7 @@ const PRODUCTION_API_COPIES = Object.freeze([
   ["registration/server/production-api.mjs", "src/shared/server/production-api.mjs"],
   ["registration/server/production-bootstrap.mjs", "src/shared/server/production-bootstrap.mjs"],
   ["registration/server/production-service.mjs", "src/shared/server/production-service.mjs"],
+  ["registration/server/private-export.mjs", "src/shared/server/private-export.mjs"],
   ["registration/server/repositories.mjs", "src/shared/server/repositories.mjs"],
 ]);
 
@@ -119,6 +121,7 @@ const DEVELOPMENT_API_COPIES = Object.freeze([
   ["api/src/functions/registration.mjs", "src/functions/registration.mjs"],
   ["api/src/storage.mjs", "src/storage.mjs"],
   ["api/src/providers.mjs", "src/providers.mjs"],
+  ["api/src/private-workbook.mjs", "src/private-workbook.mjs"],
   ["registration/registration-core.mjs", "src/shared/registration-core.mjs"],
   ["registration/declarations.mjs", "src/shared/declarations.mjs"],
   ["registration/server/adapters.mjs", "src/shared/server/adapters.mjs"],
@@ -134,7 +137,8 @@ const DEVELOPMENT_API_COPIES = Object.freeze([
   ["registration/server/acs-email-delivery.mjs", "src/shared/server/acs-email-delivery.mjs"],
   ["registration/server/email-health.mjs", "src/shared/server/email-health.mjs"],
   ["registration/server/repositories.mjs", "src/shared/server/repositories.mjs"],
-  ["registration/server/service.mjs", "src/shared/server/service.mjs"]
+  ["registration/server/service.mjs", "src/shared/server/service.mjs"],
+  ["registration/server/private-export.mjs", "src/shared/server/private-export.mjs"]
 ]);
 
 const forbiddenProductionPrefixes = Object.freeze([
