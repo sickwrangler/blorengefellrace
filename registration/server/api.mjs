@@ -122,6 +122,15 @@ export function createApi({ service, phase3Integrations = null, environment = "l
     if (method === "POST" && pathname === "/api/v2/organiser/import/synthetic-csv") return resultResponse(await service.importSyntheticCsv(actor, body.csv));
     if (method === "GET" && pathname === "/api/v2/organiser/export/public") return resultResponse(await service.exportPublic(actor));
     if (method === "GET" && pathname === "/api/v2/organiser/export/private") return resultResponse(await service.exportPrivate(actor));
+    if (method === "GET" && pathname === "/api/v2/organiser/export/waiting-list") {
+      const result = await service.exportWaitingList(actor);
+      if (!result.ok) return resultResponse(result);
+      return response(200, Buffer.from(result.csv, "utf8"), {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="${result.filename}"`,
+        "x-content-type-options": "nosniff"
+      });
+    }
     if (method === "GET" && pathname === "/api/v2/organiser/export/private-workbook") {
       const result = await service.exportPrivateWorkbook(actor);
       if (!result.ok) return resultResponse(result);
