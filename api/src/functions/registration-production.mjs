@@ -6,7 +6,11 @@ import { createProductionApi } from "../shared/server/production-api.mjs";
 import { loadProductionConfiguration } from "../production-config.mjs";
 import { createProductionAzureTableTransport } from "../production-storage.mjs";
 import { createProductionEmailAdapter, createProductionStripeGateway } from "../production-providers.mjs";
-import { createPrivateRegistrationWorkbook } from "../private-workbook.mjs";
+
+const privateWorkbookExporter = async (model) => {
+  const { createPrivateRegistrationWorkbook } = await import("../private-workbook.mjs");
+  return createPrivateRegistrationWorkbook(model);
+};
 
 const configuration = loadProductionConfiguration();
 const sasDaysRemaining = configuration.storageSasExpiryAt ? Math.floor((new Date(configuration.storageSasExpiryAt).valueOf() - Date.now()) / 86_400_000) : null;
@@ -25,7 +29,7 @@ const repository = createAzureTableRepository(storageTransport);
 const emailAdapter = createProductionEmailAdapter(configuration);
 const stripeGateway = createProductionStripeGateway(configuration);
 const phase3Integrations = new Phase3IntegrationService({ repository, stripeGateway, emailAdapter, publicBaseUrl: configuration.publicBaseUrl, environment: "production", orderConfiguration: { maxRunnersPerOrder: configuration.maxRunnersPerOrder, emailRecoveryMaxPerHour: configuration.emailRecoveryMaxPerHour } });
-const handle = createProductionApi({ service: new ProductionRegistrationService({ repository, emailAdapter, stripeMode: stripeGateway?.mode ?? "disabled" }), phase3Integrations, repository, storageDiagnostics: storageTransport.storageMetadata, privateWorkbookExporter: createPrivateRegistrationWorkbook });
+const handle = createProductionApi({ service: new ProductionRegistrationService({ repository, emailAdapter, stripeMode: stripeGateway?.mode ?? "disabled" }), phase3Integrations, repository, storageDiagnostics: storageTransport.storageMetadata, privateWorkbookExporter });
 
 const handler = async (request, context) => {
   let pathname = "";

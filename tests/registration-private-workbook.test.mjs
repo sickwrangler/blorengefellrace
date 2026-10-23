@@ -81,6 +81,24 @@ test("private export reconstructs a chronological multi-transfer chain from audi
   assert.deepEqual({ registrations: model.summary.registrationsEverTransferred, events: model.summary.totalTransferEvents, pending: model.summary.pendingDeclarations }, { registrations: 1, events: 2, pending: 1 });
 });
 
+test("private export ignores malformed and non-transfer audit events", () => {
+  const source = cloneState();
+  source.auditEvents = [
+    { id: "valid-a-b", action: "entry_transferred", subjectId: "registration-1", occurredAt: "2026-10-01T10:00:00Z", before: { runnerId: "runner-original" }, after: { runnerId: "runner-middle" } },
+    { id: "missing-both", action: "entry_transferred", subjectId: "registration-1", occurredAt: "2026-10-01T10:01:00Z", before: {}, after: {} },
+    { id: "missing-before", action: "entry_transferred", subjectId: "registration-1", occurredAt: "2026-10-01T10:02:00Z", before: {}, after: { runnerId: "runner-current" } },
+    { id: "missing-after", action: "organiser_entry_transferred", subjectId: "registration-1", occurredAt: "2026-10-01T10:03:00Z", before: { runnerId: "runner-middle" }, after: {} },
+    { id: "blank-before", action: "entry_transferred", subjectId: "registration-1", occurredAt: "2026-10-01T10:04:00Z", before: { runnerId: "   " }, after: { runnerId: "runner-current" } },
+    { id: "identical", action: "organiser_entry_transferred", subjectId: "registration-1", occurredAt: "2026-10-01T10:05:00Z", before: { runnerId: "runner-middle" }, after: { runnerId: "runner-middle" } },
+    { id: "missing-registration", action: "entry_transferred", occurredAt: "2026-10-01T10:06:00Z", before: { runnerId: "runner-middle" }, after: { runnerId: "runner-current" } },
+    { id: "unrelated", action: "runner_details_amended", subjectId: "registration-1", occurredAt: "2026-10-01T10:07:00Z", before: { runnerId: "runner-middle" }, after: { runnerId: "runner-current" } }
+  ];
+
+  const history = buildTransferHistory(source);
+  assert.deepEqual(history.map((event) => event.auditEventId), ["valid-a-b"]);
+  assert.deepEqual(history.map((event) => [event.fromRunnerId, event.toRunnerId]), [["runner-original", "runner-middle"]]);
+});
+
 test("private export handles a missing historical runner without failing or inventing contact data", () => {
   const source = state(); source.runners = source.runners.filter((runner) => runner.id !== "runner-original");
   const [first] = buildTransferHistory(source);
@@ -214,4 +232,25 @@ test("private workbook remains organiser-only and the existing race-day CSV stay
   assert.equal(allowed.headers["cache-control"], "no-store");
   assert.equal(allowed.headers["x-content-type-options"], "nosniff");
   assert.ok(Buffer.isBuffer(allowed.body));
+});
+
+test("ordinary API routes do not invoke the lazy workbook exporter", async () => {
+  const repository = createMemoryRepository(state());
+  const service = new ProductionRegistrationService({ repository, emailAdapter });
+  let workbookExportCount = 0;
+  const lazyExporter = async (model) => {
+    workbookExportCount += 1;
+    const { createPrivateRegistrationWorkbook: exportWorkbook } = await import("../api/src/private-workbook.mjs");
+    return exportWorkbook(model);
+  };
+  const api = createProductionApi({ service, phase3Integrations: {}, repository, privateWorkbookExporter: lazyExporter });
+  const status = await api({ method: "GET", pathname: "/api/v2/registration/status" });
+  assert.equal(status.status, 200);
+  assert.equal(workbookExportCount, 0);
+
+  const principal = Buffer.from(JSON.stringify({ userId: "synthetic-organiser", userRoles: ["authenticated", "organiser"] })).toString("base64");
+  const workbook = await api({ method: "GET", pathname: "/api/v2/organiser/export/private-workbook", headers: { "x-ms-client-principal": principal } });
+  assert.equal(workbook.status, 200);
+  assert.equal(workbookExportCount, 1);
+  assert.ok(Buffer.isBuffer(workbook.body));
 });

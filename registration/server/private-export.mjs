@@ -7,6 +7,7 @@ const asDate = (value) => {
 
 const eventTime = (event) => event.occurredAt ?? event.timestamp ?? event.at ?? null;
 const registrationIdFor = (event) => event.subjectId ?? event.registrationId ?? null;
+const hasIdentifier = (value) => typeof value === "string" && value.trim().length > 0;
 const runnerName = (runner) => runner ? [runner.firstName, runner.lastName].filter(Boolean).join(" ").trim() : "Historical runner record unavailable";
 const runnerEmail = (runner) => runner?.email ?? "";
 const yesNo = (value) => value === true ? "Yes" : value === false ? "No" : "";
@@ -23,7 +24,15 @@ export function buildTransferHistory(state) {
   const sequenceByRegistration = new Map();
 
   return (state.auditEvents ?? [])
-    .filter((event) => TRANSFER_ACTIONS.has(event.action) && registrationIdFor(event))
+    .filter((event) => {
+      const fromRunnerId = event.before?.runnerId;
+      const toRunnerId = event.after?.runnerId;
+      return TRANSFER_ACTIONS.has(event.action)
+        && hasIdentifier(registrationIdFor(event))
+        && hasIdentifier(fromRunnerId)
+        && hasIdentifier(toRunnerId)
+        && fromRunnerId !== toRunnerId;
+    })
     .map((event, sourceIndex) => ({ event, sourceIndex, occurredAt: asDate(eventTime(event)), registrationId: registrationIdFor(event) }))
     .sort((left, right) => {
       const leftTime = left.occurredAt?.valueOf() ?? Number.MAX_SAFE_INTEGER;

@@ -7,7 +7,11 @@ import { Phase3IntegrationService } from "../shared/server/phase3-service.mjs";
 import { createAzureTableTransport } from "../storage.mjs";
 import { createDevelopmentEmailAdapter, createDevelopmentStripeGateway } from "../providers.mjs";
 import { createControlledDevelopmentEmail } from "../shared/server/development-email.mjs";
-import { createPrivateRegistrationWorkbook } from "../private-workbook.mjs";
+
+const privateWorkbookExporter = async (model) => {
+  const { createPrivateRegistrationWorkbook } = await import("../private-workbook.mjs");
+  return createPrivateRegistrationWorkbook(model);
+};
 
 const required = (name) => {
   const value = process.env[name];
@@ -47,7 +51,7 @@ const phase3Integrations = new Phase3IntegrationService({
     draftRetentionHours: positiveInteger("REGISTRATION_DRAFT_RETENTION_HOURS")
   }
 });
-const handle = createApi({ service: new RegistrationService({ repository, paymentAdapter, emailAdapter: lifecycleEmailAdapter, publicBaseUrl }), phase3Integrations, environment: "development", privateWorkbookExporter: createPrivateRegistrationWorkbook });
+const handle = createApi({ service: new RegistrationService({ repository, paymentAdapter, emailAdapter: lifecycleEmailAdapter, publicBaseUrl }), phase3Integrations, environment: "development", privateWorkbookExporter });
 
 const handler = async (request, context) => {
   try {

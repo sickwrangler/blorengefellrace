@@ -58,3 +58,12 @@ test("organiser dashboard separates the private workbook and marks transferred e
   assert.match(localServer, /privateWorkbookExporter: createPrivateRegistrationWorkbook/);
   assert.match(localServer, /Buffer\.isBuffer\(result\.body\)/);
 });
+
+test("Azure Function entry modules lazy-load private workbook generation", () => {
+  for (const filename of ["api/src/functions/registration.mjs", "api/src/functions/registration-production.mjs"]) {
+    const source = fs.readFileSync(filename, "utf8");
+    assert.doesNotMatch(source, /^import\s+\{\s*createPrivateRegistrationWorkbook\s*\}\s+from/m, filename);
+    assert.match(source, /await import\("\.\.\/private-workbook\.mjs"\)/, filename);
+    assert.match(source, /privateWorkbookExporter\s*\}/, filename);
+  }
+});
