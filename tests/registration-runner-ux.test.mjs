@@ -133,6 +133,8 @@ test("manage page is read-only by default with separate accessible dialogs", asy
   assert.match(html, /<button[^>]*id="edit-entry"[^>]*>Edit entry<\/button>/);
   assert.match(html, /<button[^>]*id="transfer-entry"[^>]*>Transfer entry<\/button>/);
   assert.match(html, /Transfer this race place to another runner\./);
+  assert.match(html, /id="unavailable-actions"/);
+  assert.match(html, /Why some actions are unavailable/);
   assert.doesNotMatch(html, /id="edit-entry"[^>]*>Transfer entry/);
 
   assert.match(script, /Payment required/);
@@ -143,6 +145,10 @@ test("manage page is read-only by default with separate accessible dialogs", asy
   assert.match(script, /showModal\(\)/);
   assert.match(script, /returnFocusTo\?\.focus\(\)/);
   assert.match(script, /confirm\("Transfer this race place/);
+  assert.match(script, /TRANSFER_CUTOFF_PASSED/);
+  assert.match(script, /Runner transfers closed on/);
+  assert.match(script, /REFUND_ALREADY_IN_PROGRESS/);
+  assert.match(script, /MANAGEMENT_TOKEN_EXPIRED|runnerMessageForCode/);
   assert.match(script, /✓/);
   assert.match(script, /!/);
 

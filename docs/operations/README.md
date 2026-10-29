@@ -17,6 +17,7 @@ Start with the [emergency cheat sheet](emergency-cheat-sheet.md). Normal organis
 2. [System overview](system-overview.md) — what is running and how the parts connect
 3. [Resource inventory](resource-inventory.md) — verified Azure and external resources
 4. [Registration lifecycle](registration-lifecycle.md) — states, orders, places and declarations
+   - [Runner self-service](runner-self-service.md) — private links, action eligibility and transfer invariants
 5. [Payments and Stripe](payments-and-stripe.md) — Checkout, webhooks, reconciliation and refunds
 6. [Email and ACS](email-and-acs.md) — transactional email and delivery diagnosis
 7. [Scheduler](scheduler.md) — 30-minute background work and health checks

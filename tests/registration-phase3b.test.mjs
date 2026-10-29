@@ -275,6 +275,7 @@ test("secure runner refund request requires organiser approval before one full S
 
 test("v3 refund request and organiser decision routes preserve the authentication boundary", async () => {
   const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
+  state.event.transferRefundCutoffUtc = "2099-10-28T23:59:00.000Z";
   const created = beginProductionRegistration(state, { runner: runner(8), declaration: declaration(8) }, { at });
   const provider = gateway();
   const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), stripeGateway: provider.gateway, emailAdapter: createControlledDevelopmentEmail() });
@@ -332,7 +333,7 @@ test("management recovery is non-enumerating, rotates tokens and is rate limited
   assert.deepEqual(known, absent); assert.equal(mail.sent.length, 2);
   const match = mail.sent.at(-1).text.match(/#token=([^\s]+)/); assert.ok(match);
   const replacement = decodeURIComponent(match[1]);
-  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_EXPIRED");
   assert.equal((await phase3.managementEntry(replacement, at)).ok, true);
   await phase3.recoverManagementLink("phase3b-2@example.com", at);
   await phase3.recoverManagementLink("phase3b-2@example.com", at);
@@ -372,7 +373,7 @@ test("transfer resets declaration state, rotates ownership and invalidates the o
   const phase3 = new Phase3IntegrationService({ repository, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
   const transferred = await phase3.transfer(created.managementToken, { runner: runner(41) }, at);
   assert.equal(transferred.ok, true); assert.equal(transferred.registration.runner.firstName, "Runner 41");
-  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_EXPIRED");
   const state = await repository.read();
   assert.equal("replacementManagementToken" in transferred, false);
   assert.equal(state.managementTokens.filter((item) => !item.invalidatedAt).length, 1);
@@ -414,5 +415,5 @@ test("organisers can revoke a management link without learning its token", async
   const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), emailAdapter: createControlledDevelopmentEmail() });
   assert.equal((await phase3.revokeManagementLink({ authenticated: false }, created.registration.id, at)).code, "FORBIDDEN");
   assert.equal((await phase3.revokeManagementLink(admin, created.registration.id, at)).revoked, 1);
-  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_EXPIRED");
 });

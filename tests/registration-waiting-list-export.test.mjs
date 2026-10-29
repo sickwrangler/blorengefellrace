@@ -130,7 +130,7 @@ test("waiting-list CSV is private, UTF-8 safe, formula safe and operationally or
   const response = await api({ method: "GET", pathname: "/api/v2/organiser/export/waiting-list", headers: { "x-ms-client-principal": principal } });
   assert.equal(response.status, 200);
   assert.equal(response.headers["content-type"], "text/csv; charset=utf-8");
-  assert.equal(response.headers["content-disposition"], 'attachment; filename="blorenge-waiting-list-2026-10-23.csv"');
+  assert.match(response.headers["content-disposition"], /^attachment; filename="blorenge-waiting-list-\d{4}-\d{2}-\d{2}\.csv"$/);
   assert.equal(response.headers["cache-control"], "no-store");
   assert.equal(response.headers["x-content-type-options"], "nosniff");
   assert.ok(Buffer.isBuffer(response.body));

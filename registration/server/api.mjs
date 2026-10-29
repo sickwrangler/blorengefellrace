@@ -1,7 +1,7 @@
 import { actorForRequest } from "./auth.mjs";
 
 const response = (status, body, headers = {}) => ({ status, body, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
-const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "NOT_FOUND" ? 404 : result.code === "LINK_UNAVAILABLE" ? 410 : result.code === "INVALID_WEBHOOK_SIGNATURE" ? 400 : ["PAYMENTS_UNAVAILABLE", "INTEGRATION_NOT_CONFIGURED"].includes(result.code) ? 503 : 409, result);
+const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "MANAGEMENT_TOKEN_INVALID" ? 401 : result.code === "NOT_FOUND" ? 404 : ["LINK_UNAVAILABLE", "MANAGEMENT_TOKEN_EXPIRED", "MANAGEMENT_ENTRY_UNAVAILABLE"].includes(result.code) ? 410 : result.code === "INVALID_WEBHOOK_SIGNATURE" ? 400 : ["PAYMENTS_UNAVAILABLE", "INTEGRATION_NOT_CONFIGURED"].includes(result.code) ? 503 : 409, result);
 
 export function createApi({ service, phase3Integrations = null, environment = "local", privateWorkbookExporter = null }) {
   const attempts = new Map();

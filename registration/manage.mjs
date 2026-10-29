@@ -12,6 +12,8 @@ const editEntry = document.querySelector("#edit-entry");
 const transferEntry = document.querySelector("#transfer-entry");
 const requestRefund = document.querySelector("#request-refund");
 const actionMessage = document.querySelector("#action-message");
+const unavailableActions = document.querySelector("#unavailable-actions");
+const actionReasons = document.querySelector("#action-reasons");
 const editDialog = document.querySelector("#edit-entry-dialog");
 const transferDialog = document.querySelector("#transfer-entry-dialog");
 const amendForm = document.querySelector("#amend-form");
@@ -49,6 +51,56 @@ function paymentPresentation(payment) {
   return { label: payment.label || "Payment status", tone: "neutral", icon: "○", summary: payment.label || "Payment status is available." };
 }
 
+function deadlineText(value) {
+  if (!value) return "the published deadline";
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/London" }).format(new Date(value));
+}
+
+function actionReason(label, action) {
+  const deadline = deadlineText(action.deadline ?? current?.policy?.transferRefundCutoffUtc);
+  const reasons = {
+    ENTRY_INACTIVE: "This entry is no longer active.",
+    PAYMENTS_UNAVAILABLE: "Online payment is temporarily unavailable.",
+    REGISTRATION_NOT_ACCEPTING: "Registration is not currently accepting payments.",
+    PAYMENT_ALREADY_COMPLETE: "Payment is already complete.",
+    PAYMENT_PROCESSING: "Payment is still being confirmed.",
+    PAYMENT_REFUNDED: "The payment for this entry has been refunded.",
+    PAYMENT_NOT_AVAILABLE: "Payment cannot be continued from the entry’s current state.",
+    DECLARATION_COMPLETE: "The race declaration is already complete.",
+    DECLARATION_AFTER_PAYMENT: "The declaration link becomes available after payment confirms the place.",
+    TRANSFER_CUTOFF_PASSED: `Runner transfers closed on ${deadline}. Contact the organiser if an exceptional change is needed.`,
+    REFUND_CUTOFF_PASSED: `Online refund requests closed on ${deadline}. Contact the organiser if you need help.`,
+    REFUND_NOT_READY: "A refund can only be requested after payment is confirmed.",
+    REFUND_ALREADY_IN_PROGRESS: "A refund request is already being reviewed or processed."
+  };
+  return `${label}: ${reasons[action.code] ?? "This action is not available for the entry’s current state."}`;
+}
+
+function renderActions() {
+  const actions = current.actions ?? {
+    continuePayment: { available: current.payment.canContinue },
+    signDeclaration: { available: current.declaration?.status !== "complete" },
+    amend: { available: current.amendmentEligible },
+    transfer: { available: current.transferEligible },
+    requestRefund: { available: current.refundEligible }
+  };
+  const controls = [
+    ["Continue payment", continuePayment, actions.continuePayment],
+    ["Sign declaration", signDeclaration, actions.signDeclaration],
+    ["Edit entry", editEntry, actions.amend],
+    ["Transfer entry", transferEntry, actions.transfer],
+    ["Request refund", requestRefund, actions.requestRefund]
+  ];
+  for (const [, button, action] of controls) button.hidden = action?.available !== true;
+  const unavailable = controls.filter(([, , action]) => action?.available === false).map(([label, , action]) => {
+    const item = document.createElement("li"); item.textContent = actionReason(label, action); return item;
+  });
+  actionReasons.replaceChildren(...unavailable);
+  unavailableActions.hidden = unavailable.length === 0;
+  const availableChanges = [actions.continuePayment, actions.signDeclaration, actions.amend, actions.transfer, actions.requestRefund].some((action) => action?.available);
+  actionMessage.textContent = availableChanges ? "" : "There are no self-service changes available for this entry at present.";
+}
+
 function populateEditForm() {
   const values = {
     phone: current.runner.phone, addressLine1: current.runner.addressLine1, addressLine2: current.runner.addressLine2,
@@ -81,11 +133,7 @@ async function render() {
   document.querySelector("#payment-summary").textContent = payment.summary;
   document.querySelector("#declaration-summary").textContent = declarationComplete ? "The race declaration is complete." : "The runner must sign the race declaration before race day.";
 
-  continuePayment.hidden = !current.payment.canContinue;
-  signDeclaration.hidden = declarationComplete;
-  editEntry.hidden = !current.amendmentEligible;
-  transferEntry.hidden = !current.transferEligible;
-  requestRefund.hidden = !current.refundEligible;
+  renderActions();
   populateEditForm();
 
   if (new URLSearchParams(location.search).get("declaration") === "complete") {
