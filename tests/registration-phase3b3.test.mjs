@@ -64,10 +64,16 @@ test("adult emails are unique within an order and across active entries after no
 
 test("16- and 17-year-old runners require a parent or legal guardian declaration", async () => {
   const { orders } = setup(); const created = await createOrder(orders);
-  const junior = runner(1, { dateOfBirth: "2009-12-01" });
-  const wrongSigner = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: declaration(1) }, start); assert.equal(wrongSigner.code, "GUARDIAN_MUST_COMPLETE_DECLARATION");
-  const guardian = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: { ...declaration(1), typedFullName: "Guardian Example", signatoryRole: "Parent / Legal Guardian", completedByNamedRunner: false, completedByParentOrLegalGuardian: true } }, start);
-  assert.equal(guardian.ok, true); assert.equal(guardian.order.registrations[0].declaration.status, "complete");
+  const tooYoung = await orders.addRunner(created.orderToken, { runner: runner(15, { dateOfBirth: "2010-11-29" }), declarationMode: "later", declaration: null }, start); assert.equal(tooYoung.code, "VALIDATION_ERROR"); assert.match(tooYoung.errors.dateOfBirth, /at least 16/);
+  for (const [number, dateOfBirth] of [[16, "2009-11-29"], [17, "2008-11-29"]]) {
+    const junior = runner(number, { dateOfBirth });
+    const wrongRole = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: declaration(number) }, start); assert.equal(wrongRole.code, "GUARDIAN_MUST_COMPLETE_DECLARATION");
+    const selfSigned = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: { ...declaration(number), signatoryRole: "Parent / Legal Guardian", completedByNamedRunner: false, completedByParentOrLegalGuardian: true } }, start); assert.equal(selfSigned.code, "GUARDIAN_NAME_MATCHES_RUNNER");
+    const guardian = await orders.addRunner(created.orderToken, { runner: junior, declarationMode: "now", declaration: { ...declaration(number), typedFullName: `Guardian ${number} Example`, signatoryRole: "Parent / Legal Guardian", completedByNamedRunner: false, completedByParentOrLegalGuardian: true } }, start);
+    assert.equal(guardian.ok, true);
+  }
+  const adult = await orders.addRunner(created.orderToken, { runner: runner(18, { dateOfBirth: "2007-11-29" }), declarationMode: "now", declaration: declaration(18) }, start);
+  assert.equal(adult.ok, true);
 });
 
 test("declaration may be completed now only by the named runner or deferred without blocking Checkout", async () => {
@@ -164,7 +170,7 @@ test("payment confirmation preserves the management token used to recover an unp
   await current.orders.checkout(created.orderToken, start);
   await current.orders.webhook({ id: "evt_recovered_order_paid", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_test_recovered_order" } } }, start);
   const phase3 = new Phase3IntegrationService({ repository: current.repository, stripeGateway: current.stripeGateway, emailAdapter: { kind: "test", async send() { return { delivery: "test", externalCall: false }; } }, publicBaseUrl: "https://development.example" });
-  assert.equal((await phase3.paymentStatus(recoveryToken)).state, "paid");
+  assert.equal((await phase3.paymentStatus(recoveryToken, start)).state, "paid");
   assert.equal((await current.repository.read()).managementTokens.filter((item) => !item.invalidatedAt).length, 2);
 });
 
@@ -242,8 +248,9 @@ test("a deferred junior declaration records parent or legal guardian evidence", 
   await current.orders.webhook({ id: "evt_junior_paid", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_test_junior", metadata: { orderId: created.order.id } } } }, start);
   const message = current.sent.find((item) => item.template === "entry_confirmed_declaration_required"); const token = new URL(message.data.secureUrl).hash.split("token=")[1];
   const inspected = await current.orders.inspectDeclaration(token); assert.equal(inspected.registration.runner.requiresGuardianDeclaration, true);
+  const rejected = await current.orders.completeDeclaration(token, { accepted: true, typedFullName: "Runner 1 Example", completedByNamedRunner: false, completedByParentOrLegalGuardian: true }, start); assert.equal(rejected.code, "GUARDIAN_NAME_MATCHES_RUNNER");
   const completed = await current.orders.completeDeclaration(token, { accepted: true, typedFullName: "Guardian Example", completedByNamedRunner: false, completedByParentOrLegalGuardian: true }, start); assert.equal(completed.ok, true);
-  const state = await current.repository.read(); assert.equal(state.declarations[0].signatoryRole, "Parent / Legal Guardian"); assert.equal(state.declarations[0].typedFullName, "Guardian Example");
+  const state = await current.repository.read(); assert.equal(state.declarations[0].signatoryRole, "Parent / Legal Guardian"); assert.equal(state.declarations[0].typedFullName, "Guardian Example"); assert.equal(state.declarations[0].declarationVersion, "21/02/23"); assert.equal(state.declarations[0].completedAt, start.toISOString());
 });
 
 test("order, management and declaration credentials remain isolated and hashed at rest", async () => {
@@ -296,6 +303,51 @@ test("Stripe refund and notification side effects are not repeated by Azure ETag
   assert.equal(final.communications.filter((item) => item.template === "refund_completed").length, 1); assert.equal(writes, 6);
 });
 
+test("Stripe webhook converges after storage failure without duplicate payment, place or provider communication", async () => {
+  const prepared = setup(); const created = await createOrder(prepared.orders); await add(prepared.orders, created.orderToken, 1, "later"); await prepared.orders.checkout(created.orderToken, start);
+  let stored = await prepared.repository.read(); let etag = 1; let writes = 0; let sendCalls = 0;
+  const providerEffects = new Set();
+  const repository = createAzureTableRepository({
+    async loadPartition() { return { state: structuredClone(stored), etag: String(etag) }; },
+    async submitTransaction({ after }) {
+      writes += 1;
+      if (writes === 1) { const error = new Error("synthetic storage outage"); error.statusCode = 503; throw error; }
+      stored = structuredClone(after); etag += 1;
+    },
+    retryDelay: async () => {}
+  });
+  const emailAdapter = { kind: "test", async send(message) { sendCalls += 1; providerEffects.add(message.deliveryIdempotencyKey); return { delivery: "test", externalCall: true, providerReference: `deduplicated-${message.deliveryIdempotencyKey}` }; } };
+  const orders = new OrderRegistrationService({ repository, stripeGateway: prepared.stripeGateway, emailAdapter, publicBaseUrl: "https://development.example" });
+  const event = { id: "evt_storage_retry", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_storage_retry", metadata: { orderId: created.order.id } } } };
+  await assert.rejects(orders.webhook(event, start), /synthetic storage outage/);
+  assert.equal(stored.payments[0].status, "checkout_pending");
+  assert.equal((await orders.webhook(event, start)).ok, true);
+  const final = await repository.read();
+  assert.equal(final.payments.length, 1); assert.equal(final.payments[0].status, "paid");
+  assert.equal(final.registrations.filter((item) => item.placeStatus === "confirmed").length, 1);
+  assert.equal(final.processedPaymentEvents.filter((item) => item.id === event.id).length, 1);
+  assert.equal(final.communications.filter((item) => item.template === "entry_confirmed_declaration_required").length, 1);
+  assert.equal(providerEffects.size, 1); assert.equal(sendCalls, 1);
+});
+
+test("email provider failure cannot roll back authoritative paid state and resend remains independent", async () => {
+  const prepared = setup(); const created = await createOrder(prepared.orders); const added = await add(prepared.orders, created.orderToken, 1, "later"); await prepared.orders.checkout(created.orderToken, start);
+  let providerAvailable = false; const sent = [];
+  const emailAdapter = { kind: "test", async send(message) { if (!providerAvailable) throw new Error("synthetic email outage"); sent.push(message); return { delivery: "test", externalCall: true, providerReference: "synthetic-email-retry" }; } };
+  const orders = new OrderRegistrationService({ repository: prepared.repository, stripeGateway: prepared.stripeGateway, emailAdapter, publicBaseUrl: "https://development.example" });
+  const event = { id: "evt_email_failure", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_email_failure", metadata: { orderId: created.order.id } } } };
+  assert.equal((await orders.webhook(event, start)).ok, true);
+  const paid = await prepared.repository.read();
+  assert.equal(paid.payments[0].status, "paid"); assert.equal(paid.registrations[0].placeStatus, "confirmed");
+  assert.equal(paid.communications.filter((item) => item.delivery === "failed").length, 1);
+  providerAvailable = true;
+  assert.equal((await orders.resendDeclaration(admin, added.order.registrations[0].id, start)).ok, true);
+  assert.equal(sent.length, 1);
+  const final = await prepared.repository.read();
+  assert.equal(final.payments[0].status, "paid"); assert.equal(final.registrations[0].placeStatus, "confirmed");
+  assert.ok(final.communications.some((item) => item.template === "declaration_reminder" && item.delivery === "test"));
+});
+
 test("Checkout expiry releases every runner and scheduler reminders stop after completion", async () => {
   const { orders, repository, sent } = setup(); const created = await createOrder(orders); const added = await add(orders, created.orderToken, 1); await orders.checkout(created.orderToken, start);
   const expired = await orders.runScheduledWork(new Date("2026-09-01T12:31:00Z")); assert.equal(expired.abandonedOrders, 1); assert.equal(capacitySummary(await repository.read()).remaining, 120);
@@ -336,7 +388,7 @@ test("organiser transfer preserves payment/place, revokes old links and resets d
   const phase3 = new Phase3IntegrationService({ repository: paid.repository, stripeGateway: paid.stripeGateway, emailAdapter: { kind: "test", async send(message) { paid.sent.push(message); return { delivery: "test", externalCall: false }; } }, publicBaseUrl: "https://development.example" });
   const amended = await phase3.amend(oldManagementToken, { phone: "07700 900999", club: "Corrected Club" }, start); assert.equal(amended.ok, true); assert.equal((await paid.repository.read()).registrations[1].runnerId, oldRunnerId);
   const transferred = await phase3.organiserTransfer(admin, target.id, { runner: runner(3) }, start); assert.equal(transferred.ok, true); assert.equal("replacementManagementToken" in transferred, false);
-  assert.equal((await phase3.managementEntry(oldManagementToken, start)).code, "MANAGEMENT_TOKEN_INVALID"); assert.equal((await paid.orders.inspectDeclaration(oldDeclarationToken)).code, "LINK_UNAVAILABLE");
+  assert.equal((await phase3.managementEntry(oldManagementToken, start)).code, "MANAGEMENT_TOKEN_EXPIRED"); assert.equal((await paid.orders.inspectDeclaration(oldDeclarationToken)).code, "LINK_UNAVAILABLE");
   const after = await paid.repository.read(); const registration = after.registrations.find((item) => item.id === target.id);
   assert.notEqual(registration.runnerId, oldRunnerId); assert.equal(registration.placeStatus, "confirmed"); assert.equal(registration.declarationStatus, "pending"); assert.equal(after.payments[0].id, paymentId); assert.equal(after.payments[0].status, "paid");
   assert.ok(after.auditEvents.find((item) => item.action === "runner_details_amended")); assert.ok(after.auditEvents.find((item) => item.action === "organiser_entry_transferred" && item.after.cutoffOverride === false));

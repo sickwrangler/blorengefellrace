@@ -13,6 +13,12 @@
 | `info.html` | Travel, full kit guidance, historical report, statistics and winner information in tabs | Global/info/winners CSS, tab JavaScript and images |
 | `privacy.html` | Privacy policy | Global CSS |
 | `404.html` | Branded not-found page | Global CSS |
+| `registration/index.html` | Live runner order and entry journey, gated by production operational state | Managed registration API, Stripe Checkout |
+| `registration/payment-return.html` | Reads reconciled server payment state after Stripe returns | Managed registration API |
+| `registration/manage.html` | Secure runner management, transfer and refund request journey | Managed registration API, ACS recovery email |
+| `registration/declaration.html` | Secure declaration completion | Managed registration API |
+| `registration/start-list.html` | Public minimised projection of confirmed entrants | `/api/v4/start-list` |
+| `registration/dashboard.html` | Entra/`organiser`-protected operations UI | Managed organiser APIs |
 
 ## Shared components
 
@@ -70,7 +76,9 @@ Give content photographs meaningful alternative text, use an empty alternative f
 | General event wording, dates, times and public links | HTML files in this repository |
 | Historical results | Public Google Sheet exposed through OpenSheet |
 | 2025 results | Published Google Sheet CSV |
-| Current entry publication status | `enter.html` |
+| Public opening announcement | `index.html`, `enter.html` and the registration holding panel |
+| Live registration state, capacity, runners, orders and audit | Production `RegistrationProduction` Table partition via the managed API |
+| Public start list | Server-generated privacy-minimised projection of paid/confirmed production registration data |
 | 2025 statistics | Published public-result data summarized in `info.html` |
 | Confirmed route, map and GPX | `route.html`, `route-map.js` and `downloads/blorenge-fell-race-2026.gpx` |
 | Editorial photo catalogue | `data/photos/manifest.json` |

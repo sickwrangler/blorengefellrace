@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-No framework, package manager, dependency installation, compilation, or environment file is required. A modern browser is sufficient. Node.js is used for the repository checks, and any simple static HTTP server can serve the site locally. Regenerating editorial photographs additionally requires the macOS `sips` command.
+No framework or compilation is required for the static public pages. A modern browser and simple HTTP server are sufficient for those pages. Node.js is required for repository checks and registration development; the API and scheduler use locked npm dependencies. Regenerating editorial photographs additionally requires the macOS `sips` command.
 
 ## Run locally
 
@@ -74,7 +74,7 @@ The automated checks complement manual browser review, which should cover:
 - the mobile navigation open and closed states, including 44px touch targets;
 - information tabs with touch, Tab and arrow-key input;
 - results tables using keyboard and horizontal scrolling;
-- entry publication state (the previous registration form remains commented reference only);
+- entry publication wording and the current production registration page without submitting real data;
 - current and historical results;
 - browser console and network errors;
 - public embeds such as statistics, weather, video, fonts, and documents;
@@ -91,13 +91,15 @@ Do not submit registration forms, enter personal data, or trigger external trans
 
 - Make changes on a non-production branch.
 - Review the worktree before switching branches or synchronizing changes.
-- Use a pull request and its preview deployment for review.
+- Use a pull request and passing validation for review. The current production workflow does not deploy PR previews; the stable development app is separate.
 - Do not commit credentials, private entrant details, or unpublished spreadsheet data.
 - Obtain explicit approval before merging a production change.
 
 Detailed operational and security review information is maintained separately from the public website.
 
-## Registration prototype
+## Registration development
+
+> The following local tools are development-only and synthetic-only. They do not represent the production data store and must never receive genuine runner details or live Stripe credentials.
 
 Start the complete dependency-free Phase 1 prototype with one command:
 
@@ -107,7 +109,7 @@ node scripts/start-registration-prototype.mjs
 
 Open <http://127.0.0.1:4173/registration/>. The server binds only to the local loopback interface and keeps synthetic registrations in memory. It starts with zero entries and Reset test returns it to zero; stopping it deletes the server-side session. No email or payment provider is configured.
 
-The Azure pull-request version uses the shared, versioned `localStorage` repository documented in `registration-architecture.md`. Runner and dashboard testing must use the same browser profile and preview origin. The production custom domain remains closed. See `registration-test-checklist.md` for a non-developer walkthrough.
+The Phase 1 browser repository remains useful for isolated UI/domain tests in one browser profile. It is historical development tooling, not the current production architecture. See `registration-test-checklist.md` for its synthetic walkthrough.
 
 Phase 2 adds the preferred persistent local API without removing the safe PR-preview fallback:
 
@@ -115,9 +117,9 @@ Phase 2 adds the preferred persistent local API without removing the safe PR-pre
 node scripts/start-registration-phase2.mjs
 ```
 
-The runner, organiser area, captured-email adapter, disabled Phase 3 payment integration and ignored persistent store are served together at <http://127.0.0.1:4173/registration/>. The payment-return page reads the authoritative server state and cannot mark an entry paid. Stop and restart the process to verify persistence. Reset explicitly with `node scripts/reset-registration-phase2.mjs`; backup and restore commands are documented in `registration-phase2.md`.
+The runner, organiser area, controlled development email adapter, Stripe test/disabled integration and ignored persistent store are served together at <http://127.0.0.1:4173/registration/>. The payment-return page reads authoritative local server state and cannot mark an entry paid. Stop and restart the process to verify persistence. Reset explicitly with `node scripts/reset-registration-phase2.mjs`; development backup/restore is documented in `registration-phase2.md`.
 
-The public development start list is available at <http://127.0.0.1:4173/registration/start-list.html>. It polls the read-only minimised endpoint at `/api/v4/start-list`; the production deployment allowlist continues to exclude both routes.
+The local start list is available at <http://127.0.0.1:4173/registration/start-list.html>. It polls the read-only minimised endpoint at `/api/v4/start-list`. Production now deploys its own reviewed registration and start-list files/API; development fixtures and reset/mock routes remain excluded from production.
 
 To validate the managed development API package without using any Azure credential:
 

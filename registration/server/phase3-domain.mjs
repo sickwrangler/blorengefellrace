@@ -2,7 +2,9 @@ import crypto from "node:crypto";
 import { WFRA_SENIOR_ENTRY_DECLARATION } from "../declarations.mjs";
 
 export const PHASE3_REGISTRATION_STATES = Object.freeze(["CLOSED", "PRIVATE_LIVE", "OPEN", "PAUSED", "CLOSED_FINAL"]);
-export const PRIVATE_INVITATION_KINDS = Object.freeze(["registration", "waiting_list_join", "waiting_list_offer"]);
+export const PRIVATE_INVITATION_KINDS = Object.freeze(["registration", "waiting_list_join", "waiting_list_offer", "stripe_provider_proof"]);
+export const PROVIDER_PROOF_INVITATION_HOURS = 2;
+export const MANAGEMENT_TOKEN_LIFETIME_HOURS = 24;
 export const RACE_CATEGORIES = Object.freeze(["Female", "Male / Open"]);
 export const REFUND_STATES = Object.freeze(["requested", "approved", "rejected", "refunded"]);
 
@@ -14,6 +16,11 @@ export const PHASE3_EVENT = Object.freeze({
   capacity: 120,
   entryFeePence: 600,
   wfraMemberPricePence: 400,
+  transferCutoffLocal: "2026-11-27T23:59:00",
+  transferCutoffUtc: "2026-11-27T23:59:00.000Z",
+  refundCutoffLocal: "2026-10-28T23:59:00",
+  refundCutoffUtc: "2026-10-28T23:59:00.000Z",
+  // Retained as a compatibility alias for stored state and older clients.
   transferRefundCutoffLocal: "2026-10-28T23:59:00",
   transferRefundCutoffUtc: "2026-10-28T23:59:00.000Z",
   waitingListOfferHours: 48,
@@ -40,6 +47,18 @@ const iso = (value = new Date()) => new Date(value).toISOString();
 const organiser = (actor) => Boolean(actor?.authenticated && ["organiser", "Organiser", "administrator"].includes(actor.role));
 const systemActor = Object.freeze({ authenticated: true, role: "administrator", actorType: "system", id: "waiting-list-progression" });
 const activeRegistration = (entry) => !entry.deletedAt && !["cancelled", "place_released"].includes(entry.entryStatus);
+
+export function managementTokenExpiry(at = new Date()) {
+  const issuedAt = new Date(at);
+  return Number.isFinite(issuedAt.valueOf()) ? new Date(issuedAt.getTime() + MANAGEMENT_TOKEN_LIFETIME_HOURS * 3_600_000).toISOString() : null;
+}
+
+export function managementTokenIsExpired(token, at = new Date()) {
+  const expiresAt = token?.expiresAt ?? (token?.issuedAt ? managementTokenExpiry(token.issuedAt) : null);
+  const expiry = new Date(expiresAt);
+  const checkedAt = new Date(at);
+  return !expiresAt || !Number.isFinite(expiry.valueOf()) || !Number.isFinite(checkedAt.valueOf()) || expiry <= checkedAt;
+}
 
 function recordAudit(state, actor, action, subjectId = null, before = null, after = null, at = new Date()) {
   state.auditEvents.push({
@@ -114,7 +133,8 @@ export function inspectPrivateInvitation(state, token, { kind, at = new Date(), 
 }
 
 export function authorizePrivateInvitation(state, token, { kind, at = new Date(), consume = false, allowDevelopmentTest = false } = {}) {
-  const statePermitsPrivateAccess = ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState) || (allowDevelopmentTest && state.environment !== "production" && state.registrationState === "test");
+  const closedProviderProof = kind === "stripe_provider_proof" && state.environment === "production" && state.registrationState === "CLOSED" && (state.phase3RegistrationState ?? "CLOSED") === "CLOSED";
+  const statePermitsPrivateAccess = closedProviderProof || ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState) || (allowDevelopmentTest && state.environment !== "production" && state.registrationState === "test");
   if (!statePermitsPrivateAccess) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
   const checked = inspectPrivateInvitation(state, token, { kind, at, consume: false });
   if (!checked.ok) return checked;
@@ -328,6 +348,8 @@ export function acceptWaitingListOffer(state, invitationToken, input, at = new D
   if (!checked.ok) return checked;
   const offer = state.waitingListOffers.find((item) => item.invitationId === checked.invitation.id && item.status === "offered");
   if (!offer || new Date(offer.expiresAt) <= new Date(at)) return { ok: false, code: "OFFER_NOT_ACTIVE" };
+  const waiting = state.waitingList.find((item) => item.id === offer.waitingListId);
+  if (!waiting || String(input.runner?.email ?? "").trim().toLowerCase() !== waiting.email) return { ok: false, code: "WAITING_LIST_EMAIL_MISMATCH" };
   const errors = validateProductionRunner(input.runner ?? {}, { raceDate: state.event.raceDate, under18EntriesEnabled: state.event.under18EntriesEnabled !== false });
   if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
   const declarationCheck = validateDeclarationInput(state, input.declaration);
@@ -339,7 +361,7 @@ export function acceptWaitingListOffer(state, invitationToken, input, at = new D
   const runner = storeRunner(state, input.runner);
   // The active offer already reserves this place, so convert that reservation atomically.
   offer.status = "accepted"; offer.completedAt = iso(at);
-  const waiting = state.waitingList.find((item) => item.id === offer.waitingListId); if (waiting) waiting.status = "accepted";
+  waiting.status = "accepted";
   const registration = { id: shortId("reg"), runnerId: runner.id, entryStatus: "active", placeStatus: "payment_reserved", raceNumber: null, createdAt: iso(at), updatedAt: iso(at), deletedAt: null };
   state.registrations.push(registration);
   const pricing = calculateEntryPrice(state.event, input.runner);
@@ -373,21 +395,23 @@ export function issueManagementToken(state, registrationId, actor = { actorType:
   const existingTokens = state.managementTokens.filter((item) => item.registrationId === registrationId && !item.invalidatedAt);
   if (replaceExisting) for (const token of existingTokens) token.invalidatedAt = iso(at);
   const value = opaqueToken();
-  const token = { id: shortId("management"), registrationId, tokenHash: hashToken(value), issuedAt: iso(at), invalidatedAt: null };
+  const token = { id: shortId("management"), registrationId, tokenHash: hashToken(value), issuedAt: iso(at), expiresAt: managementTokenExpiry(at), invalidatedAt: null };
   state.managementTokens.push(token);
   recordAudit(state, actor, "management_token_issued", registrationId, null, { replacedPriorToken: replaceExisting && existingTokens.length > 0, preservedPriorToken: !replaceExisting && existingTokens.length > 0 }, at);
-  return { ok: true, token: value };
+  return { ok: true, token: value, expiresAt: token.expiresAt };
 }
 
 export function amendRunner(state, managementToken, changes, { actor = { actorType: "runner" }, at = new Date(), organiserOverride = false } = {}) {
-  const stored = state.managementTokens.find((item) => item.tokenHash === hashToken(managementToken) && !item.invalidatedAt);
+  const stored = state.managementTokens.find((item) => item.tokenHash === hashToken(managementToken));
   if (!stored && !organiserOverride) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
+  if (stored && (stored.invalidatedAt || managementTokenIsExpired(stored, at)) && !organiserOverride) return { ok: false, code: "MANAGEMENT_TOKEN_EXPIRED" };
   if (organiserOverride && !organiser(actor)) return { ok: false, code: "FORBIDDEN" };
   const registrationId = stored?.registrationId ?? changes.registrationId;
   const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
   const runner = state.runners.find((item) => item.id === registration?.runnerId);
   if (!registration || !runner) return { ok: false, code: "NOT_FOUND" };
-  const beforeCutoff = new Date(at) <= new Date(state.event.transferRefundCutoffUtc);
+  const transferCutoff = state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc;
+  const beforeCutoff = new Date(at) <= new Date(transferCutoff);
   const identityFields = ["firstName", "lastName"];
   if (!organiserOverride && !beforeCutoff && identityFields.some((field) => changes[field] !== undefined && changes[field] !== runner[field])) return { ok: false, code: "NAME_LOCKED_AFTER_CUTOFF" };
   const allowed = ["firstName", "lastName", "email", "phone", "addressLine1", "addressLine2", "city", "postcode", "dateOfBirth", "raceCategory", "club", "wfraMember", "wfraMembershipNumber", "emergencyContactName", "emergencyContactPhone"];
@@ -422,7 +446,8 @@ export function removePhase3RaceNumber(state, registrationId, actor, at = new Da
 }
 
 export function requestRefund(state, registrationId, actor = { actorType: "runner" }, at = new Date()) {
-  if (new Date(at) > new Date(state.event.transferRefundCutoffUtc) && !organiser(actor)) return { ok: false, code: "REFUND_CUTOFF_PASSED" };
+  const refundCutoff = state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc;
+  if (new Date(at) > new Date(refundCutoff) && !organiser(actor)) return { ok: false, code: "REFUND_CUTOFF_PASSED" };
   const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
   if (!registration) return { ok: false, code: "NOT_FOUND" };
   const request = { id: shortId("refund"), registrationId, status: "requested", requestedAt: iso(at), decidedAt: null, refundedAt: null, placeReleasedAt: null };

@@ -1,9 +1,9 @@
 import { actorForRequest } from "./auth.mjs";
 
 const response = (status, body, headers = {}) => ({ status, body, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
-const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "NOT_FOUND" ? 404 : result.code === "LINK_UNAVAILABLE" ? 410 : result.code === "INVALID_WEBHOOK_SIGNATURE" ? 400 : ["PAYMENTS_UNAVAILABLE", "INTEGRATION_NOT_CONFIGURED"].includes(result.code) ? 503 : 409, result);
+const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "MANAGEMENT_TOKEN_INVALID" ? 401 : result.code === "NOT_FOUND" ? 404 : ["LINK_UNAVAILABLE", "MANAGEMENT_TOKEN_EXPIRED", "MANAGEMENT_ENTRY_UNAVAILABLE"].includes(result.code) ? 410 : result.code === "INVALID_WEBHOOK_SIGNATURE" ? 400 : ["PAYMENTS_UNAVAILABLE", "INTEGRATION_NOT_CONFIGURED"].includes(result.code) ? 503 : 409, result);
 
-export function createApi({ service, phase3Integrations = null, environment = "local" }) {
+export function createApi({ service, phase3Integrations = null, environment = "local", privateWorkbookExporter = null }) {
   const attempts = new Map();
   return async function handle({ method, pathname, headers = {}, body = {}, hostname = "127.0.0.1", query = {} }) {
     if (!pathname.startsWith("/api/v2/") && !pathname.startsWith("/api/v3/") && !pathname.startsWith("/api/v4/")) return response(404, { ok: false, code: "NOT_FOUND" });
@@ -26,6 +26,9 @@ export function createApi({ service, phase3Integrations = null, environment = "l
     if (method === "POST" && declarationAction) return resultResponse(await (declarationAction[2] === "resend" ? phase3Integrations.orders.resendDeclaration(actor, decodeURIComponent(declarationAction[1])) : phase3Integrations.orders.recordPaperDeclaration(actor, decodeURIComponent(declarationAction[1]))));
     const organiserTransfer = pathname.match(/^\/api\/v4\/organiser\/registrations\/([^/]+)\/transfer$/);
     if (method === "POST" && organiserTransfer) return resultResponse(await phase3Integrations.organiserTransfer(actor, decodeURIComponent(organiserTransfer[1]), body));
+    if (method === "GET" && pathname === "/api/v4/organiser/email-health") return resultResponse(await phase3Integrations.orders.emailHealth(actor));
+    if (method === "GET" && pathname === "/api/v4/organiser/email-recovery/preview") return resultResponse(await phase3Integrations.orders.previewConfirmationRecovery(actor));
+    if (method === "POST" && pathname === "/api/v4/organiser/email-recovery/execute-one") return resultResponse(await phase3Integrations.orders.recoverOneConfirmation(actor, body));
     if (method === "POST" && pathname === "/api/v3/stripe/webhook") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.webhook(body.rawBody, headers["stripe-signature"]));
@@ -65,6 +68,10 @@ export function createApi({ service, phase3Integrations = null, environment = "l
     if (method === "POST" && pathname === "/api/v3/waiting-list/join") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.joinWaitingList(body), 201);
+    }
+    if (method === "POST" && pathname === "/api/v3/waiting-list/accept") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.acceptWaitingPlace(headers["x-private-invitation"], body), 201);
     }
     if (method === "POST" && pathname === "/api/v3/waiting-list/decline") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
@@ -115,6 +122,25 @@ export function createApi({ service, phase3Integrations = null, environment = "l
     if (method === "POST" && pathname === "/api/v2/organiser/import/synthetic-csv") return resultResponse(await service.importSyntheticCsv(actor, body.csv));
     if (method === "GET" && pathname === "/api/v2/organiser/export/public") return resultResponse(await service.exportPublic(actor));
     if (method === "GET" && pathname === "/api/v2/organiser/export/private") return resultResponse(await service.exportPrivate(actor));
+    if (method === "GET" && pathname === "/api/v2/organiser/export/waiting-list") {
+      const result = await service.exportWaitingList(actor);
+      if (!result.ok) return resultResponse(result);
+      return response(200, Buffer.from(result.csv, "utf8"), {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="${result.filename}"`,
+        "x-content-type-options": "nosniff"
+      });
+    }
+    if (method === "GET" && pathname === "/api/v2/organiser/export/private-workbook") {
+      const result = await service.exportPrivateWorkbook(actor);
+      if (!result.ok) return resultResponse(result);
+      if (!privateWorkbookExporter) return resultResponse({ ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return response(200, await privateWorkbookExporter(result.workbook), {
+        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "content-disposition": `attachment; filename="${result.filename}"`,
+        "x-content-type-options": "nosniff"
+      });
+    }
     if (method === "POST" && pathname === "/api/v2/organiser/reset") return resultResponse(await service.resetDevelopment(actor));
     const viewed = pathname.match(/^\/api\/v2\/organiser\/registrations\/reference\/([^/]+)\/viewed$/);
     if (method === "POST" && viewed) return resultResponse(await service.markViewed(actor, decodeURIComponent(viewed[1])));

@@ -1,5 +1,7 @@
 # ADR 0001: Phase 2 registration hosting and storage
 
+> **Historical development ADR.** Its “production not approved” boundary applied to Phase 2. Production now uses the same ETag-guarded Table pattern in separate production resources; see the [current operations handbook](../operations/README.md).
+
 Status: accepted for the isolated synthetic development environment; production use is not approved.
 
 ## Decision

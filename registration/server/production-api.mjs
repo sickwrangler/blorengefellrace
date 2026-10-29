@@ -1,10 +1,10 @@
-import { actorForRequest } from "./auth.mjs";
+import { actorForRequest, authorize } from "./auth.mjs";
 import { transitionRegistrationState } from "./phase3-domain.mjs";
 
 const response = (status, body, headers = {}) => ({ status, body, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
-const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "NOT_FOUND" ? 404 : result.code === "LINK_UNAVAILABLE" ? 410 : result.code === "INVALID_WEBHOOK_SIGNATURE" ? 400 : ["PAYMENTS_UNAVAILABLE", "INTEGRATION_NOT_CONFIGURED", "PRODUCTION_STATE_UNAVAILABLE"].includes(result.code) ? 503 : 409, result);
+const resultResponse = (result, success = 200) => response(result.ok ? success : result.code === "FORBIDDEN" ? 403 : result.code === "MANAGEMENT_TOKEN_INVALID" ? 401 : result.code === "NOT_FOUND" ? 404 : ["LINK_UNAVAILABLE", "MANAGEMENT_TOKEN_EXPIRED", "MANAGEMENT_ENTRY_UNAVAILABLE"].includes(result.code) ? 410 : result.code === "INVALID_WEBHOOK_SIGNATURE" ? 400 : ["PAYMENTS_UNAVAILABLE", "INTEGRATION_NOT_CONFIGURED", "PRODUCTION_STATE_UNAVAILABLE"].includes(result.code) ? 503 : 409, result);
 
-export function createProductionApi({ service, phase3Integrations, repository }) {
+export function createProductionApi({ service, phase3Integrations, repository, storageDiagnostics = null, privateWorkbookExporter = null }) {
   const attempts = new Map();
   return async function handle({ method, pathname, headers = {}, body = {}, hostname = "", query = {} }) {
     const actor = actorForRequest({ environment: "production", hostname, headers });
@@ -35,6 +35,9 @@ export function createProductionApi({ service, phase3Integrations, repository })
       if (body.confirmation !== `CHANGE ${body.expectedState} TO ${body.state}`) return resultResponse({ ok: false, code: "CONFIRMATION_REQUIRED" });
       return resultResponse(await repository.transaction((state) => transitionRegistrationState(state, body.state, actor, { expectedState: body.expectedState })));
     }
+    if (method === "GET" && pathname === "/api/v4/organiser/email-health") return resultResponse(await phase3Integrations.orders.emailHealth(actor));
+    if (method === "GET" && pathname === "/api/v4/organiser/email-recovery/preview") return resultResponse(await phase3Integrations.orders.previewConfirmationRecovery(actor));
+    if (method === "POST" && pathname === "/api/v4/organiser/email-recovery/execute-one") return resultResponse(await phase3Integrations.orders.recoverOneConfirmation(actor, body));
 
     if (method === "POST" && pathname === "/api/v3/stripe/webhook") return resultResponse(await phase3Integrations.webhook(body.rawBody, headers["stripe-signature"]));
     if (method === "GET" && pathname === "/api/v3/registration/status") return response(200, phase3Integrations.integrationStatus());
@@ -46,10 +49,13 @@ export function createProductionApi({ service, phase3Integrations, repository })
     if (method === "POST" && pathname === "/api/v3/management/transfer") return resultResponse(await phase3Integrations.transfer(headers["x-management-token"], body));
     if (method === "POST" && pathname === "/api/v3/refunds/request") return resultResponse(await phase3Integrations.requestRefund(headers["x-management-token"]), 201);
     if (method === "POST" && pathname === "/api/v3/waiting-list/join") return resultResponse(await phase3Integrations.joinWaitingList(body, new Date(), headers["x-private-invitation"]), 201);
+    if (method === "POST" && pathname === "/api/v3/waiting-list/accept") return resultResponse(await phase3Integrations.acceptWaitingPlace(headers["x-private-invitation"], body, new Date()), 201);
     if (method === "POST" && pathname === "/api/v3/waiting-list/decline") return resultResponse(await phase3Integrations.declineWaitingPlace(headers["x-private-invitation"]));
     if (method === "POST" && pathname === "/api/v3/organiser/waiting-list/offer-next") return resultResponse(await phase3Integrations.offerNextWaitingPlace(actor));
     const resendManagement = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/resend-management$/);
     if (method === "POST" && resendManagement) return resultResponse(await phase3Integrations.resendManagementLink(actor, decodeURIComponent(resendManagement[1])));
+    const providerProofRefund = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/provider-proof-refund-request$/);
+    if (method === "POST" && providerProofRefund) return resultResponse(await phase3Integrations.requestProviderProofRefund(actor, decodeURIComponent(providerProofRefund[1])), 201);
     const refundDecision = pathname.match(/^\/api\/v3\/organiser\/refunds\/([^/]+)\/(approve|reject)$/);
     if (method === "POST" && refundDecision) return resultResponse(await phase3Integrations.decideRefund(actor, decodeURIComponent(refundDecision[1]), refundDecision[2] === "approve" ? "approved" : "rejected"));
     const executeRefund = pathname.match(/^\/api\/v3\/organiser\/refunds\/([^/]+)\/execute$/);
@@ -57,6 +63,11 @@ export function createProductionApi({ service, phase3Integrations, repository })
 
     if (method === "GET" && pathname === "/api/v2/registration/status") return response(200, { ok: true, ...(await service.status()) });
     if (method === "GET" && pathname === "/api/v2/private-access") return resultResponse(await service.inspectPrivateAccess(headers["x-private-invitation"], query.purpose));
+    if (method === "GET" && pathname === "/api/v2/organiser/storage-metrics") {
+      if (!authorize(actor, "read")) return resultResponse({ ok: false, code: "FORBIDDEN" });
+      if (!storageDiagnostics) return resultResponse({ ok: false, code: "NOT_FOUND" });
+      return resultResponse({ ok: true, metrics: await storageDiagnostics() });
+    }
     if (method === "GET" && pathname === "/api/v2/organiser/snapshot") return resultResponse(await service.snapshot(actor, query));
     if (method === "GET" && pathname === "/api/v2/organiser/private-invitations") return resultResponse(await service.privateInvitations(actor));
     if (method === "POST" && pathname === "/api/v2/organiser/private-invitations") return resultResponse(await service.createPrivateInvitation(actor, body), 201);
@@ -64,6 +75,25 @@ export function createProductionApi({ service, phase3Integrations, repository })
     if (method === "POST" && invitationAction) return resultResponse(await (invitationAction[2] === "revoke" ? service.revokePrivateInvitation(actor, decodeURIComponent(invitationAction[1])) : service.expirePrivateInvitation(actor, decodeURIComponent(invitationAction[1]))));
     if (method === "GET" && pathname === "/api/v2/organiser/export/public") return resultResponse(await service.exportPublic(actor));
     if (method === "GET" && pathname === "/api/v2/organiser/export/private") return resultResponse(await service.exportPrivate(actor));
+    if (method === "GET" && pathname === "/api/v2/organiser/export/waiting-list") {
+      const result = await service.exportWaitingList(actor);
+      if (!result.ok) return resultResponse(result);
+      return response(200, Buffer.from(result.csv, "utf8"), {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="${result.filename}"`,
+        "x-content-type-options": "nosniff"
+      });
+    }
+    if (method === "GET" && pathname === "/api/v2/organiser/export/private-workbook") {
+      const result = await service.exportPrivateWorkbook(actor);
+      if (!result.ok) return resultResponse(result);
+      if (!privateWorkbookExporter) return resultResponse({ ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return response(200, await privateWorkbookExporter(result.workbook), {
+        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "content-disposition": `attachment; filename="${result.filename}"`,
+        "x-content-type-options": "nosniff"
+      });
+    }
     const audit = pathname.match(/^\/api\/v2\/organiser\/registrations\/([^/]+)\/audit$/);
     if (method === "GET" && audit) return resultResponse(await service.auditHistory(actor, decodeURIComponent(audit[1])));
     const entry = pathname.match(/^\/api\/v2\/organiser\/registrations\/([^/]+)$/);

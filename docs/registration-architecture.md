@@ -1,87 +1,47 @@
-# Registration prototype architecture
+# Registration architecture
+
+> **Current production reference.** Earlier Phase 1/2/3 planning and prototype documents are historical records. For live operation use [docs/operations/](operations/README.md).
 
 ## Current position
 
-The public website is static and the 2026 entry page is informational. A previous Google Form remains in commented source for historical reference, but it is not displayed or described as the 2026 registration service. Published race results use separate public spreadsheet/JSON sources. The repository does not establish which private response spreadsheet or payment process supported the earlier form, so those details must be confirmed with the organiser rather than inferred.
-
-The previous form, any private response spreadsheet and any manual payment reconciliation could be replaced incrementally: first by an isolated registration API and private store, then by payment and email adapters, and finally by an authenticated organiser interface. Public results must remain a separate, reviewed export.
-
-## Phase 1 recommendation
-
-Use the existing Azure Static Web App for public pages, with a separately deployed API, private data store and authenticated organiser application when production work is approved. Keep payment and email behind provider-neutral adapters. Do not give the public website direct storage credentials.
+Production registration is deployed and currently uses `PRIVATE_LIVE`. It is not a browser-only prototype. The public/runner pages call a managed Azure Static Web Apps API. The authoritative event state is persisted in Azure Table `RegistrationProduction`, partition `blorenge-2026-live`, with ETag-guarded whole-state transactions. Stripe live and ACS Email are enabled; a separate Function scheduler performs 30-minute background work. Organiser APIs require Microsoft Entra sign-in plus literal role `organiser`.
 
 ```mermaid
 flowchart LR
-    R[Runner / browser] --> W[Public website]
-    W --> API[Registration API]
-    API --> DB[(Private registration store)]
-    API --> PAY[Payment provider]
-    API --> MAIL[Email provider]
-    O[Authenticated organiser] --> ADMIN[Organiser interface]
-    ADMIN --> API
-    DB --> EXPORT[Reviewed public-result export]
-    EXPORT --> RESULTS[Public results]
-    GH[GitHub pull request] --> AZ[Azure preview / hosting]
-    AZ --> W
+    R[Runner] --> WEB[Static Web App]
+    O[Entra organiser] --> WEB
+    WEB --> API[Managed production API]
+    API --> DB[(Production Azure Table)]
+    API --> PAY[Stripe live]
+    API --> MAIL[ACS Email]
+    S[External scheduler] --> DB
+    S --> MAIL
+    DB --> PROJ[Minimised start-list projection]
+    PROJ --> R
 ```
 
-Phase 1 implements the original domain rules and Azure-preview simulation. Phase 2 adds a versioned server API and persistent repository behind the same user journey. The Azure PR preview continues using its isolated browser simulation; the separate approved development Static Web App uses managed Functions, Microsoft Entra organiser access and one Azure Table for shared synthetic testing. Neither environment is suitable for real entries. See `adr/0001-registration-storage.md` and `registration-phase2.md`.
+## Operational state and access
 
-Preview records persist across navigation and refresh in the same browser profile. A `storage` event refreshes an organiser tab after a runner submission in another tab; normal page refresh also reloads the same repository. Private/incognito windows have separate storage, another browser or device cannot see the records, and clearing site data removes them. Corrupt or outdated stored data blocks mutation and displays one reset instruction instead of silently discarding or accepting data.
+The production states are `CLOSED`, `PRIVATE_LIVE`, `OPEN`, `PAUSED` and terminal `CLOSED_FINAL`. They are server-side persisted state. A date, URL parameter, app setting or deployment cannot open registration. `PRIVATE_LIVE` requires an opaque, purpose-bound, expiring invitation for new entry; `OPEN` permits public entry. Existing management/declaration flows remain distinct.
 
-## State enforcement
+The authenticated transition endpoint requires the expected current state and exact confirmation text and records an audit event. The current dashboard displays state but does not expose a state-transition button.
 
-The state model is `closed`, `test`, `open`, `paused` and `full`.
+## Orders, capacity and providers
 
-- `closed` rejects submissions before validation and stores nothing.
-- `test` is limited to localhost, numbered Azure preview hostnames and the isolated stable development hostname. It accepts only obviously synthetic email addresses; only the stable development host uses shared Azure storage.
-- `open` is implemented in the domain model for future server tests, but production converts every requested non-closed state to `closed`. The test dashboard cannot select it.
-- `paused` retains existing records and rejects new submissions.
-- `full` rejects direct submissions. The final production waiting-list policy still requires organiser approval. The prototype demonstrates a provisional first-in waiting list when test capacity is exceeded.
+One order contains one to five registrations and one combined Stripe Checkout. Drafts reserve nothing. Checkout atomically reserves every runner place or none. Capacity is confirmed registrations plus active payment reservations plus active waiting-list offer reservations, never above 120. Stripe signed webhooks—not the return page—confirm payment. Individual registrations in a group retain separate declaration, transfer and partial-refund lifecycles.
 
-A query parameter, browser preference or date cannot change the production state. Production has no registration API in Phase 1, so a direct API request cannot store data or trigger another service.
+Server pricing is £6 standard or £4 for a self-declared WFRA member with membership number. Payment and declaration are separate; a paid place may still require declaration completion. Junior entry is currently disabled.
 
-Reset removes every preview registration and returns the accepted and waiting-list counts to zero. Automated synthetic fixtures remain available to the test suite but are not loaded into the organiser’s manual journey. Every runner-created record carries a visible test reference.
+ACS sends significant transactional messages with idempotency keys. The external scheduler expires stale Checkout/offer state and sends due waiting-list/declaration messages. The public start list is generated from current paid/confirmed entries and never includes private contacts, declarations, tokens, payment internals, waiting-list or audit data.
 
-Race numbers remain unique while assigned. An organiser can remove a number explicitly, or choose whether to release it when cancelling an entry; the cancellation choice defaults to release. A refund does not alter the entry's race number because payment and entry validity are separate decisions. Assignment and removal are recorded in the prototype audit history.
+## Data and recovery
 
-## Data model
+Runner/order/payment-operational state is private and separate from Git/deployment. Production storage also has a private `registration-backups` container with versioning and 35-day soft deletion. Snapshot creation/validation is currently a controlled manual operation; automatic daily backup execution is not wired/verified in the deployed scheduler artifact. Direct Table editing is never normal operation.
 
-| Entity | Principal fields |
-|---|---|
-| Event | Opaque ID, name, race date, capacity, minimum age, environment |
-| Runner | Opaque ID, name and private contact/race-day details |
-| Registration | Opaque ID, event and runner IDs, entry state, timestamps |
-| Entry status | Accepted, waiting list, cancelled; waiting-list position |
-| Payment | Mock status only: not started, successful, declined, abandoned, refunded |
-| Consent | Terms version, privacy version, recorded timestamp |
-| Audit event | Opaque ID, event type, timestamp, affected registration |
-| Communication | Opaque ID, template type, captured preview, delivery state |
-| Race allocation | Optional race number, unique within the event |
+## Production/development boundary
 
-Email addresses are attributes, never database keys. Public results remain logically and physically separate from registration data.
+The stable development environment uses separate `RegistrationDevelopment` storage/partition, Stripe test mode, controlled/captured email and its own scheduler. Production artifacts physically exclude synthetic fixtures, browser local-storage repository, mock-payment/reset routes, local bypass and development scheduler controls.
 
-## Capacity and concurrency
+## Historical documents
 
-The prototype uses one authoritative state mutation path, so only one of two final-place requests can receive the last accepted place. A production database should enforce this in a transaction or conditional write using an event-capacity counter and unique request/idempotency key. The automated suite exercises entries 109, 110 and 111 plus simultaneous final-place requests.
-
-## Production resources still requiring approval
-
-- an Azure-hosted registration API;
-- a private transactional data store with backup and recovery;
-- an identity provider and role-based organiser access;
-- monitoring and operational alerts;
-- approved payment and transactional-email providers;
-- separate development and production configuration and data boundaries.
-
-The Phase 2 cloud resources are development-only and synthetic-only. Detailed operational and security review information is maintained separately from the public website.
-
-## Phase 3A production-readiness foundation
-
-Phase 3A adds a separate server domain for production operational states, purpose-bound private invitations revalidated on every protected operation, capacity reservations, waiting-list offers, versioned WFRA declaration evidence, private self-declared WFRA membership evidence, server-calculated pricing, secure management links, cutoff-aware amendments, refund decisions and optional race numbers. UK Athletics affiliation and membership number are not part of the active model because they are not required for current race registration or operations. Production initialization is always `CLOSED`, and the existing deployment allowlist still excludes all registration pages and APIs. The development service remains synthetic with mock payment and captured-only email adapters. See `registration-phase3-plan.md` for implemented boundaries and the provider work still requiring approval.
-
-Phase 3B adds a disabled-by-default integration layer for Stripe-hosted test Checkout, raw-body signed webhooks, idempotent reconciliation, full sandbox refunds, controlled ACS Email delivery and a server-authoritative runner payment-status page. Stripe and external email are independently enabled and otherwise fail closed. It does not alter the production artifact. See `registration-phase3b.md` for the payment/email state machines, scheduled-work boundary and remaining provider proof gates.
-
-Phase 3B.3 separates a purchaser order, its one-to-five individual registrations, one combined payment and each runner's declaration state. Draft orders reserve no capacity; Checkout reserves every place atomically or none. A secure order link recovers an unpaid order in a fresh browser, reuses one still-valid Checkout, and revalidates price, runner data and capacity before replacing an expired Checkout. Payment and declaration are independent: a paid confirmed runner may still require a declaration, but cannot be marked cleared to start until it is complete. Each adult retains their own email, secure management link and declaration link. Group payments support registration-specific partial refunds. Runner and explicit organiser transfers preserve payment/place history but revoke the previous ownership links and declaration, with post-cutoff organiser override recorded separately. Final WFRA confirmation of the declaration and race-day process remains a launch-readiness requirement.
-
-The final Phase 3B integration adds a public development start list backed by a separate server-minimised read model. Only the current paid, confirmed entrant's name, optional club, category and optional race number are projected; private runner, declaration, payment, waiting-list, token and audit data never enter the response. Automatic communication is limited to significant runner actions, with one declaration reminder maximum and no amendment, Checkout-expiry, waiting-list-decline or waiting-list-expiry email.
+Phase documents under `docs/registration-phase*.md` and `docs/internal/` explain how the system evolved. Statements in them such as “production remains CLOSED”, “resources are proposed”, or “no production API” describe a past gate, not the current system. Preserve them as decision/audit history but do not use them as live operating instructions.

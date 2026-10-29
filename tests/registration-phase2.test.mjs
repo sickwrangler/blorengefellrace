@@ -283,6 +283,11 @@ test("development reset clears synthetic records while preserving event configur
   assert.equal(after.testProgress.resetCompleted, true);
 });
 
-test("source contains no runner payload logging and production remains unlinked", () => {
-  const sources = ["registration/server/service.mjs", "registration/server/api.mjs", "scripts/start-registration-phase2.mjs"].map((file) => fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8")).join("\n"); assert.doesNotMatch(sources, /console\.(log|error)\((input|body|runner|normalized|request)/i); assert.doesNotMatch(fs.readFileSync(new URL("../enter.html", import.meta.url), "utf8"), /href=["'][^"']*registration\//i);
+test("source contains no runner payload logging and the entry page links to gated registration", () => {
+  const sources = ["registration/server/service.mjs", "registration/server/api.mjs", "scripts/start-registration-phase2.mjs"].map((file) => fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8")).join("\n");
+  assert.doesNotMatch(sources, /console\.(log|error)\((input|body|runner|normalized|request)/i);
+  const entryPage = fs.readFileSync(new URL("../enter.html", import.meta.url), "utf8");
+  assert.match(entryPage, /href=["']registration\/index\.html["']/i);
+  assert.match(entryPage, />Enter the 2026 race</i);
+  assert.doesNotMatch(entryPage, /google\.com\/forms|google-form-iframe|Previous registration form/i);
 });

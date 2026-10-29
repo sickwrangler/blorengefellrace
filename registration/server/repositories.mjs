@@ -58,9 +58,9 @@ export function createJsonFileRepository(filePath, initialState) {
 
 // Review-only Azure adapter contract. Its injected implementation must use an
 // ETag-guarded Table transaction for every mutation in one event partition.
-export function createAzureTableRepository({ loadPartition, submitTransaction }) {
+export function createAzureTableRepository({ loadPartition, submitTransaction, maximumAttempts = 8, retryDelay = (attempt) => new Promise((resolve) => setTimeout(resolve, Math.min(200, 10 * (2 ** (attempt - 1))) + Math.floor(Math.random() * 10))), telemetry = null }) {
   let queue = Promise.resolve();
-  const maximumAttempts = 5;
+  if (!Number.isInteger(maximumAttempts) || maximumAttempts < 1 || maximumAttempts > 12) throw new Error("Azure Table retry limit is invalid.");
   return {
     kind: "azure-table-etag-transaction",
     async read() { const snapshot = await loadPartition(); return clone(snapshot.state); },
@@ -77,6 +77,8 @@ export function createAzureTableRepository({ loadPartition, submitTransaction })
           } catch (error) {
             const conflict = error?.statusCode === 409 || error?.statusCode === 412;
             if (!conflict || attempt === maximumAttempts) throw error;
+            telemetry?.info?.("registration_state_write_conflict_retry", { environment: "production", attempt });
+            await retryDelay(attempt);
           }
         }
       });

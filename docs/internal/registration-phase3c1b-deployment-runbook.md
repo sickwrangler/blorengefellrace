@@ -1,5 +1,7 @@
 # Phase 3C.1B production CLOSED deployment runbook
 
+> **Historical deployment-gate record.** Phase 3C.1B has completed and production later moved to `PRIVATE_LIVE`. Do not reuse this as a current deployment or opening procedure; use the [operations handbook](../operations/README.md).
+
 Status: prepared for review only. It is not authority to provision, deploy, configure providers, invite runners or change registration state.
 
 ## Required manual inputs

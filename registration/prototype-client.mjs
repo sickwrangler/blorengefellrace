@@ -9,6 +9,7 @@ export const isDevelopment = environment === "development";
 export const canTest = isLocal || isPreview || isDevelopment;
 const usesApi = isLocal || isDevelopment;
 const privateInvitationToken = new URLSearchParams(window.location.search).get("invite");
+const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : new URLSearchParams(window.location.search).get("offer") === "1" ? "waiting_list_offer" : "registration";
 export const supportsManagedApi = usesApi;
 const storageAdapter = {
   getItem(key) { return window.localStorage.getItem(key); },
@@ -56,6 +57,30 @@ async function phase4Api(path, options = {}, organiser = false) {
   return response.json();
 }
 
+async function privateWorkbook() {
+  if (!usesApi) return { ok: false, code: "MANAGED_API_REQUIRED" };
+  const response = await fetch("/api/v2/organiser/export/private-workbook", { headers: isLocal ? { "x-development-organiser": "enabled" } : {}, cache: "no-store" });
+  if (!response.ok) {
+    const type = response.headers.get("content-type") ?? "";
+    return type.includes("application/json") ? response.json() : { ok: false, code: "API_UNAVAILABLE" };
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/i)?.[1] ?? `blorenge-registration-private-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  return { ok: true, filename, blob: await response.blob() };
+}
+
+async function waitingListCsv() {
+  if (!usesApi) return { ok: false, code: "MANAGED_API_REQUIRED" };
+  const response = await fetch("/api/v2/organiser/export/waiting-list", { headers: isLocal ? { "x-development-organiser": "enabled" } : {}, cache: "no-store" });
+  if (!response.ok) {
+    const type = response.headers.get("content-type") ?? "";
+    return type.includes("application/json") ? response.json() : { ok: false, code: "API_UNAVAILABLE" };
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/i)?.[1] ?? `blorenge-waiting-list-${new Date().toISOString().slice(0, 10)}.csv`;
+  return { ok: true, filename, blob: await response.blob() };
+}
+
 async function localApiOrRepository(path, options, operation, organiser = false) {
   if (!canTest) return { ok: false, code: "PRODUCTION_CLOSED", message: "2026 entries are not yet open." };
   if (usesApi) {
@@ -81,7 +106,7 @@ function repositorySnapshot() {
 
 export const prototype = {
   hasPrivateInvitation: Boolean(privateInvitationToken),
-  async inspectPrivateAccess(purpose = "registration") {
+  async inspectPrivateAccess(purpose = privateInvitationPurpose) {
     if (!privateInvitationToken || !usesApi) return { ok: !privateInvitationToken };
     try { return await api(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }); }
     catch { return { ok: false, code: "LINK_UNAVAILABLE" }; }
@@ -93,6 +118,21 @@ export const prototype = {
     }
     const snapshot = repositorySnapshot();
     return { ...statusSummary(snapshot.state), recovery: snapshot.recovery };
+  },
+  async joinWaitingList(input) {
+    if (!usesApi) return { ok: false, code: "API_UNAVAILABLE" };
+    try { return await phase3Api("/waiting-list/join", { method: "POST", body: JSON.stringify(input), headers: privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {} }); }
+    catch { return { ok: false, code: "API_UNAVAILABLE" }; }
+  },
+  async acceptWaitingListOffer(input) {
+    if (!usesApi || !privateInvitationToken) return { ok: false, code: "LINK_UNAVAILABLE" };
+    try { const result = await phase3Api("/waiting-list/accept", { method: "POST", body: JSON.stringify(input), headers: { "x-private-invitation": privateInvitationToken } }); if (result.ok) this.rememberManagementToken(result.managementToken); return result; }
+    catch { return { ok: false, code: "API_UNAVAILABLE" }; }
+  },
+  async offerNextWaitingPlace() {
+    if (!usesApi) return { ok: false, code: "API_UNAVAILABLE" };
+    try { return await phase3Api("/organiser/waiting-list/offer-next", { method: "POST" }, true); }
+    catch { return { ok: false, code: "API_UNAVAILABLE" }; }
   },
   submit(payload) {
     if (usesApi) return api("/registrations", { method: "POST", body: JSON.stringify(payload), headers: { "idempotency-key": submissionKey, ...(privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {}) } }).then((result) => { if (result.ok) { confirmationTokens.set(result.registration.id, result.confirmationToken); this.rememberManagementToken(result.managementToken); submissionKey = crypto.randomUUID(); } return result; }).catch(() => ({ ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable." }));
@@ -133,6 +173,9 @@ export const prototype = {
   async resendDeclaration(registrationId) { try { return await phase4Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/declaration/resend`, { method: "POST" }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
   async recordPaperDeclaration(registrationId) { try { return await phase4Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/declaration/paper`, { method: "POST" }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
   async organiserTransfer(registrationId, input) { try { return await phase4Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/transfer`, { method: "POST", body: JSON.stringify(input) }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
+  async emailHealth() { try { return await phase4Api("/organiser/email-health", {}, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
+  async previewEmailRecovery() { try { return await phase4Api("/organiser/email-recovery/preview", {}, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
+  async executeOneEmailRecovery(input) { try { return await phase4Api("/organiser/email-recovery/execute-one", { method: "POST", body: JSON.stringify(input) }, true); } catch { return { ok: false, code: "API_UNAVAILABLE" }; } },
   async integrationStatus() {
     if (!usesApi) return { ok: true, stripe: "disabled", paymentsAvailable: false, email: "captured-only", externalEmailAvailable: false };
     try { return await phase3Api("/registration/status"); }
@@ -224,6 +267,8 @@ export const prototype = {
     return repository.reset();
   },
   async csv() { if (usesApi) { const result = await api("/organiser/export/public", {}, true); return result.csv; } const { state } = await this.all(); return sanitizedCsv(state); },
+  waitingListCsv,
+  privateWorkbook,
   async privateInvitations() { return usesApi ? api("/organiser/private-invitations", {}, true) : { ok: false, code: "MANAGED_API_REQUIRED", invitations: [] }; },
   async createPrivateInvitation(input) { return usesApi ? api("/organiser/private-invitations", { method: "POST", body: JSON.stringify(input) }, true) : { ok: false, code: "MANAGED_API_REQUIRED" }; },
   async revokePrivateInvitation(id) { return usesApi ? api(`/organiser/private-invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" }, true) : { ok: false, code: "MANAGED_API_REQUIRED" }; },

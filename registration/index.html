@@ -16,24 +16,36 @@
     <div class="registration-context"><span id="environment-status" class="environment-status">Development · Closed</span></div>
     <h1>Blorenge Fell Race registration <span class="heading-translation" lang="cy">Cofrestru</span></h1>
     <p><a href="start-list.html">View the public start list</a> · <a href="manage.html">Already entered? Manage your entry or request a new secure link.</a></p>
-    <section id="invalid-link-panel" class="prototype-card" hidden>
-      <p class="eyebrow">Private access</p>
-      <h2>This link is no longer available.</h2>
-      <p>Please ask the race organiser for help.</p>
-    </section>
+    <div id="access-check-status" class="availability-check" role="status"><p>Checking registration availability…</p></div>
     <section id="closed-panel" class="prototype-card" hidden>
       <p class="eyebrow">Registration status</p><h2>2026 entries are not yet open</h2>
-      <p>Entries are not open yet. Please check back here for opening details.</p><p><a class="button" href="../enter.html">Return to entry information</a></p>
+      <p>Entries are not yet open. Please check back shortly.</p><p><a class="button" href="../enter.html">Return to entry information</a></p>
     </section>
 
     <div id="test-experience" hidden>
       <section id="test-landing" class="prototype-card prototype-intro">
-        <p class="eyebrow">2026 race entry</p><h2>Enter the Blorenge Fell Race</h2>
-        <p class="lede">In development, this journey accepts synthetic information only. It creates no real race entry, takes no money from a real payment method, and keeps payment sandboxed or disabled. Any enabled test email is redirected to an approved safe recipient.</p>
-        <div class="status-grid" aria-live="polite"><div><span>Places</span><strong id="status-places">0 of 120</strong></div><div><span>Waiting list</span><strong id="status-waiting">0</strong></div><div><span>Entry fee</span><strong id="status-price">£6 standard · £4 WFRA</strong></div></div>
+        <p class="eyebrow">2026 race entry</p><h2 id="entry-landing-heading">Enter the Blorenge Fell Race</h2>
+        <p id="entry-landing-description" class="lede">In development, this journey accepts synthetic information only. It creates no real race entry, takes no money from a real payment method, and keeps payment sandboxed or disabled. Any enabled test email is redirected to an approved safe recipient.</p>
+        <div class="status-grid" aria-live="polite"><div><span>Places</span><strong id="status-places">0 of 120</strong></div><div><span>Waiting list</span><strong id="status-waiting">0</strong></div><div><span>Entry fee</span><strong id="status-price">£6 standard · £4 Welsh Fell Runners Association member</strong></div></div>
         <div id="runner-recovery" class="form-alert" role="alert" hidden></div>
-        <label>Purchaser email address <span class="hint">Used for the group payment summary; synthetic address only</span><input id="purchaser-email" type="email" value="alex.runner@example.com" required></label>
-        <div class="form-actions"><button id="start-test" class="button" type="button">Start a test registration</button><a class="secondary-link" href="dashboard.html">View organiser test area</a></div>
+        <div id="entry-available-controls">
+          <label id="purchaser-email-control">Purchaser email address <span class="hint">Used for the group payment summary; synthetic address only</span><input id="purchaser-email" type="email" value="alex.runner@example.com" required></label>
+          <div class="form-actions"><button id="start-test" class="button" type="button">Start a test registration</button><a class="secondary-link" href="dashboard.html">View organiser test area</a></div>
+        </div>
+        <section id="waiting-list-panel" class="waiting-list-panel" aria-labelledby="waiting-list-heading" hidden>
+          <p class="eyebrow">Race capacity reached</p>
+          <h3 id="waiting-list-heading">Entries are full — join the waiting list</h3>
+          <p>There is no payment to join. If a place becomes available, we will email the next person with a secure, time-limited entry link.</p>
+          <form id="waiting-list-form" novalidate>
+            <div class="field-grid">
+              <label>First name <input name="firstName" autocomplete="given-name" required></label>
+              <label>Last name <input name="lastName" autocomplete="family-name" required></label>
+              <label>Email address <input name="email" type="email" autocomplete="email" required></label>
+            </div>
+            <div id="waiting-list-message" class="form-alert" role="status" tabindex="-1" hidden></div>
+            <div class="form-actions"><button id="join-waiting-list" class="button" type="submit">Join the waiting list</button></div>
+          </form>
+        </section>
         <button id="reset-test" class="text-button" type="button">Reset test</button>
       </section>
 
@@ -56,8 +68,11 @@
               <label>Race category<select name="genderCategory" required><option value="">Select one</option><option value="Female">Female</option><option value="Male / Open" selected>Male / Open</option></select></label>
               <label>Date of birth <input name="dateOfBirth" type="date" autocomplete="bday" required value="1990-06-15"></label>
               <label>Club <span class="hint">Optional</span><input name="club" autocomplete="organization" value="Example Harriers"></label>
-              <label>WFRA member?<span class="hint">£4 member price; £6 standard price.</span><select name="wfraMember" required><option value="no" selected>No</option><option value="yes">Yes</option></select></label>
-              <label id="wfra-number-field" hidden>WFRA membership number <input name="wfraMembershipNumber" autocomplete="off" maxlength="80"></label>
+              <div class="membership-question">
+                <label>Are you a Welsh Fell Runners Association member?<span class="hint">£4 member price; £6 standard price.</span><select name="wfraMember" required><option value="no" selected>No</option><option value="yes">Yes</option></select></label>
+                <p class="hint membership-guidance">Not a member? You can <a href="https://welshfellrunnersassociation.org.uk/en/join-us">join the Welsh Fell Runners Association</a> online.</p>
+              </div>
+              <label id="wfra-number-field" hidden>Welsh Fell Runners Association membership number <input name="wfraMembershipNumber" autocomplete="off" maxlength="80"></label>
             </div>
             <div class="form-actions"><button id="details-continue" class="button" type="button">Continue</button></div>
           </section>
@@ -69,7 +84,7 @@
               <label>Emergency contact phone number <input name="emergencyPhone" type="tel" autocomplete="off" required value="07700 900456"></label>
             </div>
             <label class="checkbox-field"><input name="acceptTerms" type="checkbox" required> I confirm these details are correct and agree to follow the race rules.</label>
-            <label class="checkbox-field"><input name="acceptPrivacy" type="checkbox" required> I have read the <a href="../privacy.html" target="_blank" rel="noopener">privacy notice</a>.</label>
+            <label class="checkbox-field"><input name="acceptPrivacy" type="checkbox" required><span>I have read the <a href="../privacy.html" target="_blank" rel="noopener">Privacy Notice</a>.</span></label>
             <div class="declaration-panel">
               <h3>WFRA competitor declaration</h3>
               <p>If the runner is completing this registration, they can sign below. Otherwise, leave the declaration blank and we will email them a secure link after payment.</p>
@@ -82,7 +97,7 @@
                 <label class="checkbox-field"><input name="completedByNamedRunner" type="checkbox"> I confirm I am the runner named in this entry and I am completing this declaration myself.</label>
               </div>
               <div id="guardian-declaration-fields" hidden>
-                <p><strong>This runner is aged 16 or 17 on race day. Their parent or legal guardian must complete this declaration.</strong></p>
+                <p><strong>A parent or legal guardian must read and sign this declaration for runners aged 16 or 17.</strong></p>
                 <label>Parent or legal guardian full name <input name="guardianDeclarationName" autocomplete="name"></label>
                 <label class="checkbox-field"><input name="completedByParentOrLegalGuardian" type="checkbox"> I confirm I am the parent or legal guardian of the runner named in this entry and I am completing this declaration.</label>
               </div>

@@ -36,3 +36,33 @@ test("Recce and Kit Swap are Information sub-pages rather than primary links", (
     assert.ok(html.includes('href="info.html#stats"'));
   }
 });
+
+test("shared navigation uses equal-height link boxes without active-border movement", () => {
+  const css = fs.readFileSync("components/navbar/navbar.css", "utf8");
+  assert.match(css, /--nav-item-height:2\.75rem/);
+  assert.match(css, /\.nav-links li \{[^}]*height:var\(--nav-item-height\)/);
+  assert.match(css, /\.nav-links a \{[^}]*height:100%[^}]*border:0/);
+  assert.match(css, /\.nav-links a::after \{[^}]*position:absolute[^}]*height:\.2rem/);
+  assert.match(css, /\.nav-links \.nav-enter::after \{[^}]*display:none/);
+  assert.match(css, /--nav-item-height-mobile:3\.35rem/);
+});
+
+test("Recce and Kit Swap use the restrained responsive content-image layout", () => {
+  const css = fs.readFileSync("style.css", "utf8");
+  assert.match(css, /\.managed-image--content \{[^}]*width:\s*min\(100%, 38rem\)[^}]*justify-self:\s*start/);
+  assert.match(css, /\.managed-image--content img \{[^}]*max-height:\s*21\.375rem[^}]*aspect-ratio:\s*16 \/ 9[^}]*object-fit:\s*cover/);
+  for (const file of ["recce.html", "kit-swap.html"]) {
+    const html = fs.readFileSync(file, "utf8");
+    assert.match(html, /class="managed-image managed-image--content"/, file);
+    assert.doesNotMatch(html, /class="managed-image managed-image--hero"/, file);
+    assert.ok(html.indexOf('class="managed-image managed-image--content"') > html.indexOf('class="reading-width"'), `${file} image should follow its text`);
+  }
+});
+
+test("the 2025 report pairs the women’s and men’s winners", () => {
+  const html = fs.readFileSync("info.html", "utf8");
+  assert.ok(html.includes('data-photo-region="race-report-gallery"'));
+  assert.ok(html.includes('images/generated/photos/info-winner-tom.jpg'));
+  assert.ok(html.includes('Tom Spearman, men’s winner'));
+  assert.equal(html.includes('images/generated/photos/info-third-jonathan.jpg'), false);
+});

@@ -1,5 +1,7 @@
 # Registration development scheduler
 
+> **Development/historical reference.** Production has a separate scheduler and resource set; use the [current production scheduler guide](../operations/scheduler.md).
+
 ## Purpose and boundary
 
 The scheduler exists only in the isolated synthetic development environment. Every 30 minutes it invokes the existing shared scheduled-work domain service to:

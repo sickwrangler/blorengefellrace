@@ -44,6 +44,49 @@ test("removing the final basket runner clears review and restarts runner details
   assert.match(runner, /Your basket is empty\. Add a runner to start again\./);
 });
 
+test("runner membership wording introduces the association and links to joining guidance", async () => {
+  const [html, runner] = await Promise.all([
+    read("registration/index.html"),
+    read("registration/runner.mjs")
+  ]);
+
+  assert.match(html, /Are you a Welsh Fell Runners Association member\?/);
+  assert.match(html, /Welsh Fell Runners Association membership number/);
+  assert.match(html, />join the Welsh Fell Runners Association<\/a>/);
+  assert.match(html, /href="https:\/\/welshfellrunnersassociation\.org\.uk\/en\/join-us"/);
+  assert.match(html, /£6 standard · £4 Welsh Fell Runners Association member/);
+  assert.match(runner, /"Welsh Fell Runners Association member"/);
+  for (const incorrect of ["Welsh Fell Running Association", "Welsh Feel Running Association"]) {
+    assert.doesNotMatch(html, new RegExp(incorrect, "i"));
+    assert.doesNotMatch(runner, new RegExp(incorrect, "i"));
+  }
+});
+
+test("a full race presents an accessible waiting-list journey and organiser offer control", async () => {
+  const [html, runner, productionClient, dashboardHtml, dashboard] = await Promise.all([
+    read("registration/index.html"),
+    read("registration/runner.mjs"),
+    read("registration/production-client.mjs"),
+    read("registration/dashboard.html"),
+    read("registration/dashboard.mjs")
+  ]);
+
+  assert.match(html, /id="waiting-list-panel"[^>]*aria-labelledby="waiting-list-heading"[^>]*hidden/);
+  assert.match(html, /Entries are full — join the waiting list/);
+  assert.match(html, /There is no payment to join/);
+  for (const field of ["firstName", "lastName", "email"]) assert.match(html, new RegExp(`name="${field}"`));
+  assert.match(html, /id="waiting-list-message"[^>]*role="status"/);
+  assert.match(runner, /status\.remaining === 0/);
+  assert.match(runner, /prototype\.joinWaitingList/);
+  assert.match(runner, /already on the waiting list/);
+  assert.match(productionClient, /\/waiting-list\/join/);
+  assert.match(productionClient, /\/waiting-list\/accept/);
+  assert.match(runner, /prototype\.acceptWaitingListOffer/);
+  assert.match(dashboardHtml, /id="offer-next-waiting-place"/);
+  assert.match(dashboard, /prototype\.offerNextWaitingPlace/);
+  assert.match(dashboard, /48-hour place offer/);
+});
+
 test("declaration wording hides its version while retaining audit metadata", async () => {
   const [runner, declaration] = await Promise.all([
     read("registration/runner.mjs"),
@@ -100,6 +143,8 @@ test("manage page is read-only by default with separate accessible dialogs", asy
   assert.match(html, /<button[^>]*id="edit-entry"[^>]*>Edit entry<\/button>/);
   assert.match(html, /<button[^>]*id="transfer-entry"[^>]*>Transfer entry<\/button>/);
   assert.match(html, /Transfer this race place to another runner\./);
+  assert.match(html, /id="unavailable-actions"/);
+  assert.match(html, /Why some actions are unavailable/);
   assert.doesNotMatch(html, /id="edit-entry"[^>]*>Transfer entry/);
 
   assert.match(script, /Payment required/);
@@ -110,6 +155,10 @@ test("manage page is read-only by default with separate accessible dialogs", asy
   assert.match(script, /showModal\(\)/);
   assert.match(script, /returnFocusTo\?\.focus\(\)/);
   assert.match(script, /confirm\("Transfer this race place/);
+  assert.match(script, /TRANSFER_CUTOFF_PASSED/);
+  assert.match(script, /Runner transfers closed on/);
+  assert.match(script, /REFUND_ALREADY_IN_PROGRESS/);
+  assert.match(script, /MANAGEMENT_TOKEN_EXPIRED|runnerMessageForCode/);
   assert.match(script, /✓/);
   assert.match(script, /!/);
 

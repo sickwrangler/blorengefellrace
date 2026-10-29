@@ -1,5 +1,7 @@
 # Registration Phase 2 Azure approval pack
 
+> **Historical development approval record.** It does not describe current production. Use the [current operations handbook](../operations/README.md).
+
 Status: approved and provisioned as an isolated synthetic-development environment on 3 September 2026. The production Static Web App is not referenced.
 
 Prepared: 3 September 2026. Pricing is the Microsoft public GBP retail price, not a subscription-specific quote.

@@ -1,5 +1,7 @@
 # Phase 3C.0 production-readiness audit
 
+> **Historical pre-deployment audit.** Its blockers and CLOSED/no-deployment statements record an earlier gate. Production is now deployed and `PRIVATE_LIVE`; use the [current operations handbook](../operations/README.md).
+
 Status: audited design; no production deployment authorised. Registration remains feature-frozen.
 
 ## Decision

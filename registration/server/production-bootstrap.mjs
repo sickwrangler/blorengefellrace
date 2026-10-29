@@ -29,6 +29,8 @@ export function createProductionBootstrap({ under18EntriesEnabled = false } = {}
       declarationContentStatus: PHASE3_EVENT.declaration.contentStatus,
       transferRefundCutoff: PHASE3_EVENT.transferRefundCutoffUtc,
       transferRefundCutoffUtc: PHASE3_EVENT.transferRefundCutoffUtc,
+      transferCutoffUtc: PHASE3_EVENT.transferCutoffUtc,
+      refundCutoffUtc: PHASE3_EVENT.refundCutoffUtc,
       under18EntriesEnabled: under18EntriesEnabled === true
     },
     counters: { waitingSequence: 0 },
@@ -45,6 +47,19 @@ export function validateProductionState(state) {
   if (state.event?.id !== PHASE3_EVENT.id || state.event.capacity !== 120 || state.event.entryFeePence !== 600 || state.event.wfraMemberPricePence !== 400) throw new Error("Production event configuration is invalid.");
   for (const name of collectionNames) if (!Array.isArray(state[name])) throw new Error(`Production registration state is missing ${name}.`);
   return state;
+}
+
+export function applyProductionRuntimeConfiguration(state, { under18EntriesEnabled = false } = {}) {
+  validateProductionState(state);
+  return {
+    ...state,
+    event: {
+      ...state.event,
+      transferCutoffUtc: PHASE3_EVENT.transferCutoffUtc,
+      refundCutoffUtc: PHASE3_EVENT.refundCutoffUtc,
+      under18EntriesEnabled: under18EntriesEnabled === true
+    }
+  };
 }
 
 export function productionAvailability(state) {

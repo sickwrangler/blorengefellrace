@@ -12,6 +12,10 @@
     "@azure/data-tables": "^13.3.2",
     "@azure/functions": "^4.7.2",
     "@azure/identity": "4.13.1",
+    "exceljs": "4.4.0",
     "stripe": "22.6.1"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
   }
 }

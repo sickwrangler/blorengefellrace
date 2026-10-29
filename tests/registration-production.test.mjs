@@ -3,15 +3,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createProductionBootstrap, productionAvailability, validateProductionState } from "../registration/server/production-bootstrap.mjs";
+import { applyProductionRuntimeConfiguration, createProductionBootstrap, productionAvailability, validateProductionState } from "../registration/server/production-bootstrap.mjs";
 import { createMemoryRepository } from "../registration/server/repositories.mjs";
-import { issuePrivateInvitation, transitionRegistrationState } from "../registration/server/phase3-domain.mjs";
+import { capacitySummary, createNextWaitingListOffer, issuePrivateInvitation, transitionRegistrationState } from "../registration/server/phase3-domain.mjs";
 import { authorize as authorizeProduction, staticWebAppActor } from "../registration/server/production-auth.mjs";
 import { OrderRegistrationService } from "../registration/server/order-service.mjs";
 import { createProductionBackupService, operationalDailyBackupDue, PRODUCTION_BACKUP_POLICY } from "../registration/server/production-backup.mjs";
 import { createProductionApi } from "../registration/server/production-api.mjs";
 import { ProductionRegistrationService } from "../registration/server/production-service.mjs";
-import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
+import { Phase3IntegrationService, managementActionEligibility } from "../registration/server/phase3-service.mjs";
 import { assertStripeDevelopmentConfiguration, assertStripeProductionConfiguration } from "../registration/server/phase3-integrations.mjs";
 import { loadProductionConfiguration } from "../api/src/production-config.mjs";
 import { stageRegistrationProduction } from "../scripts/stage-deployment-artifacts.mjs";
@@ -29,8 +29,41 @@ test("production bootstrap is CLOSED, exact, empty and junior-gated", () => {
   assert.deepEqual(productionAvailability({ environment: "production", registrationState: "OPEN" }), { available: false, operationalState: "CLOSED" });
 });
 
+test("the production junior launch setting is authoritative for existing stored state", () => {
+  const stored = createProductionBootstrap({ under18EntriesEnabled: false });
+  stored.event.transferCutoffUtc = "2026-10-28T23:59:00.000Z";
+  stored.registrations.push({ id: "existing-real-entry" });
+  const enabled = applyProductionRuntimeConfiguration(stored, { under18EntriesEnabled: true });
+  assert.equal(stored.event.under18EntriesEnabled, false);
+  assert.equal(enabled.event.under18EntriesEnabled, true);
+  assert.equal(enabled.event.transferCutoffUtc, "2026-11-27T23:59:00.000Z");
+  assert.equal(enabled.event.refundCutoffUtc, "2026-10-28T23:59:00.000Z");
+  assert.deepEqual(enabled.registrations, stored.registrations);
+  const disabledAgain = applyProductionRuntimeConfiguration(enabled, { under18EntriesEnabled: false });
+  assert.equal(disabledAgain.event.under18EntriesEnabled, false);
+  assert.deepEqual(disabledAgain.registrations, stored.registrations);
+});
+
+test("runtime configuration applies the new transfer deadline to existing persisted entries", () => {
+  const stored = createProductionBootstrap();
+  stored.event.transferCutoffUtc = "2026-10-28T23:59:00.000Z";
+  stored.runners.push({ id: "runner_existing", email: "existing@example.com" });
+  stored.registrations.push({ id: "registration_existing", runnerId: "runner_existing", entryStatus: "accepted", placeStatus: "confirmed", declarationStatus: "complete", createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:00:00.000Z", deletedAt: null });
+  stored.payments.push({ id: "payment_existing", registrationId: "registration_existing", status: "paid" });
+  const configured = applyProductionRuntimeConfiguration(stored);
+  assert.equal(configured.event.transferCutoffUtc, "2026-11-27T23:59:00.000Z");
+  assert.equal(configured.event.refundCutoffUtc, "2026-10-28T23:59:00.000Z");
+  assert.equal(managementActionEligibility(configured, configured.registrations[0], { at: new Date("2026-11-01T12:00:00.000Z") }).transfer.available, true);
+  assert.equal(managementActionEligibility(configured, configured.registrations[0], { at: new Date("2026-11-28T00:00:00.000Z") }).transfer.code, "TRANSFER_CUTOFF_PASSED");
+  assert.deepEqual(configured.registrations, stored.registrations);
+  assert.deepEqual(configured.payments, stored.payments);
+});
+
 test("production configuration rejects environment crossover and permits disabled providers", () => {
   const config = loadProductionConfiguration(env()); assert.equal(config.stripeEnabled, false); assert.equal(config.emailEnabled, false); assert.equal(config.under18EntriesEnabled, false);
+  assert.equal(config.storageSasExpiryAt, null);
+  assert.equal(loadProductionConfiguration(env({ REGISTRATION_TABLE_SAS_EXPIRES_AT: "2027-01-31T23:59:00Z" })).storageSasExpiryAt, "2027-01-31T23:59:00Z");
+  assert.throws(() => loadProductionConfiguration(env({ REGISTRATION_TABLE_SAS_EXPIRES_AT: "not-a-date" })), /expiry metadata/);
   assert.throws(() => loadProductionConfiguration(env({ REGISTRATION_STORAGE_ACCOUNT: "stblorengeregdev2026" })), /development storage/);
   assert.throws(() => loadProductionConfiguration(env({ REGISTRATION_EMAIL_SAFE_RECIPIENTS: "configured-elsewhere" })), /forbidden/);
   assert.throws(() => loadProductionConfiguration(env({ REGISTRATION_STATE: "OPEN" })), /cannot open/);
@@ -53,12 +86,52 @@ test("under-18 launch gate blocks only 16/17 production runners", async () => {
   runner.dateOfBirth = "1990-01-01"; const adult = await orders.addRunner(created.orderToken, { runner: { ...runner, email: "adult@example.com" }, declarationMode: "later" }); assert.equal(adult.ok, true);
 });
 
-test("production API omits development routes and requires organiser role", async () => {
+test("production API omits development routes and protects aggregate storage diagnostics", async () => {
   const repository = createMemoryRepository(createProductionBootstrap()); const integrations = new Phase3IntegrationService({ repository, emailAdapter: email, publicBaseUrl: "https://www.blorengefellrace.cymru", environment: "production" }); const service = new ProductionRegistrationService({ repository, emailAdapter: email }); const api = createProductionApi({ service, phase3Integrations: integrations, repository });
   const call = (method, pathname, extra = {}) => api({ method, pathname, hostname: "www.blorengefellrace.cymru", ...extra });
   for (const pathname of ["/api/v2/organiser/reset", "/api/v2/organiser/import/synthetic", "/api/v2/registrations/x/mock-payment"]) assert.equal((await call("POST", pathname)).status, 404);
   assert.equal((await call("GET", "/api/v2/organiser/snapshot")).status, 403);
+  assert.equal((await call("GET", "/api/v2/organiser/storage-metrics")).status, 403);
   assert.equal((await call("POST", "/api/v4/orders", { body: { purchaserEmail: "runner@example.com" } })).body.code, "REGISTRATION_NOT_ACCEPTING");
+
+  const storageMetrics = { chunkCount: 2, totalEncodedCharacters: 42_000, largestChunkCharacters: 30_000, estimatedEntityBytes: 86_000, entityPropertyCount: 10, storageHeadroomPercent: 10.94, storageHeadroomLevel: "healthy" };
+  const protectedApi = createProductionApi({ service, phase3Integrations: integrations, repository, storageDiagnostics: async () => storageMetrics });
+  const principal = Buffer.from(JSON.stringify({ userId: "configured-at-deployment", userRoles: ["authenticated", "organiser"] })).toString("base64");
+  const diagnostic = await protectedApi({ method: "GET", pathname: "/api/v2/organiser/storage-metrics", hostname: "www.blorengefellrace.cymru", headers: { "x-ms-client-principal": principal } });
+  assert.deepEqual(diagnostic.body, { ok: true, metrics: storageMetrics });
+});
+
+test("full production registration accepts minimal waiting-list joins and reports the queue", async () => {
+  const state = createProductionBootstrap(); transitionRegistrationState(state, "OPEN", organiser);
+  for (let number = 1; number <= state.event.capacity; number += 1) state.registrations.push({ id: `registration_${number}`, entryStatus: "accepted", placeStatus: "confirmed" });
+  const repository = createMemoryRepository(state);
+  const integrations = new Phase3IntegrationService({ repository, emailAdapter: email, publicBaseUrl: "https://www.blorengefellrace.cymru", environment: "production" });
+  const service = new ProductionRegistrationService({ repository, emailAdapter: email });
+  const api = createProductionApi({ service, phase3Integrations: integrations, repository });
+  const joined = await api({ method: "POST", pathname: "/api/v3/waiting-list/join", hostname: "www.blorengefellrace.cymru", body: { firstName: "Alys", lastName: "Runner", email: "alys@example.com", phone: "must-not-store" } });
+  assert.equal(joined.status, 201); assert.equal(joined.body.ok, true);
+  const stored = await repository.read();
+  assert.deepEqual(Object.keys(stored.waitingList[0]).sort(), ["email", "firstName", "id", "joinedAt", "lastName", "sequence", "status"]);
+  const status = await api({ method: "GET", pathname: "/api/v2/registration/status", hostname: "www.blorengefellrace.cymru" });
+  assert.deepEqual({ accepted: status.body.accepted, capacity: status.body.capacity, remaining: status.body.remaining, waiting: status.body.waiting }, { accepted: 120, capacity: 120, remaining: 0, waiting: 1 });
+  const duplicate = await api({ method: "POST", pathname: "/api/v3/waiting-list/join", hostname: "www.blorengefellrace.cymru", body: { firstName: "Alys", lastName: "Runner", email: "ALYS@example.com" } });
+  assert.equal(duplicate.body.ok, true); assert.equal(duplicate.body.duplicate, true); assert.equal((await repository.read()).waitingList.length, 1);
+
+  let offerToken;
+  await repository.transaction((current) => {
+    current.registrations.pop();
+    const offered = createNextWaitingListOffer(current, organiser, new Date());
+    assert.equal(offered.ok, true); offerToken = offered.token; return { ok: true };
+  });
+  const runner = { firstName: "Alys", lastName: "Runner", email: "alys@example.com", phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", acceptTerms: true, acceptPrivacy: true };
+  const declaration = { declarationIdentifier: state.event.declaration.identifier, declarationVersion: state.event.declaration.version, accepted: true, typedFullName: "Alys Runner", signatoryRole: "Competitor" };
+  const mismatch = await api({ method: "POST", pathname: "/api/v3/waiting-list/accept", hostname: "www.blorengefellrace.cymru", headers: { "x-private-invitation": offerToken }, body: { runner: { ...runner, email: "other@example.com" }, declaration } });
+  assert.equal(mismatch.body.code, "WAITING_LIST_EMAIL_MISMATCH");
+  const accepted = await api({ method: "POST", pathname: "/api/v3/waiting-list/accept", hostname: "www.blorengefellrace.cymru", headers: { "x-private-invitation": offerToken }, body: { runner, declaration } });
+  assert.equal(accepted.status, 201); assert.equal(accepted.body.ok, true); assert.ok(accepted.body.managementToken);
+  const final = await repository.read();
+  assert.equal(final.waitingList[0].status, "accepted"); assert.equal(final.waitingListOffers[0].status, "accepted");
+  assert.deepEqual(capacitySummary(final), { capacity: 120, confirmed: 119, paymentReserved: 1, offerReserved: 0, reserved: 120, remaining: 0, waiting: 0 });
 });
 
 test("production Entra authorization requires the literal organiser role", () => {
@@ -78,6 +151,100 @@ test("PRIVATE_LIVE requires a purpose-bound invitation and consumes it only for 
   assert.equal((await orders.createOrder({ purchaserEmail: "other@example.com" }, new Date("2026-10-01T12:03:00Z"), invitation.token)).code, "LINK_UNAVAILABLE");
 });
 
+test("CLOSED Stripe proof invitations are organiser-only, short-lived and single-use", async () => {
+  const at = new Date("2026-10-01T12:00:00Z");
+  const repository = createMemoryRepository(createProductionBootstrap());
+  const disabled = new ProductionRegistrationService({ repository, emailAdapter: email, stripeMode: "disabled" });
+  assert.equal((await disabled.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at)).code, "PROVIDER_PROOF_UNAVAILABLE");
+
+  const externalEmail = new ProductionRegistrationService({ repository, emailAdapter: { ...email, externalDelivery: true }, stripeMode: "live" });
+  assert.equal((await externalEmail.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at)).code, "PROVIDER_PROOF_UNAVAILABLE");
+
+  const nonEmptyState = createProductionBootstrap(); nonEmptyState.waitingList.push({ id: "existing_record" });
+  const nonEmpty = new ProductionRegistrationService({ repository: createMemoryRepository(nonEmptyState), emailAdapter: email, stripeMode: "live" });
+  assert.equal((await nonEmpty.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at)).code, "PROVIDER_PROOF_REQUIRES_EMPTY_BASELINE");
+
+  const live = new ProductionRegistrationService({ repository, emailAdapter: email, stripeMode: "live" });
+  assert.equal((await live.createPrivateInvitation({ authenticated: true, role: null }, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at)).code, "FORBIDDEN");
+  assert.equal((await live.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T14:00:01Z" }, at)).code, "PROVIDER_PROOF_EXPIRY_TOO_LONG");
+
+  const created = await live.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z", maximumUses: 99 }, at);
+  assert.equal(created.ok, true); assert.equal(created.invitation.maximumUses, 1); assert.equal(created.invitation.tokenHash, undefined);
+  assert.equal((await live.inspectPrivateAccess(created.token, "stripe_provider_proof", new Date("2026-10-01T12:01:00Z"))).ok, true);
+  assert.equal((await live.inspectPrivateAccess(created.token, "registration", new Date("2026-10-01T12:01:00Z"))).code, "LINK_UNAVAILABLE");
+  assert.equal((await live.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:30:00Z" }, at)).code, "PROVIDER_PROOF_ALREADY_ACTIVE");
+});
+
+test("one CLOSED provider proof permits exactly one adult standard-price live Checkout", async () => {
+  const at = new Date("2026-10-01T12:00:00Z");
+  const repository = createMemoryRepository(createProductionBootstrap());
+  const stripeCalls = [];
+  const stripeGateway = {
+    mode: "live",
+    async createOrderCheckoutSession(input) {
+      stripeCalls.push(input);
+      return { id: "cs_live_provider_proof", url: "https://checkout.stripe.com/provider-proof", expiresAt: "2026-10-01T12:30:00Z" };
+    }
+  };
+  const service = new ProductionRegistrationService({ repository, emailAdapter: email, stripeMode: "live" });
+  const invitation = await service.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at);
+  const orders = new OrderRegistrationService({ repository, stripeGateway, emailAdapter: email, publicBaseUrl: "https://www.blorengefellrace.cymru" });
+
+  assert.equal((await orders.createOrder({ purchaserEmail: "proof@example.com" }, at)).code, "REGISTRATION_NOT_ACCEPTING");
+  assert.equal((await orders.createOrder({ purchaserEmail: "invalid" }, at, invitation.token)).code, "VALIDATION_ERROR");
+  assert.equal((await repository.read()).privateInvitations[0].uses, 0);
+
+  const created = await orders.createOrder({ purchaserEmail: "proof@example.com" }, at, invitation.token);
+  assert.equal(created.ok, true); assert.equal(created.order.runnerCount, 0); assert.equal(created.order.providerProof, true);
+  assert.equal((await orders.getOrder(created.orderToken)).order.providerProof, true);
+  assert.equal((await repository.read()).privateInvitations[0].uses, 1);
+  assert.equal((await orders.createOrder({ purchaserEmail: "second@example.com" }, at, invitation.token)).code, "REGISTRATION_NOT_ACCEPTING");
+
+  const baseRunner = { firstName: "Provider", lastName: "Proof", email: "proof@example.com", phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", acceptTerms: true, acceptPrivacy: true };
+  assert.equal((await orders.addRunner(created.orderToken, { runner: { ...baseRunner, wfraMember: true, wfraMembershipNumber: "WFRA-PROOF" }, declarationMode: "later" }, at)).code, "PROVIDER_PROOF_REQUIREMENTS");
+  const added = await orders.addRunner(created.orderToken, { runner: baseRunner, declarationMode: "later" }, at);
+  assert.equal(added.ok, true); assert.equal(added.order.totalPence, 600);
+  assert.equal((await orders.addRunner(created.orderToken, { runner: { ...baseRunner, email: "extra@example.com" }, declarationMode: "later" }, at)).code, "PROVIDER_PROOF_REQUIREMENTS");
+
+  const checkout = await orders.checkout(created.orderToken, at);
+  assert.equal(checkout.ok, true); assert.equal(checkout.totalPence, 600);
+  assert.deepEqual(stripeCalls[0].runnerPricesPence, [600]); assert.match(checkout.checkoutUrl, /^https:\/\/checkout\.stripe\.com\//);
+  const final = await repository.read();
+  assert.equal(final.registrationState, "CLOSED"); assert.equal(final.phase3RegistrationState, "CLOSED");
+  assert.equal(capacitySummary(final).remaining, 119); assert.equal(final.orders[0].providerProof, true);
+  assert.equal((await service.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:30:00Z" }, at)).code, "PROVIDER_PROOF_ALREADY_USED");
+  assert.equal((await service.revokePrivateInvitation(organiser, invitation.invitation.id, at)).ok, true);
+  assert.equal((await service.privateInvitations(organiser)).invitations[0].status, "Revoked");
+});
+
+test("organiser can request only the exact paid CLOSED production provider-proof refund", async () => {
+  const at = new Date("2026-10-01T12:00:00Z");
+  const repository = createMemoryRepository(createProductionBootstrap());
+  const stripeGateway = {
+    mode: "live",
+    async createOrderCheckoutSession() { return { id: "cs_live_refund_proof", url: "https://checkout.stripe.com/provider-proof", expiresAt: "2026-10-01T12:30:00Z" }; }
+  };
+  const service = new ProductionRegistrationService({ repository, emailAdapter: email, stripeMode: "live" });
+  const invitation = await service.createPrivateInvitation(organiser, { kind: "stripe_provider_proof", expiresAt: "2026-10-01T13:00:00Z" }, at);
+  const integrations = new Phase3IntegrationService({ repository, stripeGateway, emailAdapter: email, publicBaseUrl: "https://www.blorengefellrace.cymru", environment: "production" });
+  const created = await integrations.orders.createOrder({ purchaserEmail: "proof@example.com" }, at, invitation.token);
+  const runner = { firstName: "Provider", lastName: "Proof", email: "proof@example.com", phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA", raceCategory: "Female", dateOfBirth: "1990-06-15", club: "Example Harriers", wfraMember: false, wfraMembershipNumber: "", emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", acceptTerms: true, acceptPrivacy: true };
+  const added = await integrations.orders.addRunner(created.orderToken, { runner, declarationMode: "later" }, at);
+  await integrations.orders.checkout(created.orderToken, at);
+  const paid = await integrations.orders.webhook({ id: "evt_live_refund_proof", type: "checkout.session.completed", data: { object: { id: "cs_live_refund_proof", payment_intent: "pi_live_refund_proof", amount_total: 600, currency: "gbp", payment_status: "paid" } } }, at);
+  assert.equal(paid.ok, true);
+
+  const registrationId = added.order.registrations[0].id;
+  assert.equal((await integrations.requestProviderProofRefund({ authenticated: true, role: null }, registrationId, at)).code, "FORBIDDEN");
+  const requested = await integrations.requestProviderProofRefund(organiser, registrationId, at);
+  assert.equal(requested.ok, true); assert.equal(requested.request.status, "requested");
+  const duplicate = await integrations.requestProviderProofRefund(organiser, registrationId, at);
+  assert.equal(duplicate.ok, true); assert.equal(duplicate.duplicate, true); assert.equal(duplicate.request.id, requested.request.id);
+  const final = await repository.read();
+  assert.equal(final.registrationState, "CLOSED"); assert.equal(final.phase3RegistrationState, "CLOSED"); assert.equal(final.refundRequests.length, 1);
+  assert.equal(final.auditEvents.some((event) => event.action === "refund_requested" && event.subjectId === registrationId), true);
+});
+
 test("production scheduler is harmless while CLOSED and empty", async () => {
   const service = { async runScheduledWork(actor) {
     assert.equal(authorizeProduction(actor, "manage"), true);
@@ -85,6 +252,29 @@ test("production scheduler is harmless while CLOSED and empty", async () => {
   } };
   const handler = createProductionSchedulerHandler({ service, environment: env(), clock: () => new Date("2026-10-01T12:00:00Z"), logger: { log() {}, error() {} } });
   const result = await handler(); assert.equal(result.ok, true); assert.equal(result.reminders, 0); assert.equal(result.expiredOffers, 0);
+  assert.equal(result.emailRecovery.status, "disabled");
+});
+
+test("production scheduler recovery is explicit and tightly bounded", async () => {
+  const calls = [];
+  const service = {
+    async runScheduledWork() { return { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, nextOfferCreated: false }; },
+    async runScheduledConfirmationRecovery(actor, options) { calls.push({ actor, options }); return { ok: true, status: "active", sent: 4, remaining: 35 }; }
+  };
+  const handler = createProductionSchedulerHandler({ service, environment: env({ REGISTRATION_EMAIL_RECOVERY_ENABLED: "true", REGISTRATION_EMAIL_RECOVERY_BATCH_SIZE: "4" }), clock: () => new Date("2026-10-01T12:00:00Z"), logger: { log() {}, error() {} } });
+  const result = await handler(); assert.equal(result.emailRecovery.sent, 4); assert.equal(calls.length, 1);
+  assert.equal(authorizeProduction(calls[0].actor, "manage"), true); assert.deepEqual(calls[0].options, { maxMessages: 4 });
+  assert.throws(() => createProductionSchedulerHandler({ service, environment: env({ REGISTRATION_EMAIL_RECOVERY_ENABLED: "yes" }) }), /explicitly true or false/);
+  assert.throws(() => createProductionSchedulerHandler({ service, environment: env({ REGISTRATION_EMAIL_RECOVERY_BATCH_SIZE: "5" }) }), /integer from 1 to 4/);
+});
+
+test("production scheduler surfaces a paused recovery campaign as a failed invocation", async () => {
+  const service = {
+    async runScheduledWork() { return { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, nextOfferCreated: false }; },
+    async runScheduledConfirmationRecovery() { return { ok: false, status: "paused", sent: 0, code: "EMAIL_DELIVERY_FAILED" }; }
+  };
+  const handler = createProductionSchedulerHandler({ service, environment: env({ REGISTRATION_EMAIL_RECOVERY_ENABLED: "true" }), clock: () => new Date("2026-10-01T12:00:00Z"), logger: { log() {}, error() {} } });
+  await assert.rejects(handler(), /recovery paused/);
 });
 
 test("production artifacts are exact and physically exclude browser test controls", () => {
@@ -96,7 +286,10 @@ test("production artifacts are exact and physically exclude browser test control
     for (const illustration of ["images/kitswap.png", "images/litterpickwalk.png"]) assert.equal(artifact.appFiles.includes(illustration), false);
     const runnerPage = fs.readFileSync(path.join(root, "site/app/registration/index.html"), "utf8");
     for (const internalPhrase of ["Production ·", "persistent development API", "No entry or payment can be created"]) assert.equal(runnerPage.includes(internalPhrase), false);
-    assert.ok(runnerPage.includes("Entries are not open yet. Please check back here for opening details."));
+    assert.ok(runnerPage.includes("Entries are not yet open. Please check back shortly."));
+    const dashboardScript = fs.readFileSync(path.join(root, "site/app/registration/dashboard.mjs"), "utf8");
+    for (const required of ["Create controlled proof refund request", "Approve full ${refundKind} refund", "Revoke proof access"]) assert.ok(dashboardScript.includes(required));
+    assert.equal(dashboardScript.includes("Stripe sandbox refund"), false);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

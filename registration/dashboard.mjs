@@ -25,20 +25,27 @@ async function render() {
   const attention = active.filter((item) => ["created", "not_configured", "declined", "abandoned", "failed", "expired"].includes(item.paymentStatus)).length;
   const declarations = active.filter((item) => item.placeStatus === "confirmed" && item.declarationStatus === "pending").length;
   document.querySelector("#summary-accepted").textContent = accepted;
-  document.querySelector("#summary-waiting").textContent = waiting;
+  const waitingCount = currentState.waitingListSummary?.currentlyWaiting ?? snapshot.totals?.waiting ?? waiting;
+  const remainingPlaces = snapshot.totals?.remaining ?? Math.max(0, currentState.event.capacity - accepted - reserved);
+  document.querySelector("#summary-waiting").textContent = waitingCount;
   document.querySelector("#summary-payments").textContent = attention;
   document.querySelector("#summary-declarations").textContent = declarations;
-  document.querySelector("#summary-remaining").textContent = Math.max(0, currentState.event.capacity - accepted - reserved);
+  document.querySelector("#summary-remaining").textContent = remainingPlaces;
+  const offerButton = document.querySelector("#offer-next-waiting-place");
+  offerButton.disabled = waitingCount < 1 || remainingPlaces < 1;
+  document.querySelector("#waiting-list-operations-note").textContent = waitingCount < 1 ? "Nobody is currently waiting." : remainingPlaces < 1 ? `${waitingCount} ${waitingCount === 1 ? "person is" : "people are"} waiting; an offer can be sent after a place is released.` : `${waitingCount} ${waitingCount === 1 ? "person is" : "people are"} waiting and ${remainingPlaces} ${remainingPlaces === 1 ? "place is" : "places are"} available.`;
   const environment = currentState.environment === "production" ? "Production" : "Development";
   const currentOperationalState = currentState.phase3RegistrationState ?? "CLOSED";
   const stateLabel = currentOperationalState === "PRIVATE_LIVE" ? "Private" : currentOperationalState === "CLOSED_FINAL" ? "Closed" : `${currentOperationalState[0]}${currentOperationalState.slice(1).toLowerCase()}`;
-  document.querySelector("#environment-status").textContent = `${environment} · ${stateLabel} · ${integrations.paymentsAvailable ? "Stripe sandbox" : "Payments unavailable"}`;
-  document.querySelector("#integration-status").textContent = `${integrations.paymentsAvailable ? "Stripe sandbox" : "Payments unavailable"} · ${integrations.externalEmailAvailable ? "Controlled email" : "Email captured only"}`;
+  const stripeLabel = integrations.stripe === "live" ? "Stripe live" : integrations.paymentsAvailable ? "Stripe sandbox" : "Payments unavailable";
+  document.querySelector("#environment-status").textContent = `${environment} · ${stateLabel} · ${stripeLabel}`;
+  document.querySelector("#integration-status").textContent = `${stripeLabel} · ${integrations.externalEmailAvailable ? "Controlled email" : "Email captured only"}`;
+  document.querySelector("#provider-proof-option").hidden = !(currentState.environment === "production" && currentOperationalState === "CLOSED" && integrations.stripe === "live" && integrations.externalEmailAvailable !== true && currentState.event.under18EntriesEnabled === false);
   document.querySelector("#technical-environment").textContent = snapshot.diagnostics.environment;
   document.querySelector("#technical-storage").textContent = snapshot.diagnostics.storageType;
   document.querySelector("#technical-schema").textContent = snapshot.diagnostics.schemaVersion;
   if (snapshot.recovery) showNotice(snapshot.recovery.message, true);
-  renderList(); renderProgress(); await renderPrivateInvitations();
+  renderWaitingList(); renderList(); renderProgress(); await Promise.all([renderPrivateInvitations(), renderEmailHealth()]);
   const selected = currentState.registrations.find((item) => item.testReference === selectedReference);
   if (selected) {
     renderDetail(selected);
@@ -50,6 +57,69 @@ async function render() {
   } else {
     document.querySelector("#entry-detail").hidden = true;
     if (selectedReference) { selectedReference = null; history.replaceState(null, "", "dashboard.html"); }
+  }
+}
+function waitingListStatus(item) {
+  if (item.offerStatus === "offered") return { label: "Offer sent", className: "status-badge--info" };
+  const labels = { waiting: "Waiting", accepted: "Accepted", declined: "Declined", expired: "Expired", offered: "Offer sent" };
+  const classNames = { waiting: "status-badge--positive", accepted: "status-badge--positive", declined: "status-badge--neutral", expired: "status-badge--neutral", offered: "status-badge--info" };
+  return { label: labels[item.status] ?? String(item.status || "Unknown").replaceAll("_", " "), className: classNames[item.status] ?? "status-badge--neutral" };
+}
+function formatWaitingTime(value, dateOnly = false) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return "—";
+  return dateOnly ? date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : date.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function filteredWaitingList() {
+  const search = document.querySelector("#waiting-list-search").value.trim().toLowerCase();
+  const filter = document.querySelector("#waiting-list-filter").value;
+  return (currentState.waitingList ?? []).filter((item) => {
+    const matchesSearch = !search || [item.firstName, item.lastName, item.email].some((value) => String(value ?? "").toLowerCase().includes(search));
+    const matchesFilter = !filter || (filter === "offered" ? item.offerStatus === "offered" : item.status === filter);
+    return matchesSearch && matchesFilter;
+  });
+}
+function renderWaitingList() {
+  const summary = currentState.waitingListSummary ?? { currentlyWaiting: 0, outstandingOffers: 0, accepted: 0, declined: 0, expired: 0 };
+  document.querySelector("#waiting-summary-waiting").textContent = summary.currentlyWaiting;
+  document.querySelector("#waiting-summary-offered").textContent = summary.outstandingOffers;
+  document.querySelector("#waiting-summary-accepted").textContent = summary.accepted;
+  document.querySelector("#waiting-summary-declined").textContent = summary.declined;
+  document.querySelector("#waiting-summary-expired").textContent = summary.expired;
+  const rows = document.querySelector("#waiting-list-rows"); rows.replaceChildren();
+  const items = filteredWaitingList();
+  for (const item of items) {
+    const row = document.createElement("tr");
+    if (item.status !== "waiting" && item.offerStatus !== "offered") row.classList.add("waiting-list-row--historical");
+    const position = document.createElement("td"); position.textContent = item.currentPosition ?? "—";
+    const name = document.createElement("td"); name.textContent = `${item.firstName} ${item.lastName}`.trim();
+    const email = document.createElement("td"); email.textContent = item.email;
+    const status = document.createElement("td"); const badge = document.createElement("span"); const statusView = waitingListStatus(item); badge.className = `status-badge ${statusView.className}`; badge.textContent = statusView.label; status.append(badge);
+    const joined = document.createElement("td"); joined.textContent = formatWaitingTime(item.joinedAt, true);
+    const offer = document.createElement("td");
+    const offerParts = [];
+    if (item.offerCreatedAt) offerParts.push(`Sent ${formatWaitingTime(item.offerCreatedAt)}`);
+    if (item.offerExpiresAt) offerParts.push(`${item.offerStatus === "expired" || item.status === "expired" ? "Expired" : "Expires"} ${formatWaitingTime(item.offerExpiresAt)}`);
+    if (item.offerCompletedAt) offerParts.push(`Completed ${formatWaitingTime(item.offerCompletedAt)}`);
+    if (item.entryReference) offerParts.push(`Entry ${item.entryReference}`);
+    offer.textContent = offerParts.join(" · ") || "—";
+    row.append(position, name, email, status, joined, offer); rows.append(row);
+  }
+  document.querySelector("#waiting-list-empty").hidden = items.length > 0;
+}
+async function renderEmailHealth() {
+  try {
+    const result = await prototype.emailHealth(); const health = result?.health;
+    if (!result?.ok || !health) { document.querySelector("#email-health-note").textContent = "Email health is unavailable."; return; }
+    document.querySelector("#email-expected").textContent = health.expectedConfirmations;
+    document.querySelector("#email-sent").textContent = health.initialConfirmations.sent;
+    document.querySelector("#email-failed").textContent = health.initialConfirmations.failed;
+    document.querySelector("#email-missing").textContent = health.initialConfirmations.missing;
+    const backlog = health.failedCommunicationBacklog;
+    document.querySelector("#email-health-note").textContent = backlog ? `${backlog} failed communication${backlog === 1 ? "" : "s"} require review. Recovery sends require a separate dry run and explicit confirmation.` : "No failed communication backlog is recorded.";
+  } catch {
+    document.querySelector("#email-health-note").textContent = "Email health is unavailable.";
   }
 }
 async function renderPrivateInvitations() {
@@ -67,6 +137,8 @@ async function renderPrivateInvitations() {
     if (status === "Active") {
       li.append(actionButton("Expire now", async () => { const expired = await prototype.expirePrivateInvitation(invitation.id); showNotice(expired.ok ? "Private link expired." : `Link could not be expired: ${expired.code}`, !expired.ok); await renderPrivateInvitations(); }, "text-button"));
       li.append(actionButton("Revoke", async () => { const revoked = await prototype.revokePrivateInvitation(invitation.id); showNotice(revoked.ok ? "Private link revoked." : `Link could not be revoked: ${revoked.code}`, !revoked.ok); await renderPrivateInvitations(); }, "text-button danger-link"));
+    } else if (status === "Used" && invitation.kind === "stripe_provider_proof") {
+      li.append(actionButton("Revoke proof access", async () => { if (!window.confirm("Revoke this used provider-proof invitation?")) return; const revoked = await prototype.revokePrivateInvitation(invitation.id); showNotice(revoked.ok ? "Provider-proof access revoked." : `Link could not be revoked: ${revoked.code}`, !revoked.ok); await renderPrivateInvitations(); }, "text-button danger-link"));
     }
     list.append(li);
   }
@@ -96,6 +168,7 @@ function renderList() {
     if (item.testReference === selectedReference) card.classList.add("entrant-card--selected");
     const heading = document.createElement("h3"); heading.textContent = `${item.runner.firstName} ${item.runner.lastName}`;
     const reference = document.createElement("p"); reference.className = "entrant-reference"; reference.textContent = item.testReference;
+    if (item.transfer?.transferred) { const marker = document.createElement("span"); marker.className = "status-badge status-badge--info"; marker.textContent = "Transferred"; reference.append(" · ", marker); }
     const facts = document.createElement("dl"); facts.className = "entrant-facts";
     for (const [label, value] of [["Club", item.runner.club], ["Entry", item.entryStatus.replace("_", " ")], ["Payment", item.paymentStatus.replaceAll("_", " ")], ["Declaration", item.declarationStatus === "complete" ? "Complete" : "Required"], ["Race number", item.raceNumber ?? "Not assigned"]]) {
       const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; facts.append(dt, dd);
@@ -116,6 +189,7 @@ function renderDetail(item) {
   document.querySelector("#detail-reference").textContent = item.testReference;
   const money = (value, currency = "gbp") => value == null ? "Not recorded" : `${new Intl.NumberFormat("en-GB", { style: "currency", currency: String(currency).toUpperCase() }).format(value / 100)} ${String(currency).toUpperCase()}`;
   const fields = { "Email address": item.runner.email, "Phone number": item.runner.phone, "Club": item.runner.club, "Race category": item.runner.genderCategory, "WFRA member?": item.runner.wfraMember ? "Yes (self-declared, not verified)" : "No", "WFRA membership number": item.runner.wfraMembershipNumber ?? "Not supplied", "Entry status": item.entryStatus.replace("_", " "), "Place status": item.placeStatus.replaceAll("_", " "), "Payment status": item.paymentStatus.replaceAll("_", " "), "Declaration": item.declarationStatus === "complete" ? `Complete · ${String(item.declarationCompletionMethod ?? "digital").replaceAll("_", " ")}` : "Required before the runner can start", "Cleared to start": item.clearedToStart ? "Yes" : "No", "Expected charge": money(item.pricing?.priceActuallyChargedPence ?? item.payment?.expectedAmountPence, item.payment?.currency), "Actual charge": money(item.payment?.actualPaidAmountPence, item.payment?.currency), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact name": item.runner.emergencyName, "Emergency contact phone number": item.runner.emergencyPhone, "Price calculated by server": item.pricing?.priceActuallyChargedPence == null ? "Not recorded" : `£${(item.pricing.priceActuallyChargedPence / 100).toFixed(2)} · ${item.pricing.adjustmentReason}` };
+  if (item.transfer?.transferred) Object.assign(fields, { "Transfer count": item.transfer.count, "Original runner": item.transfer.originalRunnerName || "Historical runner record unavailable", "Previous runner": item.transfer.previousRunnerName || "Historical runner record unavailable", "Latest transfer": item.transfer.latestAt ? new Date(item.transfer.latestAt).toLocaleString() : "Time unavailable" });
   document.querySelector("#entry-details").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
   renderActions(item); renderMessages(item);
 }
@@ -158,11 +232,16 @@ function renderActions(item) {
     await render();
   }));
   if (available.includes("promote")) actions.append(actionButton("Promote from waiting list", async () => { const result = await prototype.promote(item.id); showNotice(result.ok ? `${item.testReference} promoted.` : `Promotion unavailable: ${result.code}`, !result.ok); await render(); }));
+  if (item.providerProof && item.paymentStatus === "successful" && !refundRequest && currentState.environment === "production" && (currentState.phase3RegistrationState ?? "CLOSED") === "CLOSED" && currentIntegrations.stripe === "live") {
+    actions.append(actionButton("Create controlled proof refund request", async () => { if (!window.confirm(`Create the refund request for controlled provider proof ${item.testReference}? This does not send money yet.`)) return; const result = await prototype.requestProviderProofRefund(item.id); showNotice(result.ok ? "Controlled provider-proof refund requested. Review and approve it before execution." : `Refund request could not be created: ${result.code}`, !result.ok); await render(); }));
+  }
+  const liveRefund = currentIntegrations.stripe === "live";
+  const refundKind = liveRefund ? "live" : "test";
   if (refundRequest?.status === "requested") {
-    actions.append(actionButton("Approve full test refund", async () => { const result = await prototype.decideRefund(refundRequest.id, "approve"); showNotice(result.ok ? "Full test refund approved. It has not been sent to Stripe yet." : `Refund could not be approved: ${result.code}`, !result.ok); await render(); }));
+    actions.append(actionButton(`Approve full ${refundKind} refund`, async () => { const result = await prototype.decideRefund(refundRequest.id, "approve"); showNotice(result.ok ? `Full ${refundKind} refund approved. It has not been sent to Stripe yet.` : `Refund could not be approved: ${result.code}`, !result.ok); await render(); }));
     actions.append(actionButton("Reject refund request", async () => { const result = await prototype.decideRefund(refundRequest.id, "reject"); showNotice(result.ok ? "Refund request rejected." : `Refund could not be rejected: ${result.code}`, !result.ok); await render(); }, "button button--quiet danger-button"));
   }
-  if (refundRequest?.status === "approved" && currentIntegrations.paymentsAvailable) actions.append(actionButton("Execute approved full test refund", async () => { if (!window.confirm(`Send a full Stripe sandbox refund for ${item.testReference}?`)) return; const result = await prototype.executeRefund(refundRequest.id); showNotice(result.ok ? "Full Stripe sandbox refund completed and the place released." : `The refund could not be processed: ${result.code}`, !result.ok); await render(); }));
+  if (refundRequest?.status === "approved" && currentIntegrations.paymentsAvailable) actions.append(actionButton(`Execute approved full ${refundKind} refund`, async () => { if (!window.confirm(`Send a full Stripe ${refundKind} refund for ${item.testReference}? This will return real money when Stripe is live.`)) return; const result = await prototype.executeRefund(refundRequest.id); showNotice(result.ok ? `Full Stripe ${refundKind} refund completed and the place released.` : `The refund could not be processed: ${result.code}`, !result.ok); await render(); }));
   if (available.includes("cancel")) actions.append(actionButton("Cancel entry", async () => {
     if (item.raceNumber) {
       pendingCancellation = item.id;
@@ -191,9 +270,14 @@ async function cancelEntry(id, releaseRaceNumber) {
   showNotice(message, !result.ok); await render();
 }
 function renderMessages(item) {
-  const messages = currentState.communications.filter((message) => message.registrationId === item.id); const list = document.querySelector("#entry-messages"); list.replaceChildren(); document.querySelector("#message-preview").hidden = true;
-  for (const message of messages) { const li = document.createElement("li"); const strong = document.createElement("strong"); strong.textContent = message.subject; const copy = document.createElement("p"); copy.textContent = message.body; li.append(strong, copy); list.append(li); }
-  if (!messages.length) { const li = document.createElement("li"); li.textContent = "No messages have been captured for this test entry."; list.append(li); }
+  const messages = currentState.communications.filter((message) => message.registrationId === item.id); const list = document.querySelector("#entry-messages"); list.replaceChildren();
+  for (const message of messages) {
+    const li = document.createElement("li"); const strong = document.createElement("strong"); const label = String(message.template ?? "email").replaceAll("_", " ");
+    const status = message.delivery === "sent" ? "Sent" : message.delivery === "failed" ? "Failed" : "Pending"; strong.textContent = `${label} — ${status}`;
+    const detail = document.createElement("p"); const timestamp = message.createdAt ? new Date(message.createdAt).toLocaleString() : "Time unavailable"; const provider = message.providerReference ? ` · Provider reference ${message.providerReference}` : "";
+    detail.textContent = `${timestamp} · Recipient ${message.intendedRecipientAddress || "not recorded"}${provider}`; li.append(strong, detail); list.append(li);
+  }
+  if (!messages.length) { const li = document.createElement("li"); li.textContent = "No email history is recorded for this entry."; list.append(li); }
 }
 function renderProgress() {
   const reference = currentState.testProgress.submittedReference;
@@ -207,15 +291,36 @@ function renderProgress() {
 }
 
 for (const selector of ["#search", "#entry-filter", "#payment-filter", "#declaration-filter"]) document.querySelector(selector)?.addEventListener("input", renderList);
+for (const selector of ["#waiting-list-search", "#waiting-list-filter"]) document.querySelector(selector)?.addEventListener("input", renderWaitingList);
+document.querySelector("#offer-next-waiting-place")?.addEventListener("click", async () => {
+  if (!window.confirm("Offer the available place to the next person on the waiting list? The place will be reserved for 48 hours and the runner will be emailed.")) return;
+  const result = await prototype.offerNextWaitingPlace();
+  showNotice(result.ok ? "The next waiting-list runner has been emailed a 48-hour place offer." : `A place offer could not be created: ${result.code}`, !result.ok);
+  await render();
+});
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
 document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });
+document.querySelector("#export-waiting-list-csv")?.addEventListener("click", async () => {
+  const result = await prototype.waitingListCsv();
+  if (!result.ok) { showNotice(`Waiting-list CSV unavailable: ${result.code}`, true); return; }
+  const url = URL.createObjectURL(result.blob); const link = document.createElement("a"); link.href = url; link.download = result.filename; link.click(); URL.revokeObjectURL(url);
+  showNotice("Private waiting-list CSV downloaded. Store it securely and share it only with authorised race organisers.");
+});
+document.querySelector("#export-private-workbook")?.addEventListener("click", async () => {
+  const result = await prototype.privateWorkbook();
+  if (!result.ok) { showNotice(`Private workbook unavailable: ${result.code}`, true); return; }
+  const url = URL.createObjectURL(result.blob); const link = document.createElement("a"); link.href = url; link.download = result.filename; link.click(); URL.revokeObjectURL(url);
+  showNotice("Private registration workbook downloaded. Store it securely and share it only with authorised race organisers.");
+});
 document.querySelector("#create-invitation")?.addEventListener("click", async () => {
   const expires = document.querySelector("#invitation-expiry");
-  if (!expires.value) expires.value = new Date(Date.now() + 48 * 3_600_000).toISOString().slice(0, 16);
-  const result = await prototype.createPrivateInvitation({ kind: document.querySelector("#invitation-kind").value, expiresAt: new Date(expires.value).toISOString(), maximumUses: 1 });
+  const kind = document.querySelector("#invitation-kind").value;
+  if (!expires.value) expires.value = new Date(Date.now() + (kind === "stripe_provider_proof" ? 1 : 48) * 3_600_000).toISOString().slice(0, 16);
+  const result = await prototype.createPrivateInvitation({ kind, expiresAt: new Date(expires.value).toISOString(), maximumUses: 1 });
   if (!result.ok) { showNotice(`Private link could not be created: ${result.code}`, true); return; }
   const url = new URL("./", window.location.href); url.searchParams.set("invite", result.token);
+  if (kind === "stripe_provider_proof") url.searchParams.set("proof", "stripe");
   document.querySelector("#created-invitation-url").textContent = url.href;
   document.querySelector("#created-invitation").hidden = false;
   await renderPrivateInvitations();

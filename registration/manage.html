@@ -34,6 +34,10 @@
       <section class="manage-section" aria-labelledby="actions-title"><h3 id="actions-title">Actions</h3>
         <div class="form-actions"><button id="continue-payment" class="button" type="button" hidden>Continue to payment</button><button id="sign-declaration" class="button" type="button" hidden>Sign your race declaration</button><button id="edit-entry" class="button button--quiet" type="button" hidden>Edit entry</button><button id="transfer-entry" class="button button--quiet" type="button" hidden>Transfer entry</button><button id="request-refund" class="button button--quiet" type="button" hidden>Request refund for this entry</button><button id="refresh-entry" class="text-button" type="button">Refresh status</button></div>
         <p id="action-message" aria-live="polite"></p>
+        <div id="unavailable-actions" class="action-availability" hidden>
+          <h4>Why some actions are unavailable</h4>
+          <ul id="action-reasons"></ul>
+        </div>
       </section>
     </section>
 

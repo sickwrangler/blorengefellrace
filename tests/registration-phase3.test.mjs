@@ -21,7 +21,7 @@ const runner = (number = 1, overrides = {}) => ({
   emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", ...overrides
 });
 const beforeCutoff = new Date("2026-10-01T12:00:00.000Z");
-const afterCutoff = new Date("2026-10-29T00:00:00.000Z");
+const afterCutoff = new Date("2026-11-28T00:00:00.000Z");
 
 const declaration = (overrides = {}) => ({ declarationIdentifier: "WFRA_SENIOR_ENTRY", declarationVersion: "21/02/23", accepted: true, typedFullName: "Runner 1 Example", signatoryRole: "Competitor", ...overrides });
 
@@ -204,7 +204,7 @@ test("runner UI is English-only, contains the approved fields and has no languag
   const html = fs.readFileSync("registration/index.html", "utf8");
   for (const label of [
     "Email address", "First name", "Last name", "Phone number", "Address line 1", "Address line 2", "City", "Postcode",
-    "Race category", "Date of birth", "Club", "WFRA member?", "WFRA membership number",
+    "Race category", "Date of birth", "Club", "Are you a Welsh Fell Runners Association member?", "Welsh Fell Runners Association membership number",
     "Emergency contact name", "Emergency contact phone number", "Runner full name", "Parent or legal guardian full name"
   ]) assert.ok(html.includes(label), `missing English label: ${label}`);
   assert.ok(html.includes('<option value="Female">Female</option>'));
@@ -292,9 +292,10 @@ test("transfer before cutoff rotates the management token and names lock after c
   const firstToken = issueManagementToken(state, registration.id, admin, beforeCutoff).token;
   const transferred = amendRunner(state, firstToken, { firstName: "New", lastName: "Runner", email: "new.runner@example.com" }, { at: beforeCutoff });
   assert.ok(transferred.replacementManagementToken); assert.notEqual(transferred.replacementManagementToken, firstToken);
-  assert.equal(amendRunner(state, firstToken, { phone: "07700 900999" }, { at: beforeCutoff }).code, "MANAGEMENT_TOKEN_INVALID");
-  assert.equal(amendRunner(state, transferred.replacementManagementToken, { firstName: "Locked" }, { at: afterCutoff }).code, "NAME_LOCKED_AFTER_CUTOFF");
-  assert.equal(amendRunner(state, transferred.replacementManagementToken, { phone: "07700 900999" }, { at: afterCutoff }).ok, true);
+  assert.equal(amendRunner(state, firstToken, { phone: "07700 900999" }, { at: beforeCutoff }).code, "MANAGEMENT_TOKEN_EXPIRED");
+  const postCutoffToken = issueManagementToken(state, registration.id, admin, afterCutoff).token;
+  assert.equal(amendRunner(state, postCutoffToken, { firstName: "Locked" }, { at: afterCutoff }).code, "NAME_LOCKED_AFTER_CUTOFF");
+  assert.equal(amendRunner(state, postCutoffToken, { phone: "07700 900999" }, { at: afterCutoff }).ok, true);
   assert.equal(amendRunner(state, "", { registrationId: registration.id, firstName: "Exceptional" }, { actor: admin, at: afterCutoff, organiserOverride: true }).ok, true);
   assert.ok(state.auditEvents.some((item) => item.action === "organiser_override"));
 });

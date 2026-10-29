@@ -26,7 +26,7 @@ else {
   document.querySelector("#declaration-entry").replaceChildren(...[["Reference", result.registration.reference], ["Category", runner.raceCategory], ["Club", runner.club || "Unattached"]].flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
   document.querySelector("#remote-declaration-content").replaceChildren(...WFRA_SENIOR_ENTRY_DECLARATION.displayParagraphs.map((text) => { const paragraph = document.createElement("p"); paragraph.textContent = text; return paragraph; }));
   if (guardian) {
-    document.querySelector("#remote-declaration-instruction strong").textContent = "This runner is aged 16 or 17 on race day. Their parent or legal guardian must complete this declaration.";
+    document.querySelector("#remote-declaration-instruction strong").textContent = "A parent or legal guardian must read and sign this declaration for runners aged 16 or 17.";
     document.querySelector("#remote-declaration-name-label").firstChild.textContent = "Parent or legal guardian full name ";
     document.querySelector("#remote-declaration-acceptance").textContent = "I confirm I am the parent or legal guardian of the runner named above and I accept the WFRA declaration.";
   } else form.elements.typedFullName.value = `${runner.firstName} ${runner.lastName}`;
@@ -38,7 +38,14 @@ form.addEventListener("submit", async (event) => {
   const guardian = form.dataset.guardian === "true";
   if (!form.elements.accepted.checked || !form.elements.typedFullName.value.trim()) { alert.textContent = guardian ? "A parent or legal guardian must type their full name and accept the declaration." : "The named runner must type their name and accept the declaration."; alert.hidden = false; alert.focus(); return; }
   const response = await prototype.completeDeclaration(token, { accepted: true, typedFullName: form.elements.typedFullName.value, signatoryRole: guardian ? "Parent / Legal Guardian" : "Competitor", completedByNamedRunner: !guardian, completedByParentOrLegalGuardian: guardian });
-  if (!response.ok) { alert.textContent = response.code === "DECLARATION_NAME_MISMATCH" ? "The typed name must match the named runner." : "The declaration could not be completed. Ask the organiser to resend the secure link."; alert.hidden = false; alert.focus(); return; }
+  if (!response.ok) {
+    alert.textContent = response.code === "DECLARATION_NAME_MISMATCH"
+      ? "The typed name must match the named runner."
+      : response.code === "GUARDIAN_NAME_MATCHES_RUNNER"
+        ? "Enter the parent or legal guardian's full name, not the runner's name."
+        : "The declaration could not be completed. Ask the organiser to resend the secure link.";
+    alert.hidden = false; alert.focus(); return;
+  }
   form.hidden = true; returnToManagement();
 });
 

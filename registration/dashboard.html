@@ -23,10 +23,43 @@
       <div><span>Accepted</span><strong id="summary-accepted">0</strong></div><div><span>Waiting list</span><strong id="summary-waiting">0</strong></div><div><span>Payments needing attention</span><strong id="summary-payments">0</strong></div><div><span>Declaration required</span><strong id="summary-declarations">0</strong></div><div><span>Remaining places</span><strong id="summary-remaining">120</strong></div>
     </section>
 
+    <section class="prototype-card" aria-labelledby="waiting-list-operations-title">
+      <p class="eyebrow">Capacity management</p><h2 id="waiting-list-operations-title">Waiting list</h2>
+      <p>When a place is released, offer it to the next person in queue. The offer reserves that place for 48 hours and is sent by email.</p>
+      <dl class="waiting-list-summary" aria-label="Waiting-list summary">
+        <div><dt>Currently waiting</dt><dd id="waiting-summary-waiting">0</dd></div>
+        <div><dt>Offer outstanding</dt><dd id="waiting-summary-offered">0</dd></div>
+        <div><dt>Accepted</dt><dd id="waiting-summary-accepted">0</dd></div>
+        <div><dt>Declined</dt><dd id="waiting-summary-declined">0</dd></div>
+        <div><dt>Expired</dt><dd id="waiting-summary-expired">0</dd></div>
+      </dl>
+      <div class="form-actions"><button id="offer-next-waiting-place" class="button button--quiet" type="button" disabled>Offer next available place</button></div>
+      <p id="waiting-list-operations-note" class="hint">There must be both a waiting runner and an available place.</p>
+      <div class="waiting-list-filters">
+        <label>Search waiting list<input id="waiting-list-search" type="search" placeholder="Name or email"></label>
+        <label>Status<select id="waiting-list-filter"><option value="">All</option><option value="waiting">Waiting</option><option value="offered">Offer outstanding</option><option value="accepted">Accepted</option><option value="declined">Declined</option><option value="expired">Expired</option></select></label>
+      </div>
+      <div class="waiting-list-table-wrap">
+        <table class="waiting-list-table">
+          <thead><tr><th scope="col">Position</th><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Joined</th><th scope="col">Offer details</th></tr></thead>
+          <tbody id="waiting-list-rows"></tbody>
+        </table>
+      </div>
+      <p id="waiting-list-empty" class="helper-text" hidden>No waiting-list records match these filters.</p>
+      <div class="secondary-actions"><button id="export-waiting-list-csv" class="text-button" type="button">Export waiting list CSV</button><span>Private personal data for authorised organisers only. Store the downloaded file securely.</span></div>
+    </section>
+
+    <section class="prototype-card" aria-labelledby="email-health-title">
+      <div class="detail-heading"><div><p class="eyebrow">Transactional communications</p><h2 id="email-health-title">Email health</h2></div></div>
+      <p>Successful delivery is based on the recorded delivery result, not merely an attempted send time.</p>
+      <dl class="email-health-grid"><div><dt>Expected confirmations</dt><dd id="email-expected">—</dd></div><div><dt>Sent</dt><dd id="email-sent">—</dd></div><div><dt>Failed</dt><dd id="email-failed">—</dd></div><div><dt>Missing</dt><dd id="email-missing">—</dd></div></dl>
+      <p id="email-health-note" class="helper-text">Loading email health…</p>
+    </section>
+
     <section id="private-access" class="prototype-card" aria-labelledby="private-access-title">
       <div class="detail-heading"><div><p class="eyebrow">Phase 3 foundation</p><h2 id="private-access-title">Private access</h2></div></div>
       <p>Create a single-use private link for controlled testing. Creating a link does not open registration, bypass capacity or send anything externally.</p>
-      <div class="private-access-controls"><label>Purpose<select id="invitation-kind"><option value="registration">Registration</option><option value="waiting_list_join">Waiting-list join</option><option value="waiting_list_offer">Waiting-list place offer</option></select></label><label>Expires<input id="invitation-expiry" type="datetime-local"></label><button id="create-invitation" class="button button--quiet" type="button">Create private link</button></div>
+      <div class="private-access-controls"><label>Purpose<select id="invitation-kind"><option value="registration">Registration</option><option value="waiting_list_join">Waiting-list join</option><option value="waiting_list_offer">Waiting-list place offer</option><option id="provider-proof-option" value="stripe_provider_proof" hidden>One-off Stripe live proof</option></select></label><label>Expires<input id="invitation-expiry" type="datetime-local"></label><button id="create-invitation" class="button button--quiet" type="button">Create private link</button></div>
       <div id="created-invitation" class="form-alert form-alert--success" hidden><p>Copy this link now. Only a hash is retained by the server.</p><code id="created-invitation-url"></code></div>
       <ul id="private-invitation-list" class="message-list"><li>No private links created.</li></ul>
     </section>
@@ -43,14 +76,15 @@
       <h2 id="entries-title">Test entries</h2>
       <div class="organiser-filters"><label>Search<input id="search" type="search" placeholder="Reference, name or example email"></label><label>Entry status<select id="entry-filter"><option value="">All</option><option value="accepted">Accepted</option><option value="waiting_list">Waiting list</option><option value="cancelled">Cancelled</option></select></label><label>Payment<select id="payment-filter"><option value="">All</option><option value="not_configured">Unavailable</option><option value="checkout_pending">Awaiting payment</option><option value="processing">Processing</option><option value="successful">Confirmed</option><option value="declined">Unsuccessful</option><option value="abandoned">Expired</option><option value="refunded">Refunded</option></select></label><label>Declaration<select id="declaration-filter"><option value="">All</option><option value="pending">Declaration required</option><option value="complete">Complete</option></select></label></div>
       <div id="entrant-list" class="entrant-list"></div><p id="empty-state">There are no test entries. Complete the runner test to add one.</p>
-      <div class="secondary-actions"><button id="export-csv" class="text-button" type="button">Export sanitized test CSV</button><span>The export contains test reference, name, club, category and race-management statuses—not contact or emergency details.</span></div>
+      <div class="secondary-actions"><button id="export-csv" class="text-button" type="button">Export race-day CSV</button><span>Sanitised current-state data for timing and race-day systems. It excludes contact and emergency details.</span></div>
+      <div class="secondary-actions"><button id="export-private-workbook" class="text-button" type="button">Export full registration workbook</button><span>Private operational data including contact details and transfer history.</span></div>
     </section>
 
     <section id="entry-detail" class="prototype-card selected-entry" aria-labelledby="detail-title" tabindex="-1" hidden>
       <div class="detail-heading"><div><p class="eyebrow">Selected test entry</p><h2 id="detail-title"></h2><p id="detail-reference"></p></div><button id="close-detail" class="text-button" type="button">Close details</button></div>
       <dl id="entry-details" class="review-list"></dl>
       <h3>Available actions</h3><div id="entry-actions" class="form-actions"></div>
-      <div id="message-preview" hidden><h3>Captured message previews</h3><ul id="entry-messages" class="message-list"></ul></div>
+      <div id="message-preview"><h3>Email history</h3><ul id="entry-messages" class="message-list"></ul></div>
       <div><h3>Audit history</h3><ol id="entry-audit" class="message-list"><li>Loading audit history…</li></ol></div>
     </section>
 

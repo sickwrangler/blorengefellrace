@@ -1,6 +1,7 @@
 export const canTest = true;
 export const supportsManagedApi = true;
 const privateInvitationToken = new URLSearchParams(window.location.search).get("invite");
+const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : new URLSearchParams(window.location.search).get("offer") === "1" ? "waiting_list_offer" : "registration";
 const MANAGEMENT_TOKEN_SESSION_KEY = "blorenge-management-token";
 const ORDER_TOKEN_SESSION_KEY = "blorenge-order-token";
 
@@ -14,10 +15,35 @@ const v2 = (path, options) => request("v2", path, options);
 const v3 = (path, options) => request("v3", path, options);
 const v4 = (path, options) => request("v4", path, options);
 
+async function privateWorkbook() {
+  const response = await fetch("/api/v2/organiser/export/private-workbook", { cache: "no-store" });
+  if (!response.ok) {
+    const type = response.headers.get("content-type") ?? "";
+    return type.includes("application/json") ? response.json() : { ok: false, code: "API_UNAVAILABLE" };
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/i)?.[1] ?? `blorenge-registration-private-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  return { ok: true, filename, blob: await response.blob() };
+}
+
+async function waitingListCsv() {
+  const response = await fetch("/api/v2/organiser/export/waiting-list", { cache: "no-store" });
+  if (!response.ok) {
+    const type = response.headers.get("content-type") ?? "";
+    return type.includes("application/json") ? response.json() : { ok: false, code: "API_UNAVAILABLE" };
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/i)?.[1] ?? `blorenge-waiting-list-${new Date().toISOString().slice(0, 10)}.csv`;
+  return { ok: true, filename, blob: await response.blob() };
+}
+
 export const prototype = {
   hasPrivateInvitation: Boolean(privateInvitationToken),
-  inspectPrivateAccess(purpose = "registration") { return privateInvitationToken ? v2(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }) : Promise.resolve({ ok: true }); },
+  inspectPrivateAccess(purpose = privateInvitationPurpose) { return privateInvitationToken ? v2(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }) : Promise.resolve({ ok: true }); },
   status() { return v2("/registration/status"); },
+  joinWaitingList(input) { return v3("/waiting-list/join", { method: "POST", body: JSON.stringify(input), headers: privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {} }); },
+  async acceptWaitingListOffer(input) { const result = await v3("/waiting-list/accept", { method: "POST", body: JSON.stringify(input), headers: { "x-private-invitation": privateInvitationToken } }); if (result.ok) this.rememberManagementToken(result.managementToken); return result; },
+  offerNextWaitingPlace() { return v3("/organiser/waiting-list/offer-next", { method: "POST" }); },
   rememberManagementToken(token) { if (token) sessionStorage.setItem(MANAGEMENT_TOKEN_SESSION_KEY, token); },
   forgetManagementToken() { sessionStorage.removeItem(MANAGEMENT_TOKEN_SESSION_KEY); },
   managementToken() { return sessionStorage.getItem(MANAGEMENT_TOKEN_SESSION_KEY); },
@@ -35,10 +61,14 @@ export const prototype = {
   resendDeclaration(id) { return v4(`/organiser/registrations/${encodeURIComponent(id)}/declaration/resend`, { method: "POST" }); },
   recordPaperDeclaration(id) { return v4(`/organiser/registrations/${encodeURIComponent(id)}/declaration/paper`, { method: "POST" }); },
   organiserTransfer(id, input) { return v4(`/organiser/registrations/${encodeURIComponent(id)}/transfer`, { method: "POST", body: JSON.stringify(input) }); },
+  emailHealth() { return v4("/organiser/email-health"); },
+  previewEmailRecovery() { return v4("/organiser/email-recovery/preview"); },
+  executeOneEmailRecovery(input) { return v4("/organiser/email-recovery/execute-one", { method: "POST", body: JSON.stringify(input) }); },
   integrationStatus() { return v3("/registration/status"); },
   paymentStatus(token = this.managementToken()) { return token ? v3("/payments/status", { headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
   checkout(token = this.managementToken()) { return token ? v3("/payments/checkout", { method: "POST", headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "PAYMENTS_UNAVAILABLE" }); },
   requestRefund(token = this.managementToken()) { return token ? v3("/refunds/request", { method: "POST", headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
+  requestProviderProofRefund(id) { return v3(`/organiser/registrations/${encodeURIComponent(id)}/provider-proof-refund-request`, { method: "POST" }); },
   managementEntry(token = this.managementToken()) { return token ? v3("/management/entry", { headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
   recoverManagementLink(email) { return v3("/management/recover", { method: "POST", body: JSON.stringify({ email }) }); },
   amendEntry(changes, token = this.managementToken()) { return v3("/management/amend", { method: "POST", body: JSON.stringify(changes), headers: { "x-management-token": token } }); },
@@ -54,6 +84,8 @@ export const prototype = {
   correctEntry(id, changes) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/correct`, { method: "POST", body: JSON.stringify(changes) }); },
   audit(id) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/audit`); },
   async csv() { const result = await v2("/organiser/export/public"); return result.csv ?? ""; },
+  waitingListCsv,
+  privateWorkbook,
   privateInvitations() { return v2("/organiser/private-invitations"); },
   createPrivateInvitation(input) { return v2("/organiser/private-invitations", { method: "POST", body: JSON.stringify(input) }); },
   revokePrivateInvitation(id) { return v2(`/organiser/private-invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" }); },
