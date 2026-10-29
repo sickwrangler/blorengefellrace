@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { EVENT, safeRegistrationState, validateRunner } from "../registration-core.mjs";
 import { authorize } from "./auth.mjs";
-import { PRIVATE_INVITATION_KINDS, issuePrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, authorizePrivateInvitation, calculateEntryPrice } from "./phase3-domain.mjs";
+import { PRIVATE_INVITATION_KINDS, issuePrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, authorizePrivateInvitation, calculateEntryPrice, managementTokenExpiry } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { buildPrivateWorkbookModel, buildTransferHistory, buildWaitingListView, transferSummaryForRegistration, waitingListSummary } from "./private-export.mjs";
 
@@ -17,7 +17,7 @@ export function createDatabase({ environment = "local", registrationState = "tes
   return {
     schemaVersion: 3,
     environment,
-    event: { ...EVENT, capacity, raceDate: EVENT.date, transferRefundCutoffUtc: EVENT.transferRefundCutoff, intendedOpeningDate: null },
+    event: { ...EVENT, capacity, raceDate: EVENT.date, transferCutoffUtc: EVENT.transferCutoff, refundCutoffUtc: EVENT.refundCutoff, transferRefundCutoffUtc: EVENT.transferRefundCutoff, intendedOpeningDate: null },
     registrationState: safeRegistrationState(registrationState, environment),
     phase3RegistrationState: "CLOSED",
     counters: { waitingSequence: 0 },
@@ -37,6 +37,8 @@ export function migrateDevelopmentDatabase(input) {
     ...(db.event ?? {}),
     capacity: EVENT.capacity,
     raceDate: db.event?.raceDate ?? db.event?.date ?? EVENT.date,
+    transferCutoffUtc: EVENT.transferCutoff,
+    refundCutoffUtc: EVENT.refundCutoff,
     transferRefundCutoffUtc: db.event?.transferRefundCutoffUtc ?? db.event?.transferRefundCutoff ?? EVENT.transferRefundCutoff
   };
   if (!Number.isInteger(db.event.wfraMemberPricePence) || db.event.wfraMemberPricePence < 0) db.event.wfraMemberPricePence = EVENT.wfraMemberPricePence;
@@ -198,7 +200,8 @@ export class RegistrationService {
       const registration = { id: registrationId, testReference: `TEST-${crypto.randomBytes(4).toString("hex").toUpperCase()}`, eventId: db.event.id, runnerId, environment: db.environment, entryStatus: accepted ? "accepted" : "waiting_list", placeStatus: "none", waitingSequence: accepted ? null : ++db.counters.waitingSequence, waitingListPosition: null, raceNumber: null, confirmationTokenHash: tokenHash(confirmationToken), createdAt, updatedAt: createdAt, deletedAt: null };
       db.registrations.push(registration); refreshWaiting(db, actor);
       const managementToken = replayableToken(`management:${idempotencyKey}`, registrationId);
-      db.managementTokens.push({ id: id("management"), registrationId, tokenHash: tokenHash(managementToken), issuedAt: createdAt, invalidatedAt: null });
+      const managementExpiresAt = managementTokenExpiry(createdAt);
+      db.managementTokens.push({ id: id("management"), registrationId, tokenHash: tokenHash(managementToken), issuedAt: createdAt, expiresAt: managementExpiresAt, invalidatedAt: null });
       db.idempotency.push({ operation: "create", key: idempotencyKey, registrationId, createdAt });
       db.testProgress.submittedReference = registration.testReference;
       audit(db, actor, "registration_created", registrationId, null, { entryStatus: registration.entryStatus });
@@ -207,7 +210,7 @@ export class RegistrationService {
         registrationId,
         template: "continue_to_payment",
         intendedRecipientAddress: normalized.email,
-        data: { runnerName: `${normalized.firstName} ${normalized.lastName}`, secureUrl: this.managementUrl(managementToken) }
+        data: { runnerName: `${normalized.firstName} ${normalized.lastName}`, secureUrl: this.managementUrl(managementToken), managementExpiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: db.event.transferCutoffUtc ?? db.event.transferRefundCutoffUtc }
       }, `registration:${registrationId}:payment-required:v1`);
       return { ok: true, registration: view(db, registration, { runnerSafe: true }), confirmationToken, managementToken };
     });

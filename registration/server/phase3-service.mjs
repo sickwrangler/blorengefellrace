@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { acceptWaitingListOffer, authorizePrivateInvitation, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
+import { acceptWaitingListOffer, authorizePrivateInvitation, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
-import { deliverRegistrationCommunication } from "./communications.mjs";
+import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken } from "./order-service.mjs";
 import { reconcileEmailHealth } from "./email-health.mjs";
 
@@ -16,20 +16,70 @@ const paymentFor = (state, registration) => state.payments.find((item) => item.r
 const refundFor = (state, registration) => [...state.refundRequests].reverse().find((item) => item.registrationId === registration?.id);
 const emergencyFor = (state, registration) => state.emergencyContacts?.find((item) => item.registrationId === registration?.id);
 
-function registrationForToken(state, token) {
-  const stored = state.managementTokens.find((item) => item.tokenHash === hashToken(token) && !item.invalidatedAt);
-  return stored ? state.registrations.find((item) => item.id === stored.registrationId && !item.deletedAt) : null;
+function managementAccess(state, token, at = new Date()) {
+  const tokenHash = hashToken(token);
+  const stored = state.managementTokens.find((item) => item.tokenHash === tokenHash);
+  if (!stored) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
+  if (stored.invalidatedAt) return { ok: false, code: "MANAGEMENT_TOKEN_EXPIRED" };
+  if (managementTokenIsExpired(stored, at)) return { ok: false, code: "MANAGEMENT_TOKEN_EXPIRED" };
+  const registration = state.registrations.find((item) => item.id === stored.registrationId && !item.deletedAt);
+  return registration ? { ok: true, registration } : { ok: false, code: "MANAGEMENT_ENTRY_UNAVAILABLE" };
 }
 
-function managementView(state, registration, at = new Date()) {
+function unavailable(code, deadline = null) { return { available: false, code, deadline }; }
+function available() { return { available: true, code: null, deadline: null }; }
+
+export function managementActionEligibility(state, registration, { at = new Date(), paymentsAvailable = true } = {}) {
+  const payment = paymentFor(state, registration);
+  const refund = refundFor(state, registration);
+  const active = activeRegistration(registration);
+  const transferCutoff = state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc;
+  const refundCutoff = state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc;
+  const beforeTransferCutoff = new Date(at) <= new Date(transferCutoff);
+  const beforeRefundCutoff = new Date(at) <= new Date(refundCutoff);
+  const acceptingPayments = ["PRIVATE_LIVE", "OPEN", "test"].includes(state.registrationState);
+  const paymentCanContinue = ["created", "not_configured", "checkout_pending", "failed", "expired", "abandoned"].includes(payment?.status);
+  const declarationComplete = (registration.declarationStatus ?? "complete") === "complete";
+
+  let continuePayment = available();
+  if (!active) continuePayment = unavailable("ENTRY_INACTIVE");
+  else if (!paymentsAvailable) continuePayment = unavailable("PAYMENTS_UNAVAILABLE");
+  else if (!acceptingPayments) continuePayment = unavailable("REGISTRATION_NOT_ACCEPTING");
+  else if (payment?.status === "paid") continuePayment = unavailable("PAYMENT_ALREADY_COMPLETE");
+  else if (payment?.status === "processing") continuePayment = unavailable("PAYMENT_PROCESSING");
+  else if (payment?.status === "refunded" || refund?.status === "refunded") continuePayment = unavailable("PAYMENT_REFUNDED");
+  else if (!paymentCanContinue) continuePayment = unavailable("PAYMENT_NOT_AVAILABLE");
+
+  let signDeclaration = available();
+  if (!active) signDeclaration = unavailable("ENTRY_INACTIVE");
+  else if (declarationComplete) signDeclaration = unavailable("DECLARATION_COMPLETE");
+  else if (registration.placeStatus !== "confirmed") signDeclaration = unavailable("DECLARATION_AFTER_PAYMENT");
+
+  const amend = active ? available() : unavailable("ENTRY_INACTIVE");
+  let transfer = available();
+  if (!active) transfer = unavailable("ENTRY_INACTIVE");
+  else if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") transfer = unavailable("TRANSFER_PAYMENT_REQUIRED");
+  else if (!beforeTransferCutoff) transfer = unavailable("TRANSFER_CUTOFF_PASSED", transferCutoff);
+
+  let requestRefundAction = available();
+  if (!active) requestRefundAction = unavailable("ENTRY_INACTIVE");
+  else if (!beforeRefundCutoff) requestRefundAction = unavailable("REFUND_CUTOFF_PASSED", refundCutoff);
+  else if (payment?.status !== "paid") requestRefundAction = unavailable("REFUND_NOT_READY");
+  else if (["requested", "approved"].includes(refund?.status)) requestRefundAction = unavailable("REFUND_ALREADY_IN_PROGRESS");
+  else if (refund?.status === "refunded") requestRefundAction = unavailable("PAYMENT_REFUNDED");
+
+  return { continuePayment, signDeclaration, amend, transfer, requestRefund: requestRefundAction };
+}
+
+function managementView(state, registration, at = new Date(), { paymentsAvailable = true } = {}) {
   const runner = runnerFor(state, registration);
   const payment = paymentFor(state, registration);
   const refund = refundFor(state, registration);
-  const beforeCutoff = new Date(at) <= new Date(state.event.transferRefundCutoffUtc);
   const paymentState = runnerPaymentState(state, registration.id);
   const emergency = emergencyFor(state, registration);
-  const stateName = refund?.status === "requested" ? "refund_requested" : refund?.status === "approved" ? "refund_approved" : refund?.status === "rejected" ? "refund_rejected" : paymentState.state;
+  const stateName = refund?.status === "requested" ? "refund_requested" : refund?.status === "approved" ? "refund_approved" : refund?.status === "rejected" ? "refund_rejected" : refund?.status === "refunded" ? "refunded" : paymentState.state;
   const labels = { refund_requested: "Refund requested", refund_approved: "Refund approved", refund_rejected: "Refund request not approved", refunded: "Refund completed" };
+  const actions = managementActionEligibility(state, registration, { at, paymentsAvailable });
   return {
     ok: true,
     registration: {
@@ -43,10 +93,15 @@ function managementView(state, registration, at = new Date()) {
       emergencyContact: { name: emergency?.name ?? "", phone: emergency?.phone ?? "" },
       entryStatus: registration.entryStatus, placeStatus: registration.placeStatus,
       declaration: { status: registration.declarationStatus ?? "complete", completionMethod: registration.declarationCompletionMethod ?? "digital_during_entry", clearedToStart: (registration.declarationStatus ?? "complete") === "complete" && registration.placeStatus === "confirmed" },
-      payment: { state: stateName, label: labels[stateName] ?? paymentState.label, canContinue: ["created", "not_configured", "checkout_pending", "failed", "expired"].includes(payment?.status) },
-      amendmentEligible: beforeCutoff && activeRegistration(registration),
-      transferEligible: beforeCutoff && activeRegistration(registration),
-      refundEligible: beforeCutoff && payment?.status === "paid" && !refund,
+      payment: { state: stateName, label: labels[stateName] ?? paymentState.label, canContinue: actions.continuePayment.available },
+      actions,
+      policy: {
+        transferCutoffUtc: state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc,
+        refundCutoffUtc: state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc
+      },
+      amendmentEligible: actions.amend.available,
+      transferEligible: actions.transfer.available,
+      refundEligible: actions.requestRefund.available,
       raceNumber: registration.raceNumber ?? null
     }
   };
@@ -74,28 +129,29 @@ export class Phase3IntegrationService {
     return this.repository.transaction(async (state) => {
       const accepting = (["local", "development"].includes(state.environment) && (state.registrationState === "test" || ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState))) || (state.environment === "production" && ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState));
       if (!accepting) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
-      const registration = registrationForToken(state, managementToken);
-      if (!registration) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
-      return beginStripeCheckout(state, registration.id, this.stripeGateway, { successUrl: `${this.publicBaseUrl}/registration/payment-return.html`, cancelUrl: `${this.publicBaseUrl}/registration/payment-return.html?cancelled=1`, at });
+      const access = managementAccess(state, managementToken, at);
+      if (!access.ok) return access;
+      if (!activeRegistration(access.registration)) return { ok: false, code: "ENTRY_INACTIVE" };
+      return beginStripeCheckout(state, access.registration.id, this.stripeGateway, { successUrl: `${this.publicBaseUrl}/registration/payment-return.html`, cancelUrl: `${this.publicBaseUrl}/registration/payment-return.html?cancelled=1`, at });
     });
   }
 
-  async paymentStatus(managementToken) {
-    const state = await this.repository.read(); const registration = registrationForToken(state, managementToken);
-    if (!registration) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
-    const view = managementView(state, registration);
-    return { ...runnerPaymentState(state, registration.id), state: view.registration.payment.state, label: view.registration.payment.label };
+  async paymentStatus(managementToken, at = new Date()) {
+    const state = await this.repository.read(); const access = managementAccess(state, managementToken, at);
+    if (!access.ok) return access;
+    const view = managementView(state, access.registration, new Date(), { paymentsAvailable: Boolean(this.stripeGateway) });
+    return { ...runnerPaymentState(state, access.registration.id), state: view.registration.payment.state, label: view.registration.payment.label };
   }
 
   async managementEntry(managementToken, at = new Date()) {
-    const state = await this.repository.read(); const registration = registrationForToken(state, managementToken);
-    return registration ? managementView(state, registration, at) : { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
+    const state = await this.repository.read(); const access = managementAccess(state, managementToken, at);
+    return access.ok ? managementView(state, access.registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }) : access;
   }
 
   async recoverManagementLink(emailAddress, at = new Date()) {
     const email = normalizeEmail(emailAddress);
     const generic = { ok: true, message: "If an eligible entry matches, a secure link will be sent." };
-    try { return await this.repository.transaction(async (state) => {
+    try { await this.repository.transaction(async (state) => {
       state.managementRecoveryAttempts ??= [];
       const emailHash = hashToken(email);
       const recent = state.managementRecoveryAttempts.filter((item) => item.emailHash === emailHash && new Date(item.requestedAt) > new Date(new Date(at).getTime() - 60 * 60_000));
@@ -107,17 +163,19 @@ export class Phase3IntegrationService {
         const runner = runnerFor(state, registration);
         const issued = issueManagementToken(state, registration.id, { actorType: "system", id: "management-recovery" }, at);
         const tokenId = state.managementTokens.find((item) => item.registrationId === registration.id && !item.invalidatedAt)?.id;
-        await this.communicate(state, { registrationId: registration.id, template: "management_link", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token) } }, `registration:${registration.id}:management-recovery:${tokenId}`, at);
+        const delivery = await this.communicate(state, { registrationId: registration.id, template: "management_link", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token), managementExpiresAt: issued.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc } }, `registration:${registration.id}:management-recovery:${tokenId}`, at);
+        if (["failed", "disabled"].includes(delivery.receipt?.delivery)) return { ok: false, code: "MANAGEMENT_LINK_DELIVERY_FAILED" };
       }
       return generic;
-    }); } catch { return generic; }
+    }); return generic; } catch { return generic; }
   }
 
   amend(managementToken, changes, at = new Date()) {
     return this.repository.transaction(async (state) => {
-      const registration = registrationForToken(state, managementToken);
-      if (!registration || !activeRegistration(registration)) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
-      if (new Date(at) > new Date(state.event.transferRefundCutoffUtc)) return { ok: false, code: "AMENDMENT_CUTOFF_PASSED" };
+      const access = managementAccess(state, managementToken, at);
+      if (!access.ok) return access;
+      const registration = access.registration;
+      if (!activeRegistration(registration)) return { ok: false, code: "ENTRY_INACTIVE" };
       const runner = runnerFor(state, registration); const changedFields = [];
       const emergencyName = changes.emergencyContactName === undefined ? undefined : String(changes.emergencyContactName).trim();
       const emergencyPhone = changes.emergencyContactPhone === undefined ? undefined : String(changes.emergencyContactPhone).trim();
@@ -133,15 +191,20 @@ export class Phase3IntegrationService {
       if (runner.wfraMember !== true) runner.wfraMembershipNumber = null;
       registration.updatedAt = iso(at);
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: "runner", actorId: null, action: "runner_details_amended", subjectId: registration.id, before: null, after: { fields: changedFields }, environment: state.environment });
-      return managementView(state, registration, at);
+      return managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) });
     });
   }
 
   transferRegistration({ managementToken = null, registrationId = null, input, actor, allowCutoffOverride = false }, at = new Date()) {
     return this.repository.transaction(async (state) => {
-      const registration = managementToken ? registrationForToken(state, managementToken) : state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
-      if (!registration || !activeRegistration(registration)) return { ok: false, code: managementToken ? "MANAGEMENT_TOKEN_INVALID" : "NOT_FOUND" };
-      const afterCutoff = new Date(at) > new Date(state.event.transferRefundCutoffUtc);
+      const access = managementToken ? managementAccess(state, managementToken, at) : null;
+      if (managementToken && !access.ok) return access;
+      const registration = managementToken ? access.registration : state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
+      if (!registration || !activeRegistration(registration)) return { ok: false, code: managementToken ? "ENTRY_INACTIVE" : "NOT_FOUND" };
+      const payment = paymentFor(state, registration);
+      if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") return { ok: false, code: "TRANSFER_PAYMENT_REQUIRED" };
+      const transferCutoff = state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc;
+      const afterCutoff = new Date(at) > new Date(transferCutoff);
       if (afterCutoff && !allowCutoffOverride) return { ok: false, code: managementToken ? "TRANSFER_CUTOFF_PASSED" : "ORGANISER_OVERRIDE_REQUIRED" };
       const next = input.runner ?? {};
       const errors = validateProductionRunner(next, { raceDate: state.event.raceDate, under18EntriesEnabled: state.event.under18EntriesEnabled !== false });
@@ -164,9 +227,13 @@ export class Phase3IntegrationService {
       const declarationToken = issueDeclarationToken(state, registration.id, at);
       const action = actor.actorType === "organiser" ? "organiser_entry_transferred" : "entry_transferred";
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType, actorId: actor.id ?? null, action, subjectId: registration.id, before: { runnerId: previous.id }, after: { runnerId: runner.id, declarationStatus: "pending", cutoffOverride: Boolean(afterCutoff && allowCutoffOverride) }, environment: state.environment });
-      await this.communicate(state, { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} }, `registration:${registration.id}:transfer-old:${registration.updatedAt}`, at);
-      await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, managementUrl: this.managementUrl(issued.token), secureUrl: this.orders.declarationUrl(declarationToken, issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
-      return managementView(state, registration, at);
+      const replacementDelivery = await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, managementUrl: this.managementUrl(issued.token), managementExpiresAt: issued.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: transferCutoff, secureUrl: this.orders.declarationUrl(declarationToken, issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
+      if (["failed", "disabled"].includes(replacementDelivery.receipt?.delivery)) return { ok: false, code: "TRANSFER_DELIVERY_FAILED" };
+      const previousMessage = { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} };
+      const previousKey = `registration:${registration.id}:transfer-old:${registration.updatedAt}`;
+      try { await this.communicate(state, previousMessage, previousKey, at); }
+      catch (error) { recordRegistrationCommunication(state, previousMessage, { delivery: "failed", externalCall: true, failureCategory: String(error?.name || "email_provider_error").slice(0, 80) }, { idempotencyKey: previousKey, at }); }
+      return managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) });
     });
   }
 
@@ -185,7 +252,8 @@ export class Phase3IntegrationService {
       const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item)); const runner = runnerFor(state, registration);
       if (!registration || !runner) return { ok: false, code: "NOT_FOUND" };
       const issued = issueManagementToken(state, registration.id, actor, at);
-      await this.communicate(state, { registrationId, template: "management_link", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token) } }, `registration:${registration.id}:management-organiser:${registration.updatedAt}:${state.managementTokens.at(-1).id}`, at);
+      const delivery = await this.communicate(state, { registrationId, template: "management_link", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token), managementExpiresAt: issued.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc } }, `registration:${registration.id}:management-organiser:${registration.updatedAt}:${state.managementTokens.at(-1).id}`, at);
+      if (["failed", "disabled"].includes(delivery.receipt?.delivery)) return { ok: false, code: "MANAGEMENT_LINK_DELIVERY_FAILED" };
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType ?? "organiser", actorId: actor.id ?? null, action: "management_link_resent", subjectId: registration.id, before: null, after: {}, environment: state.environment });
       return { ok: true };
     });
@@ -205,8 +273,10 @@ export class Phase3IntegrationService {
 
   requestRefund(managementToken, at = new Date()) {
     return this.repository.transaction(async (state) => {
-      const registration = registrationForToken(state, managementToken);
-      if (!registration) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
+      const access = managementAccess(state, managementToken, at);
+      if (!access.ok) return access;
+      const registration = access.registration;
+      if (!activeRegistration(registration)) return { ok: false, code: "ENTRY_INACTIVE" };
       const payment = paymentFor(state, registration);
       if (payment?.status !== "paid") return { ok: false, code: "REFUND_NOT_READY" };
       const existing = state.refundRequests.find((item) => item.registrationId === registration.id && ["requested", "approved"].includes(item.status));

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { createAzureTableRepository, createMemoryRepository } from "../registration/server/repositories.mjs";
 import { createDatabase } from "../registration/server/service.mjs";
 import { OrderRegistrationService, DEFAULT_MAX_RUNNERS_PER_ORDER, buildPublicStartList } from "../registration/server/order-service.mjs";
-import { capacitySummary, decideRefund, requestRefund } from "../registration/server/phase3-domain.mjs";
+import { capacitySummary, decideRefund, issueManagementToken, requestRefund } from "../registration/server/phase3-domain.mjs";
 import { createStripeGateway, executeApprovedStripeRefund } from "../registration/server/phase3-integrations.mjs";
 import { createApi } from "../registration/server/api.mjs";
 import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
@@ -161,6 +161,17 @@ test("normal single-runner payment sends one consolidated confirmation", async (
   const { orders, sent } = setup(); const created = await createOrder(orders); await add(orders, created.orderToken, 1, "now"); await orders.checkout(created.orderToken, start);
   await orders.webhook({ id: "evt_single_paid", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_test_single" } } }, start);
   assert.deepEqual(sent.map((message) => message.template), ["entry_confirmed"]);
+});
+
+test("payment confirmation preserves the management token used to recover an unpaid order", async () => {
+  const current = setup(); const created = await createOrder(current.orders); const added = await add(current.orders, created.orderToken, 1, "now");
+  let recoveryToken;
+  await current.repository.transaction((state) => { recoveryToken = issueManagementToken(state, added.order.registrations[0].id, { actorType: "system" }, start).token; return { ok: true }; });
+  await current.orders.checkout(created.orderToken, start);
+  await current.orders.webhook({ id: "evt_recovered_order_paid", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_test_recovered_order" } } }, start);
+  const phase3 = new Phase3IntegrationService({ repository: current.repository, stripeGateway: current.stripeGateway, emailAdapter: { kind: "test", async send() { return { delivery: "test", externalCall: false }; } }, publicBaseUrl: "https://development.example" });
+  assert.equal((await phase3.paymentStatus(recoveryToken, start)).state, "paid");
+  assert.equal((await current.repository.read()).managementTokens.filter((item) => !item.invalidatedAt).length, 2);
 });
 
 test("public start list is empty and excludes unpaid, reserved and waiting-list records", async () => {
@@ -377,7 +388,7 @@ test("organiser transfer preserves payment/place, revokes old links and resets d
   const phase3 = new Phase3IntegrationService({ repository: paid.repository, stripeGateway: paid.stripeGateway, emailAdapter: { kind: "test", async send(message) { paid.sent.push(message); return { delivery: "test", externalCall: false }; } }, publicBaseUrl: "https://development.example" });
   const amended = await phase3.amend(oldManagementToken, { phone: "07700 900999", club: "Corrected Club" }, start); assert.equal(amended.ok, true); assert.equal((await paid.repository.read()).registrations[1].runnerId, oldRunnerId);
   const transferred = await phase3.organiserTransfer(admin, target.id, { runner: runner(3) }, start); assert.equal(transferred.ok, true); assert.equal("replacementManagementToken" in transferred, false);
-  assert.equal((await phase3.managementEntry(oldManagementToken, start)).code, "MANAGEMENT_TOKEN_INVALID"); assert.equal((await paid.orders.inspectDeclaration(oldDeclarationToken)).code, "LINK_UNAVAILABLE");
+  assert.equal((await phase3.managementEntry(oldManagementToken, start)).code, "MANAGEMENT_TOKEN_EXPIRED"); assert.equal((await paid.orders.inspectDeclaration(oldDeclarationToken)).code, "LINK_UNAVAILABLE");
   const after = await paid.repository.read(); const registration = after.registrations.find((item) => item.id === target.id);
   assert.notEqual(registration.runnerId, oldRunnerId); assert.equal(registration.placeStatus, "confirmed"); assert.equal(registration.declarationStatus, "pending"); assert.equal(after.payments[0].id, paymentId); assert.equal(after.payments[0].status, "paid");
   assert.ok(after.auditEvents.find((item) => item.action === "runner_details_amended")); assert.ok(after.auditEvents.find((item) => item.action === "organiser_entry_transferred" && item.after.cutoffOverride === false));

@@ -34,6 +34,16 @@ test("runner registration removes prototype and internal operational wording", a
   assert.doesNotMatch(runner, /form\.elements\.declarationTiming/);
 });
 
+test("removing the final basket runner clears review and restarts runner details", async () => {
+  const runner = await read("registration/runner.mjs");
+  assert.match(runner, /function restartEmptyOrder\(\)/);
+  assert.match(runner, /order-runner-list"\)\.replaceChildren\(\)/);
+  assert.match(runner, /order-total"\)\.textContent = "£0\.00"/);
+  assert.match(runner, /order-review"\)\.hidden = true/);
+  assert.match(runner, /currentOrder\.runnerCount === 0\) restartEmptyOrder\(\)/);
+  assert.match(runner, /Your basket is empty\. Add a runner to start again\./);
+});
+
 test("runner membership wording introduces the association and links to joining guidance", async () => {
   const [html, runner] = await Promise.all([
     read("registration/index.html"),
@@ -133,6 +143,8 @@ test("manage page is read-only by default with separate accessible dialogs", asy
   assert.match(html, /<button[^>]*id="edit-entry"[^>]*>Edit entry<\/button>/);
   assert.match(html, /<button[^>]*id="transfer-entry"[^>]*>Transfer entry<\/button>/);
   assert.match(html, /Transfer this race place to another runner\./);
+  assert.match(html, /id="unavailable-actions"/);
+  assert.match(html, /Why some actions are unavailable/);
   assert.doesNotMatch(html, /id="edit-entry"[^>]*>Transfer entry/);
 
   assert.match(script, /Payment required/);
@@ -143,6 +155,10 @@ test("manage page is read-only by default with separate accessible dialogs", asy
   assert.match(script, /showModal\(\)/);
   assert.match(script, /returnFocusTo\?\.focus\(\)/);
   assert.match(script, /confirm\("Transfer this race place/);
+  assert.match(script, /TRANSFER_CUTOFF_PASSED/);
+  assert.match(script, /Runner transfers closed on/);
+  assert.match(script, /REFUND_ALREADY_IN_PROGRESS/);
+  assert.match(script, /MANAGEMENT_TOKEN_EXPIRED|runnerMessageForCode/);
   assert.match(script, /✓/);
   assert.match(script, /!/);
 

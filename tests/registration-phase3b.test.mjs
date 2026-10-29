@@ -223,6 +223,7 @@ test("v3 API keeps integrations unavailable until explicitly configured", async 
 test("configured Phase 3 routes report disabled providers and cannot make external calls", async () => {
   const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
   const created = beginProductionRegistration(state, { runner: runner(), declaration: declaration() }, { at });
+  state.managementTokens[0].expiresAt = "2099-01-01T00:00:00.000Z";
   const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), emailAdapter: createControlledDevelopmentEmail() });
   const api = createApi({ service: {}, phase3Integrations: phase3, environment: "development" });
   const integrationStatus = await api({ method: "GET", pathname: "/api/v3/registration/status" });
@@ -236,6 +237,7 @@ test("configured Phase 3 routes report disabled providers and cannot make extern
 test("v3 Checkout/status and raw signed webhook routes use the Phase 3 integration service", async () => {
   const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
   const created = beginProductionRegistration(state, { runner: runner(), declaration: declaration() }, { at });
+  state.managementTokens[0].expiresAt = "2099-01-01T00:00:00.000Z";
   const provider = gateway();
   const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), stripeGateway: provider.gateway, emailAdapter: createControlledDevelopmentEmail(), publicBaseUrl: "https://development.example" });
   const api = createApi({ service: {}, phase3Integrations: phase3, environment: "development" });
@@ -275,7 +277,9 @@ test("secure runner refund request requires organiser approval before one full S
 
 test("v3 refund request and organiser decision routes preserve the authentication boundary", async () => {
   const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
+  state.event.refundCutoffUtc = "2099-10-28T23:59:00.000Z";
   const created = beginProductionRegistration(state, { runner: runner(8), declaration: declaration(8) }, { at });
+  state.managementTokens[0].expiresAt = "2099-01-01T00:00:00.000Z";
   const provider = gateway();
   const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), stripeGateway: provider.gateway, emailAdapter: createControlledDevelopmentEmail() });
   await phase3.checkout(created.managementToken, at);
@@ -332,7 +336,7 @@ test("management recovery is non-enumerating, rotates tokens and is rate limited
   assert.deepEqual(known, absent); assert.equal(mail.sent.length, 2);
   const match = mail.sent.at(-1).text.match(/#token=([^\s]+)/); assert.ok(match);
   const replacement = decodeURIComponent(match[1]);
-  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_EXPIRED");
   assert.equal((await phase3.managementEntry(replacement, at)).ok, true);
   await phase3.recoverManagementLink("phase3b-2@example.com", at);
   await phase3.recoverManagementLink("phase3b-2@example.com", at);
@@ -369,10 +373,15 @@ test("transfer resets declaration state, rotates ownership and invalidates the o
   const repository = createMemoryRepository(createDatabase({ environment: "development", registrationState: "test" })); const mail = controlledEmail();
   const service = new RegistrationService({ repository, paymentAdapter: createMockPaymentAdapter(), emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
   const created = await service.create(phase2Runner(4), { idempotencyKey: "phase3b-transfer-link-4" });
+  await repository.transaction((state) => {
+    state.payments.find((item) => item.registrationId === state.registrations[0].id).status = "paid";
+    state.registrations[0].placeStatus = "confirmed";
+    return { ok: true };
+  });
   const phase3 = new Phase3IntegrationService({ repository, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
   const transferred = await phase3.transfer(created.managementToken, { runner: runner(41) }, at);
   assert.equal(transferred.ok, true); assert.equal(transferred.registration.runner.firstName, "Runner 41");
-  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_EXPIRED");
   const state = await repository.read();
   assert.equal("replacementManagementToken" in transferred, false);
   assert.equal(state.managementTokens.filter((item) => !item.invalidatedAt).length, 1);
@@ -414,5 +423,5 @@ test("organisers can revoke a management link without learning its token", async
   const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), emailAdapter: createControlledDevelopmentEmail() });
   assert.equal((await phase3.revokeManagementLink({ authenticated: false }, created.registration.id, at)).code, "FORBIDDEN");
   assert.equal((await phase3.revokeManagementLink(admin, created.registration.id, at)).revoked, 1);
-  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_INVALID");
+  assert.equal((await phase3.managementEntry(created.managementToken, at)).code, "MANAGEMENT_TOKEN_EXPIRED");
 });

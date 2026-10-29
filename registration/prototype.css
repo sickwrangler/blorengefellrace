@@ -51,6 +51,10 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border: .15rem solid #
 .manage-section { padding-block: 1rem; border-top: 1px solid var(--colour-stone); }
 .manage-section h3 { margin-bottom: .6rem; }
 .manage-section p { margin-bottom: .5rem; }
+.action-availability { margin-top: 1.25rem; padding: 1rem; border-left: .25rem solid var(--colour-bracken); background: var(--colour-paper); }
+.action-availability h4 { margin-bottom: .5rem; }
+.action-availability ul { margin: 0; padding-left: 1.25rem; }
+.action-availability li + li { margin-top: .4rem; }
 .entry-dialog { width: min(100% - 2rem, 48rem); max-height: calc(100vh - 2rem); padding: clamp(1rem, 4vw, 2rem); overflow-y: auto; border: 1px solid var(--colour-stone-dark); background: var(--colour-paper-light); color: var(--colour-ink); }
 .entry-dialog::backdrop { background: rgb(20 24 20 / .68); }
 .dialog-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }

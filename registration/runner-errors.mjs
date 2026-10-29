@@ -36,12 +36,18 @@ export function runnerMessageForCode(code) {
     GUARDIAN_MUST_COMPLETE_DECLARATION: "A parent or legal guardian must provide their full name and confirm the declaration.",
     GUARDIAN_NAME_MATCHES_RUNNER: "Enter the parent or legal guardian's full name, not the runner's name.",
     PAYMENTS_UNAVAILABLE: "Online payment is not available yet. Your synthetic entry details have been retained.",
-    MANAGEMENT_TOKEN_INVALID: "This secure entry link is no longer available.",
+    MANAGEMENT_TOKEN_INVALID: "This secure entry link is not valid. Check that you opened the complete link from your email, or request a replacement below.",
+    MANAGEMENT_TOKEN_EXPIRED: "This secure entry link has expired or was replaced. Request a new link below.",
+    MANAGEMENT_ENTRY_UNAVAILABLE: "This entry is no longer available through runner self-service. Contact the organiser if you need help.",
+    ENTRY_INACTIVE: "This entry is no longer active, so it cannot be changed through runner self-service.",
     CAPACITY_FULL: "There are currently no entry places available.",
     REFUND_NOT_READY: "A refund can only be requested after payment is confirmed.",
+    REFUND_ALREADY_IN_PROGRESS: "A refund request is already being reviewed or processed.",
     REFUND_CUTOFF_PASSED: "The refund-request deadline has passed. Please contact the organiser if you need help.",
     AMENDMENT_CUTOFF_PASSED: "The amendment deadline has passed. Please contact the organiser if you need help.",
     TRANSFER_CUTOFF_PASSED: "The transfer deadline has passed. Please contact the organiser if you need help.",
+    TRANSFER_PAYMENT_REQUIRED: "This entry must have a confirmed payment and race place before it can be transferred.",
+    TRANSFER_DELIVERY_FAILED: "The transfer was not completed because the new runner’s secure links could not be delivered. No entry details were changed. Please try again later or contact the organiser.",
     MANAGEMENT_UNAVAILABLE: "Entry management is temporarily unavailable. Please try again later."
   };
   return messages[code] ?? "We could not complete that request. Please review your details and try again.";
