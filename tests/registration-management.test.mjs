@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { beginProductionRegistration, capacitySummary, createPhase3State } from "../registration/server/phase3-domain.mjs";
+import { beginProductionRegistration, capacitySummary, createPhase3State, issueManagementToken } from "../registration/server/phase3-domain.mjs";
 import { createApi } from "../registration/server/api.mjs";
+import { renderRegistrationEmail } from "../registration/server/email-templates.mjs";
 import { Phase3IntegrationService, managementActionEligibility } from "../registration/server/phase3-service.mjs";
 import { createMemoryRepository } from "../registration/server/repositories.mjs";
 
@@ -88,7 +89,49 @@ test("deadline policies retain safe amendments, close refunds first and close tr
   assert.equal(amended.registration.runner.phone, "07700 900999");
   assert.equal(amended.registration.actions.amend.available, true);
   assert.equal((await service.requestRefund(created.managementToken, afterRefundCutoff)).code, "REFUND_CUTOFF_PASSED");
-  assert.equal((await service.transfer(created.managementToken, { runner: runner(2) }, afterTransferCutoff)).code, "TRANSFER_CUTOFF_PASSED");
+  const replacement = await repositoryWithFreshToken(service, afterTransferCutoff);
+  assert.equal((await service.transfer(replacement, { runner: runner(2) }, afterTransferCutoff)).code, "TRANSFER_CUTOFF_PASSED");
+});
+
+async function repositoryWithFreshToken(service, at) {
+  let value;
+  await service.repository.transaction((state) => { value = issueManagementToken(state, state.registrations[0].id, { actorType: "system", id: "test-recovery" }, at).token; return { ok: true }; });
+  return value;
+}
+
+test("management access expires after 24 hours with a legacy issuedAt fallback", async () => {
+  const { state, created } = paidEntry();
+  const { service, repository } = serviceFor(state);
+  const issuedAt = new Date(state.managementTokens[0].issuedAt);
+  assert.equal((await service.managementEntry(created.managementToken, new Date(issuedAt.getTime() + 24 * 3_600_000 - 1))).ok, true);
+  assert.equal((await service.managementEntry(created.managementToken, new Date(issuedAt.getTime() + 24 * 3_600_000))).code, "MANAGEMENT_TOKEN_EXPIRED");
+  await repository.transaction((working) => { delete working.managementTokens[0].expiresAt; return { ok: true }; });
+  assert.equal((await service.managementEntry(created.managementToken, new Date(issuedAt.getTime() + 24 * 3_600_000))).code, "MANAGEMENT_TOKEN_EXPIRED");
+});
+
+test("website recovery replaces an expired link and sends it only to the registered address", async () => {
+  const { state, created } = paidEntry();
+  const sent = []; const { service, repository } = serviceFor(state, { sent });
+  const recoveryAt = new Date(new Date(state.managementTokens[0].issuedAt).getTime() + 25 * 3_600_000);
+  assert.equal((await service.managementEntry(created.managementToken, recoveryAt)).code, "MANAGEMENT_TOKEN_EXPIRED");
+  const result = await service.recoverManagementLink("RUNNER-1@EXAMPLE.COM", recoveryAt);
+  assert.equal(result.ok, true); assert.equal(sent.length, 1);
+  assert.equal(sent[0].intendedRecipientAddress, "runner-1@example.com");
+  const replacement = decodeURIComponent(new URL(sent[0].data.secureUrl).hash.slice(1).split("token=")[1]);
+  assert.equal((await service.managementEntry(replacement, recoveryAt)).ok, true);
+  assert.equal((await service.managementEntry(created.managementToken, recoveryAt)).code, "MANAGEMENT_TOKEN_EXPIRED");
+  const stored = await repository.read();
+  assert.equal(stored.managementTokens.filter((item) => !item.invalidatedAt).length, 1);
+  assert.equal(stored.managementTokens.at(-1).expiresAt, new Date(recoveryAt.getTime() + 24 * 3_600_000).toISOString());
+});
+
+test("failed recovery delivery does not revoke the previous usable management link", async () => {
+  const { state, created } = paidEntry();
+  const { service, repository } = serviceFor(state, { emailAdapter: { kind: "test", async send() { return { delivery: "failed", externalCall: true, failureCategory: "synthetic_failure" }; } } });
+  const before = await repository.read();
+  assert.equal((await service.recoverManagementLink("runner-1@example.com", beforeCutoff)).ok, true, "the public response remains non-enumerating");
+  assert.deepEqual(await repository.read(), before);
+  assert.equal((await service.managementEntry(created.managementToken, beforeCutoff)).ok, true);
 });
 
 test("unpaid and payment-reserved entries cannot be transferred", async () => {
@@ -211,4 +254,25 @@ test("management API returns distinct HTTP responses for invalid and superseded 
   await service.recoverManagementLink("runner-1@example.com", beforeCutoff);
   const expired = await api({ method: "GET", pathname: "/api/v3/management/entry", hostname: "development.example", headers: { "x-management-token": created.managementToken } });
   assert.equal(expired.status, 410); assert.equal(expired.body.code, "MANAGEMENT_TOKEN_EXPIRED");
+});
+
+test("confirmation and transfer emails explain self-service transfer and keep management links distinct", () => {
+  const data = {
+    runnerName: "Runner Example",
+    raceDate: "2026-11-28",
+    transferDeadline: "2026-11-27T23:59:00.000Z",
+    managementExpiresAt: "2026-10-30T12:00:00.000Z",
+    managementUrl: "https://development.example/registration/manage.html#token=management-token",
+    managementRecoveryUrl: "https://development.example/registration/manage.html",
+    secureUrl: "https://development.example/registration/declaration.html#token=declaration-token"
+  };
+  const confirmation = renderRegistrationEmail("entry_confirmed", data);
+  assert.match(confirmation.text, /transfer the paid place/i);
+  assert.match(confirmation.text, /Transfer deadline:/);
+  assert.match(confirmation.text, /This management link expires:/);
+  assert.match(confirmation.text, /Expired link\? Request a replacement:/);
+  const transfer = renderRegistrationEmail("entry_transferred", data);
+  assert.match(transfer.html, /href="https:\/\/development\.example\/registration\/declaration\.html#token=declaration-token">Sign your race declaration/);
+  assert.match(transfer.html, /href="https:\/\/development\.example\/registration\/manage\.html#token=management-token">Manage your entry/);
+  assert.doesNotMatch(transfer.html, /declaration-token">Manage your entry/);
 });

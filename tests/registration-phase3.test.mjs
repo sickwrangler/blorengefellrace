@@ -292,9 +292,10 @@ test("transfer before cutoff rotates the management token and names lock after c
   const firstToken = issueManagementToken(state, registration.id, admin, beforeCutoff).token;
   const transferred = amendRunner(state, firstToken, { firstName: "New", lastName: "Runner", email: "new.runner@example.com" }, { at: beforeCutoff });
   assert.ok(transferred.replacementManagementToken); assert.notEqual(transferred.replacementManagementToken, firstToken);
-  assert.equal(amendRunner(state, firstToken, { phone: "07700 900999" }, { at: beforeCutoff }).code, "MANAGEMENT_TOKEN_INVALID");
-  assert.equal(amendRunner(state, transferred.replacementManagementToken, { firstName: "Locked" }, { at: afterCutoff }).code, "NAME_LOCKED_AFTER_CUTOFF");
-  assert.equal(amendRunner(state, transferred.replacementManagementToken, { phone: "07700 900999" }, { at: afterCutoff }).ok, true);
+  assert.equal(amendRunner(state, firstToken, { phone: "07700 900999" }, { at: beforeCutoff }).code, "MANAGEMENT_TOKEN_EXPIRED");
+  const postCutoffToken = issueManagementToken(state, registration.id, admin, afterCutoff).token;
+  assert.equal(amendRunner(state, postCutoffToken, { firstName: "Locked" }, { at: afterCutoff }).code, "NAME_LOCKED_AFTER_CUTOFF");
+  assert.equal(amendRunner(state, postCutoffToken, { phone: "07700 900999" }, { at: afterCutoff }).ok, true);
   assert.equal(amendRunner(state, "", { registrationId: registration.id, firstName: "Exceptional" }, { actor: admin, at: afterCutoff, organiserOverride: true }).ok, true);
   assert.ok(state.auditEvents.some((item) => item.action === "organiser_override"));
 });

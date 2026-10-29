@@ -11,7 +11,7 @@ import { OrderRegistrationService } from "../registration/server/order-service.m
 import { createProductionBackupService, operationalDailyBackupDue, PRODUCTION_BACKUP_POLICY } from "../registration/server/production-backup.mjs";
 import { createProductionApi } from "../registration/server/production-api.mjs";
 import { ProductionRegistrationService } from "../registration/server/production-service.mjs";
-import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
+import { Phase3IntegrationService, managementActionEligibility } from "../registration/server/phase3-service.mjs";
 import { assertStripeDevelopmentConfiguration, assertStripeProductionConfiguration } from "../registration/server/phase3-integrations.mjs";
 import { loadProductionConfiguration } from "../api/src/production-config.mjs";
 import { stageRegistrationProduction } from "../scripts/stage-deployment-artifacts.mjs";
@@ -42,6 +42,21 @@ test("the production junior launch setting is authoritative for existing stored 
   const disabledAgain = applyProductionRuntimeConfiguration(enabled, { under18EntriesEnabled: false });
   assert.equal(disabledAgain.event.under18EntriesEnabled, false);
   assert.deepEqual(disabledAgain.registrations, stored.registrations);
+});
+
+test("runtime configuration applies the new transfer deadline to existing persisted entries", () => {
+  const stored = createProductionBootstrap();
+  stored.event.transferCutoffUtc = "2026-10-28T23:59:00.000Z";
+  stored.runners.push({ id: "runner_existing", email: "existing@example.com" });
+  stored.registrations.push({ id: "registration_existing", runnerId: "runner_existing", entryStatus: "accepted", placeStatus: "confirmed", declarationStatus: "complete", createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:00:00.000Z", deletedAt: null });
+  stored.payments.push({ id: "payment_existing", registrationId: "registration_existing", status: "paid" });
+  const configured = applyProductionRuntimeConfiguration(stored);
+  assert.equal(configured.event.transferCutoffUtc, "2026-11-27T23:59:00.000Z");
+  assert.equal(configured.event.refundCutoffUtc, "2026-10-28T23:59:00.000Z");
+  assert.equal(managementActionEligibility(configured, configured.registrations[0], { at: new Date("2026-11-01T12:00:00.000Z") }).transfer.available, true);
+  assert.equal(managementActionEligibility(configured, configured.registrations[0], { at: new Date("2026-11-28T00:00:00.000Z") }).transfer.code, "TRANSFER_CUTOFF_PASSED");
+  assert.deepEqual(configured.registrations, stored.registrations);
+  assert.deepEqual(configured.payments, stored.payments);
 });
 
 test("production configuration rejects environment crossover and permits disabled providers", () => {

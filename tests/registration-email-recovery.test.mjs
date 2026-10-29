@@ -167,7 +167,7 @@ test("failed recovery records failure without undoing paid registration", async 
   assert.equal(final.managementTokens.find((item) => item.id === "old-management").invalidatedAt, null);
   assert.equal(final.declarationTokens.find((item) => item.id === "old-declaration").revokedAt, null);
   const phase3 = new Phase3IntegrationService({ repository, emailAdapter: { async send() {} }, publicBaseUrl: "https://development.example" });
-  assert.equal((await phase3.managementEntry("old-management-token")).ok, true);
+  assert.equal((await phase3.managementEntry("old-management-token", at)).ok, true);
   assert.equal((await orders.inspectDeclaration("old-declaration-token")).ok, true);
 });
 
@@ -191,7 +191,7 @@ test("recovery ACS success followed by finalisation ETag conflict keeps one vali
   const secure = new URL(sent[0].data.secureUrl); const declarationToken = new URLSearchParams(secure.hash.slice(1)).get("token"); const managementToken = new URLSearchParams(secure.hash.slice(1)).get("manage");
   assert.equal((await orders.inspectDeclaration(declarationToken)).ok, true);
   const phase3 = new Phase3IntegrationService({ repository: prepared.repository, emailAdapter, publicBaseUrl: "https://development.example" });
-  assert.equal((await phase3.managementEntry(managementToken)).ok, true);
+  assert.equal((await phase3.managementEntry(managementToken, at)).ok, true);
   const final = await prepared.repository.read();
   assert.equal(final.communications.filter((item) => item.registrationId === "registration-pending" && item.delivery === "sent").length, 1);
   assert.equal(final.emailOutbox.filter((item) => item.status === "sent").length, 1);
@@ -212,7 +212,7 @@ test("normal Stripe confirmation commits credentials before send and survives pr
   const secure = new URL(sent[0].data.secureUrl); const parameters = new URLSearchParams(secure.hash.slice(1)); const declarationToken = parameters.get("token"); const managementToken = parameters.get("manage");
   assert.equal((await orders.inspectDeclaration(declarationToken)).ok, true);
   const phase3 = new Phase3IntegrationService({ repository: prepared.repository, emailAdapter, publicBaseUrl: "https://development.example" });
-  assert.equal((await phase3.managementEntry(managementToken)).ok, true);
+  assert.equal((await phase3.managementEntry(managementToken, at)).ok, true);
   const final = await prepared.repository.read();
   assert.equal(final.payments.length, 1); assert.equal(final.payments[0].status, "paid"); assert.equal(capacitySummary(final).confirmed, 1);
   assert.equal(final.processedPaymentEvents.filter((item) => item.id === event.id).length, 1);

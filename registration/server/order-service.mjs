@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, validateProductionRunner } from "./phase3-domain.mjs";
+import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, managementTokenExpiry, managementTokenIsExpired, validateProductionRunner } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { confirmationRecoveryPlan, reconcileEmailHealth, recoveryFingerprint } from "./email-health.mjs";
 
@@ -185,9 +185,9 @@ export function issueDeclarationToken(state, registrationId, at = new Date()) {
 }
 
 function prepareManagementToken(state, registrationId, at = new Date()) {
-  const value = opaqueToken(); const token = { id: id("management"), registrationId, tokenHash: hashToken(value), issuedAt: iso(at), invalidatedAt: null };
+  const value = opaqueToken(); const token = { id: id("management"), registrationId, tokenHash: hashToken(value), issuedAt: iso(at), expiresAt: managementTokenExpiry(at), invalidatedAt: null };
   state.managementTokens.push(token);
-  return { id: token.id, value };
+  return { id: token.id, value, expiresAt: token.expiresAt };
 }
 
 function prepareDeclarationToken(state, registrationId, at = new Date()) {
@@ -196,8 +196,8 @@ function prepareDeclarationToken(state, registrationId, at = new Date()) {
   return { id: token.id, value };
 }
 
-function tokenSetStillValid(state, attempt) {
-  const managementValid = !attempt.managementTokenId || state.managementTokens.some((item) => item.id === attempt.managementTokenId && !item.invalidatedAt);
+function tokenSetStillValid(state, attempt, at = new Date()) {
+  const managementValid = !attempt.managementTokenId || state.managementTokens.some((item) => item.id === attempt.managementTokenId && !item.invalidatedAt && !managementTokenIsExpired(item, at));
   const declarationValid = !attempt.declarationTokenId || state.declarationTokens.some((item) => item.id === attempt.declarationTokenId && !item.revokedAt);
   return managementValid && declarationValid;
 }
@@ -265,7 +265,7 @@ export class OrderRegistrationService {
       const retryable = ["throttled", "provider_5xx", "request_timeout", "network", "email_provider_error", "Error"].includes(attempt.failureCategory);
       if (attempt.status === "failed" && !retryable) return { ok: true, duplicate: true, permanentFailure: true, sent: 0, attemptId };
       if (attempt.retryAfterAt && new Date(attempt.retryAfterAt) > new Date(at)) return { ok: true, duplicate: true, retryNotDue: true, sent: 0, attemptId };
-      if (!attempt.message || !tokenSetStillValid(state, attempt)) {
+      if (!attempt.message || !tokenSetStillValid(state, attempt, at)) {
         attempt.status = "superseded"; attempt.updatedAt = iso(at);
         audit(state, "email_outbox_superseded", attempt.registrationId ?? attempt.orderId, { purpose: attempt.purpose }, at, { actorType: "system" });
         return { ok: true, superseded: true, sent: 0, attemptId };
@@ -346,10 +346,10 @@ export class OrderRegistrationService {
       if (externalAttempts >= this.emailRecoveryMaxPerHour) return { ok: false, code: "EMAIL_RATE_BUDGET_EXHAUSTED", retryAfterSeconds: 3_600 };
       const candidate = plan[0]; const registration = state.registrations.find((item) => item.id === candidate.registrationId); const runner = runnerFor(state, registration);
       if (!registration || !runner) return { ok: false, code: "NOT_FOUND" };
-      const existing = [...state.emailOutbox].reverse().find((item) => item.registrationId === registration.id && item.purpose === "confirmation_recovery" && ["prepared", "sending", "failed"].includes(item.status) && item.message && tokenSetStillValid(state, item));
+      const existing = [...state.emailOutbox].reverse().find((item) => item.registrationId === registration.id && item.purpose === "confirmation_recovery" && ["prepared", "sending", "failed"].includes(item.status) && item.message && tokenSetStillValid(state, item, at));
       if (existing) return { ok: true, prepared: true, attemptId: existing.id };
       const management = prepareManagementToken(state, registration.id, at);
-      const data = { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.value)}` };
+      const data = { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.value)}`, managementExpiresAt: management.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc };
       let declarationToken = null;
       if (candidate.expectedTemplate === "entry_confirmed_declaration_required") {
         declarationToken = prepareDeclarationToken(state, registration.id, at);
@@ -535,10 +535,10 @@ export class OrderRegistrationService {
             const runner = runnerFor(state, registration); const management = prepareManagementToken(state, registration.id, at);
             if (declarationView(state, registration).status === "pending") {
               const declarationToken = prepareDeclarationToken(state, registration.id, at);
-              const attempt = prepareOutboxAttempt(state, { registrationId: registration.id, orderId: order.id, sourceEventId: event.id, purpose: "initial_confirmation", idempotencyKey: `order:${order.id}:registration:${registration.id}:confirmed-pending`, message: { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, secureUrl: this.declarationUrl(declarationToken.value, management.value), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.value)}` } }, managementTokenId: management.id, declarationTokenId: declarationToken.id, invalidatePriorTokensOnSuccess: true }, at);
+              const attempt = prepareOutboxAttempt(state, { registrationId: registration.id, orderId: order.id, sourceEventId: event.id, purpose: "initial_confirmation", idempotencyKey: `order:${order.id}:registration:${registration.id}:confirmed-pending`, message: { registrationId: registration.id, template: "entry_confirmed_declaration_required", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, secureUrl: this.declarationUrl(declarationToken.value, management.value), managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.value)}`, managementExpiresAt: management.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc } }, managementTokenId: management.id, declarationTokenId: declarationToken.id, invalidatePriorTokensOnSuccess: true }, at);
               outboxAttemptIds.push(attempt.id);
             } else {
-              const attempt = prepareOutboxAttempt(state, { registrationId: registration.id, orderId: order.id, sourceEventId: event.id, purpose: "initial_confirmation", idempotencyKey: `order:${order.id}:registration:${registration.id}:confirmed`, message: { registrationId: registration.id, template: "entry_confirmed", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.value)}` } }, managementTokenId: management.id, invalidatePriorTokensOnSuccess: true }, at);
+              const attempt = prepareOutboxAttempt(state, { registrationId: registration.id, orderId: order.id, sourceEventId: event.id, purpose: "initial_confirmation", idempotencyKey: `order:${order.id}:registration:${registration.id}:confirmed`, message: { registrationId: registration.id, template: "entry_confirmed", intendedRecipientAddress: runner.email, data: { runnerName: fullName(runner), raceDate: state.event.raceDate, raceInfoUrl: `${this.publicBaseUrl}/info.html`, managementUrl: `${this.publicBaseUrl}/registration/manage.html#token=${encodeURIComponent(management.value)}`, managementExpiresAt: management.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc } }, managementTokenId: management.id, invalidatePriorTokensOnSuccess: true }, at);
               outboxAttemptIds.push(attempt.id);
             }
           }

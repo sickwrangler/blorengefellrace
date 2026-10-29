@@ -2,6 +2,8 @@
 
 The private runner URL is `/registration/manage.html#token=<opaque-token>`. Only the token hash is stored. The browser reads the URL fragment, keeps the token in session storage and removes the fragment from the visible URL before calling the API.
 
+Management links expire 24 hours after issue. Expiry is checked by the server for every management read or mutation; hiding an action in the browser is not the security boundary. Tokens created before the explicit `expiresAt` field was introduced derive the same deadline from `issuedAt`, so existing stored entries do not receive indefinite access. The management page accepts an email address for non-enumerating recovery. Successful delivery creates a new 24-hour link and invalidates every previous link for that entry. Failed delivery leaves the previous link state unchanged. Recovery requests are rate limited and always return the same public response whether an address matches or not.
+
 The runner transfer deadline is **27 November 2026 at 23:59 Europe/London** (`2026-11-27T23:59:00.000Z`). The refund-request deadline remains **28 October 2026 at 23:59 Europe/London** (`2026-10-28T23:59:00.000Z`). Neither deadline prevents safe contact and race-detail corrections. An organiser may make an exceptional post-deadline transfer only through the separately confirmed, audited organiser override.
 
 ## Action eligibility
@@ -20,6 +22,8 @@ All mutating endpoints repeat these checks on the server. Browser visibility is 
 ## Transfer invariants
 
 A successful transfer validates a complete replacement runner record, rejects a duplicate active-entry email, preserves the registration, place, price and payment, replaces only the runner ownership, resets declaration status, revokes prior management/declaration links, issues new hashed credentials and records the old/new runner IDs in the audit event. Delivery of the replacement runner's secure links is required before the change is committed; failure leaves ownership and payment unchanged. Failure of the secondary previous-runner notice is recorded without invalidating access already delivered to the replacement runner.
+
+Registration-confirmation, replacement-management-link and transfer emails state the transfer deadline, the 24-hour management-link expiry and where to request a replacement. Confirmation emails direct eligible runners to **Manage your entry**, then **Transfer entry**. A transferred runner receives distinct declaration and management links; the former runner is told that their previous access has been revoked.
 
 ## Confirmed product policy
 

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { acceptWaitingListOffer, authorizePrivateInvitation, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
+import { acceptWaitingListOffer, authorizePrivateInvitation, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken } from "./order-service.mjs";
@@ -16,11 +16,12 @@ const paymentFor = (state, registration) => state.payments.find((item) => item.r
 const refundFor = (state, registration) => [...state.refundRequests].reverse().find((item) => item.registrationId === registration?.id);
 const emergencyFor = (state, registration) => state.emergencyContacts?.find((item) => item.registrationId === registration?.id);
 
-function managementAccess(state, token) {
+function managementAccess(state, token, at = new Date()) {
   const tokenHash = hashToken(token);
   const stored = state.managementTokens.find((item) => item.tokenHash === tokenHash);
   if (!stored) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
   if (stored.invalidatedAt) return { ok: false, code: "MANAGEMENT_TOKEN_EXPIRED" };
+  if (managementTokenIsExpired(stored, at)) return { ok: false, code: "MANAGEMENT_TOKEN_EXPIRED" };
   const registration = state.registrations.find((item) => item.id === stored.registrationId && !item.deletedAt);
   return registration ? { ok: true, registration } : { ok: false, code: "MANAGEMENT_ENTRY_UNAVAILABLE" };
 }
@@ -128,29 +129,29 @@ export class Phase3IntegrationService {
     return this.repository.transaction(async (state) => {
       const accepting = (["local", "development"].includes(state.environment) && (state.registrationState === "test" || ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState))) || (state.environment === "production" && ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState));
       if (!accepting) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
-      const access = managementAccess(state, managementToken);
+      const access = managementAccess(state, managementToken, at);
       if (!access.ok) return access;
       if (!activeRegistration(access.registration)) return { ok: false, code: "ENTRY_INACTIVE" };
       return beginStripeCheckout(state, access.registration.id, this.stripeGateway, { successUrl: `${this.publicBaseUrl}/registration/payment-return.html`, cancelUrl: `${this.publicBaseUrl}/registration/payment-return.html?cancelled=1`, at });
     });
   }
 
-  async paymentStatus(managementToken) {
-    const state = await this.repository.read(); const access = managementAccess(state, managementToken);
+  async paymentStatus(managementToken, at = new Date()) {
+    const state = await this.repository.read(); const access = managementAccess(state, managementToken, at);
     if (!access.ok) return access;
     const view = managementView(state, access.registration, new Date(), { paymentsAvailable: Boolean(this.stripeGateway) });
     return { ...runnerPaymentState(state, access.registration.id), state: view.registration.payment.state, label: view.registration.payment.label };
   }
 
   async managementEntry(managementToken, at = new Date()) {
-    const state = await this.repository.read(); const access = managementAccess(state, managementToken);
+    const state = await this.repository.read(); const access = managementAccess(state, managementToken, at);
     return access.ok ? managementView(state, access.registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }) : access;
   }
 
   async recoverManagementLink(emailAddress, at = new Date()) {
     const email = normalizeEmail(emailAddress);
     const generic = { ok: true, message: "If an eligible entry matches, a secure link will be sent." };
-    try { return await this.repository.transaction(async (state) => {
+    try { await this.repository.transaction(async (state) => {
       state.managementRecoveryAttempts ??= [];
       const emailHash = hashToken(email);
       const recent = state.managementRecoveryAttempts.filter((item) => item.emailHash === emailHash && new Date(item.requestedAt) > new Date(new Date(at).getTime() - 60 * 60_000));
@@ -162,15 +163,16 @@ export class Phase3IntegrationService {
         const runner = runnerFor(state, registration);
         const issued = issueManagementToken(state, registration.id, { actorType: "system", id: "management-recovery" }, at);
         const tokenId = state.managementTokens.find((item) => item.registrationId === registration.id && !item.invalidatedAt)?.id;
-        await this.communicate(state, { registrationId: registration.id, template: "management_link", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token) } }, `registration:${registration.id}:management-recovery:${tokenId}`, at);
+        const delivery = await this.communicate(state, { registrationId: registration.id, template: "management_link", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token), managementExpiresAt: issued.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc } }, `registration:${registration.id}:management-recovery:${tokenId}`, at);
+        if (["failed", "disabled"].includes(delivery.receipt?.delivery)) return { ok: false, code: "MANAGEMENT_LINK_DELIVERY_FAILED" };
       }
       return generic;
-    }); } catch { return generic; }
+    }); return generic; } catch { return generic; }
   }
 
   amend(managementToken, changes, at = new Date()) {
     return this.repository.transaction(async (state) => {
-      const access = managementAccess(state, managementToken);
+      const access = managementAccess(state, managementToken, at);
       if (!access.ok) return access;
       const registration = access.registration;
       if (!activeRegistration(registration)) return { ok: false, code: "ENTRY_INACTIVE" };
@@ -195,7 +197,7 @@ export class Phase3IntegrationService {
 
   transferRegistration({ managementToken = null, registrationId = null, input, actor, allowCutoffOverride = false }, at = new Date()) {
     return this.repository.transaction(async (state) => {
-      const access = managementToken ? managementAccess(state, managementToken) : null;
+      const access = managementToken ? managementAccess(state, managementToken, at) : null;
       if (managementToken && !access.ok) return access;
       const registration = managementToken ? access.registration : state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
       if (!registration || !activeRegistration(registration)) return { ok: false, code: managementToken ? "ENTRY_INACTIVE" : "NOT_FOUND" };
@@ -225,7 +227,7 @@ export class Phase3IntegrationService {
       const declarationToken = issueDeclarationToken(state, registration.id, at);
       const action = actor.actorType === "organiser" ? "organiser_entry_transferred" : "entry_transferred";
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType, actorId: actor.id ?? null, action, subjectId: registration.id, before: { runnerId: previous.id }, after: { runnerId: runner.id, declarationStatus: "pending", cutoffOverride: Boolean(afterCutoff && allowCutoffOverride) }, environment: state.environment });
-      const replacementDelivery = await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, managementUrl: this.managementUrl(issued.token), secureUrl: this.orders.declarationUrl(declarationToken, issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
+      const replacementDelivery = await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, managementUrl: this.managementUrl(issued.token), managementExpiresAt: issued.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: transferCutoff, secureUrl: this.orders.declarationUrl(declarationToken, issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
       if (["failed", "disabled"].includes(replacementDelivery.receipt?.delivery)) return { ok: false, code: "TRANSFER_DELIVERY_FAILED" };
       const previousMessage = { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} };
       const previousKey = `registration:${registration.id}:transfer-old:${registration.updatedAt}`;
@@ -250,7 +252,8 @@ export class Phase3IntegrationService {
       const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item)); const runner = runnerFor(state, registration);
       if (!registration || !runner) return { ok: false, code: "NOT_FOUND" };
       const issued = issueManagementToken(state, registration.id, actor, at);
-      await this.communicate(state, { registrationId, template: "management_link", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token) } }, `registration:${registration.id}:management-organiser:${registration.updatedAt}:${state.managementTokens.at(-1).id}`, at);
+      const delivery = await this.communicate(state, { registrationId, template: "management_link", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, secureUrl: this.managementUrl(issued.token), managementExpiresAt: issued.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc } }, `registration:${registration.id}:management-organiser:${registration.updatedAt}:${state.managementTokens.at(-1).id}`, at);
+      if (["failed", "disabled"].includes(delivery.receipt?.delivery)) return { ok: false, code: "MANAGEMENT_LINK_DELIVERY_FAILED" };
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType ?? "organiser", actorId: actor.id ?? null, action: "management_link_resent", subjectId: registration.id, before: null, after: {}, environment: state.environment });
       return { ok: true };
     });
@@ -270,7 +273,7 @@ export class Phase3IntegrationService {
 
   requestRefund(managementToken, at = new Date()) {
     return this.repository.transaction(async (state) => {
-      const access = managementAccess(state, managementToken);
+      const access = managementAccess(state, managementToken, at);
       if (!access.ok) return access;
       const registration = access.registration;
       if (!activeRegistration(registration)) return { ok: false, code: "ENTRY_INACTIVE" };

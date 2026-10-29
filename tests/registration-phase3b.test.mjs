@@ -223,6 +223,7 @@ test("v3 API keeps integrations unavailable until explicitly configured", async 
 test("configured Phase 3 routes report disabled providers and cannot make external calls", async () => {
   const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
   const created = beginProductionRegistration(state, { runner: runner(), declaration: declaration() }, { at });
+  state.managementTokens[0].expiresAt = "2099-01-01T00:00:00.000Z";
   const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), emailAdapter: createControlledDevelopmentEmail() });
   const api = createApi({ service: {}, phase3Integrations: phase3, environment: "development" });
   const integrationStatus = await api({ method: "GET", pathname: "/api/v3/registration/status" });
@@ -236,6 +237,7 @@ test("configured Phase 3 routes report disabled providers and cannot make extern
 test("v3 Checkout/status and raw signed webhook routes use the Phase 3 integration service", async () => {
   const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
   const created = beginProductionRegistration(state, { runner: runner(), declaration: declaration() }, { at });
+  state.managementTokens[0].expiresAt = "2099-01-01T00:00:00.000Z";
   const provider = gateway();
   const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), stripeGateway: provider.gateway, emailAdapter: createControlledDevelopmentEmail(), publicBaseUrl: "https://development.example" });
   const api = createApi({ service: {}, phase3Integrations: phase3, environment: "development" });
@@ -277,6 +279,7 @@ test("v3 refund request and organiser decision routes preserve the authenticatio
   const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
   state.event.refundCutoffUtc = "2099-10-28T23:59:00.000Z";
   const created = beginProductionRegistration(state, { runner: runner(8), declaration: declaration(8) }, { at });
+  state.managementTokens[0].expiresAt = "2099-01-01T00:00:00.000Z";
   const provider = gateway();
   const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), stripeGateway: provider.gateway, emailAdapter: createControlledDevelopmentEmail() });
   await phase3.checkout(created.managementToken, at);
