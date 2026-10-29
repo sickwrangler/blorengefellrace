@@ -21,7 +21,7 @@ const runner = (number = 1, overrides = {}) => ({
   emergencyContactName: "Contact Example", emergencyContactPhone: "07700 900456", ...overrides
 });
 const beforeCutoff = new Date("2026-10-01T12:00:00.000Z");
-const afterCutoff = new Date("2026-10-29T00:00:00.000Z");
+const afterCutoff = new Date("2026-11-28T00:00:00.000Z");
 
 const declaration = (overrides = {}) => ({ declarationIdentifier: "WFRA_SENIOR_ENTRY", declarationVersion: "21/02/23", accepted: true, typedFullName: "Runner 1 Example", signatoryRole: "Competitor", ...overrides });
 

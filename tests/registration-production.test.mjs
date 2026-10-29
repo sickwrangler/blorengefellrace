@@ -31,10 +31,13 @@ test("production bootstrap is CLOSED, exact, empty and junior-gated", () => {
 
 test("the production junior launch setting is authoritative for existing stored state", () => {
   const stored = createProductionBootstrap({ under18EntriesEnabled: false });
+  stored.event.transferCutoffUtc = "2026-10-28T23:59:00.000Z";
   stored.registrations.push({ id: "existing-real-entry" });
   const enabled = applyProductionRuntimeConfiguration(stored, { under18EntriesEnabled: true });
   assert.equal(stored.event.under18EntriesEnabled, false);
   assert.equal(enabled.event.under18EntriesEnabled, true);
+  assert.equal(enabled.event.transferCutoffUtc, "2026-11-27T23:59:00.000Z");
+  assert.equal(enabled.event.refundCutoffUtc, "2026-10-28T23:59:00.000Z");
   assert.deepEqual(enabled.registrations, stored.registrations);
   const disabledAgain = applyProductionRuntimeConfiguration(enabled, { under18EntriesEnabled: false });
   assert.equal(disabledAgain.event.under18EntriesEnabled, false);

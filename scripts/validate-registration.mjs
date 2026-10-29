@@ -59,7 +59,7 @@ const phase2 = fs.readFileSync("registration/server/service.mjs", "utf8") + fs.r
 for (const required of ["IDEMPOTENCY_KEY_REQUIRED", "confirmationTokenHash", "race_number_removed", "record_anonymised", "csvFormulaSafe", "/api/v2/organiser/"])
   if (!phase2.includes(required)) errors.push(`Phase 2 server boundary is missing: ${required}`);
 const phase3 = fs.readFileSync("registration/server/phase3-domain.mjs", "utf8");
-for (const required of ["PRIVATE_LIVE", "CLOSED_FINAL", "waiting_list_offer", "transferRefundCutoffUtc", "declarationVersion", "DUPLICATE_RACE_NUMBER", "MANAGEMENT_TOKEN_INVALID"])
+for (const required of ["PRIVATE_LIVE", "CLOSED_FINAL", "waiting_list_offer", "transferCutoffUtc", "refundCutoffUtc", "declarationVersion", "DUPLICATE_RACE_NUMBER", "MANAGEMENT_TOKEN_INVALID"])
   if (!phase3.includes(required)) errors.push(`Phase 3 foundation is missing: ${required}`);
 const phase3b = fs.readFileSync("registration/server/phase3-integrations.mjs", "utf8") + fs.readFileSync("registration/server/phase3-service.mjs", "utf8") + fs.readFileSync("registration/server/development-email.mjs", "utf8");
 for (const required of ["CHECKOUT_RESERVATION_MINUTES = 30", "stripe_checkout_created", "verifyWebhook", "INVALID_WEBHOOK_SIGNATURE", "amount_or_currency_mismatch", "executeApprovedStripeRefund", "redirected_safe_recipient", "waiting_list_reminder"])

@@ -32,8 +32,10 @@ export function managementActionEligibility(state, registration, { at = new Date
   const payment = paymentFor(state, registration);
   const refund = refundFor(state, registration);
   const active = activeRegistration(registration);
-  const beforeCutoff = new Date(at) <= new Date(state.event.transferRefundCutoffUtc);
-  const cutoff = state.event.transferRefundCutoffUtc;
+  const transferCutoff = state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc;
+  const refundCutoff = state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc;
+  const beforeTransferCutoff = new Date(at) <= new Date(transferCutoff);
+  const beforeRefundCutoff = new Date(at) <= new Date(refundCutoff);
   const acceptingPayments = ["PRIVATE_LIVE", "OPEN", "test"].includes(state.registrationState);
   const paymentCanContinue = ["created", "not_configured", "checkout_pending", "failed", "expired", "abandoned"].includes(payment?.status);
   const declarationComplete = (registration.declarationStatus ?? "complete") === "complete";
@@ -53,11 +55,14 @@ export function managementActionEligibility(state, registration, { at = new Date
   else if (registration.placeStatus !== "confirmed") signDeclaration = unavailable("DECLARATION_AFTER_PAYMENT");
 
   const amend = active ? available() : unavailable("ENTRY_INACTIVE");
-  const transfer = !active ? unavailable("ENTRY_INACTIVE") : beforeCutoff ? available() : unavailable("TRANSFER_CUTOFF_PASSED", cutoff);
+  let transfer = available();
+  if (!active) transfer = unavailable("ENTRY_INACTIVE");
+  else if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") transfer = unavailable("TRANSFER_PAYMENT_REQUIRED");
+  else if (!beforeTransferCutoff) transfer = unavailable("TRANSFER_CUTOFF_PASSED", transferCutoff);
 
   let requestRefundAction = available();
   if (!active) requestRefundAction = unavailable("ENTRY_INACTIVE");
-  else if (!beforeCutoff) requestRefundAction = unavailable("REFUND_CUTOFF_PASSED", cutoff);
+  else if (!beforeRefundCutoff) requestRefundAction = unavailable("REFUND_CUTOFF_PASSED", refundCutoff);
   else if (payment?.status !== "paid") requestRefundAction = unavailable("REFUND_NOT_READY");
   else if (["requested", "approved"].includes(refund?.status)) requestRefundAction = unavailable("REFUND_ALREADY_IN_PROGRESS");
   else if (refund?.status === "refunded") requestRefundAction = unavailable("PAYMENT_REFUNDED");
@@ -89,7 +94,10 @@ function managementView(state, registration, at = new Date(), { paymentsAvailabl
       declaration: { status: registration.declarationStatus ?? "complete", completionMethod: registration.declarationCompletionMethod ?? "digital_during_entry", clearedToStart: (registration.declarationStatus ?? "complete") === "complete" && registration.placeStatus === "confirmed" },
       payment: { state: stateName, label: labels[stateName] ?? paymentState.label, canContinue: actions.continuePayment.available },
       actions,
-      policy: { transferRefundCutoffUtc: state.event.transferRefundCutoffUtc },
+      policy: {
+        transferCutoffUtc: state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc,
+        refundCutoffUtc: state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc
+      },
       amendmentEligible: actions.amend.available,
       transferEligible: actions.transfer.available,
       refundEligible: actions.requestRefund.available,
@@ -191,7 +199,10 @@ export class Phase3IntegrationService {
       if (managementToken && !access.ok) return access;
       const registration = managementToken ? access.registration : state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
       if (!registration || !activeRegistration(registration)) return { ok: false, code: managementToken ? "ENTRY_INACTIVE" : "NOT_FOUND" };
-      const afterCutoff = new Date(at) > new Date(state.event.transferRefundCutoffUtc);
+      const payment = paymentFor(state, registration);
+      if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") return { ok: false, code: "TRANSFER_PAYMENT_REQUIRED" };
+      const transferCutoff = state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc;
+      const afterCutoff = new Date(at) > new Date(transferCutoff);
       if (afterCutoff && !allowCutoffOverride) return { ok: false, code: managementToken ? "TRANSFER_CUTOFF_PASSED" : "ORGANISER_OVERRIDE_REQUIRED" };
       const next = input.runner ?? {};
       const errors = validateProductionRunner(next, { raceDate: state.event.raceDate, under18EntriesEnabled: state.event.under18EntriesEnabled !== false });

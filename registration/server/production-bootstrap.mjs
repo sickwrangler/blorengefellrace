@@ -29,6 +29,8 @@ export function createProductionBootstrap({ under18EntriesEnabled = false } = {}
       declarationContentStatus: PHASE3_EVENT.declaration.contentStatus,
       transferRefundCutoff: PHASE3_EVENT.transferRefundCutoffUtc,
       transferRefundCutoffUtc: PHASE3_EVENT.transferRefundCutoffUtc,
+      transferCutoffUtc: PHASE3_EVENT.transferCutoffUtc,
+      refundCutoffUtc: PHASE3_EVENT.refundCutoffUtc,
       under18EntriesEnabled: under18EntriesEnabled === true
     },
     counters: { waitingSequence: 0 },
@@ -49,7 +51,15 @@ export function validateProductionState(state) {
 
 export function applyProductionRuntimeConfiguration(state, { under18EntriesEnabled = false } = {}) {
   validateProductionState(state);
-  return { ...state, event: { ...state.event, under18EntriesEnabled: under18EntriesEnabled === true } };
+  return {
+    ...state,
+    event: {
+      ...state.event,
+      transferCutoffUtc: PHASE3_EVENT.transferCutoffUtc,
+      refundCutoffUtc: PHASE3_EVENT.refundCutoffUtc,
+      under18EntriesEnabled: under18EntriesEnabled === true
+    }
+  };
 }
 
 export function productionAvailability(state) {

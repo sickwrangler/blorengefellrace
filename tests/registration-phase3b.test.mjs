@@ -275,7 +275,7 @@ test("secure runner refund request requires organiser approval before one full S
 
 test("v3 refund request and organiser decision routes preserve the authentication boundary", async () => {
   const state = createPhase3State({ environment: "development", registrationState: "OPEN" });
-  state.event.transferRefundCutoffUtc = "2099-10-28T23:59:00.000Z";
+  state.event.refundCutoffUtc = "2099-10-28T23:59:00.000Z";
   const created = beginProductionRegistration(state, { runner: runner(8), declaration: declaration(8) }, { at });
   const provider = gateway();
   const phase3 = new Phase3IntegrationService({ repository: createMemoryRepository(state), stripeGateway: provider.gateway, emailAdapter: createControlledDevelopmentEmail() });
@@ -370,6 +370,11 @@ test("transfer resets declaration state, rotates ownership and invalidates the o
   const repository = createMemoryRepository(createDatabase({ environment: "development", registrationState: "test" })); const mail = controlledEmail();
   const service = new RegistrationService({ repository, paymentAdapter: createMockPaymentAdapter(), emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
   const created = await service.create(phase2Runner(4), { idempotencyKey: "phase3b-transfer-link-4" });
+  await repository.transaction((state) => {
+    state.payments.find((item) => item.registrationId === state.registrations[0].id).status = "paid";
+    state.registrations[0].placeStatus = "confirmed";
+    return { ok: true };
+  });
   const phase3 = new Phase3IntegrationService({ repository, emailAdapter: mail.email, publicBaseUrl: "https://development.example" });
   const transferred = await phase3.transfer(created.managementToken, { runner: runner(41) }, at);
   assert.equal(transferred.ok, true); assert.equal(transferred.registration.runner.firstName, "Runner 41");

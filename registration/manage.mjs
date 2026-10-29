@@ -57,7 +57,7 @@ function deadlineText(value) {
 }
 
 function actionReason(label, action) {
-  const deadline = deadlineText(action.deadline ?? current?.policy?.transferRefundCutoffUtc);
+  const deadline = deadlineText(action.deadline);
   const reasons = {
     ENTRY_INACTIVE: "This entry is no longer active.",
     PAYMENTS_UNAVAILABLE: "Online payment is temporarily unavailable.",
@@ -68,6 +68,7 @@ function actionReason(label, action) {
     PAYMENT_NOT_AVAILABLE: "Payment cannot be continued from the entry’s current state.",
     DECLARATION_COMPLETE: "The race declaration is already complete.",
     DECLARATION_AFTER_PAYMENT: "The declaration link becomes available after payment confirms the place.",
+    TRANSFER_PAYMENT_REQUIRED: "A transfer becomes available after payment has confirmed the race place.",
     TRANSFER_CUTOFF_PASSED: `Runner transfers closed on ${deadline}. Contact the organiser if an exceptional change is needed.`,
     REFUND_CUTOFF_PASSED: `Online refund requests closed on ${deadline}. Contact the organiser if you need help.`,
     REFUND_NOT_READY: "A refund can only be requested after payment is confirmed.",

@@ -7,7 +7,8 @@ import { Phase3IntegrationService, managementActionEligibility } from "../regist
 import { createMemoryRepository } from "../registration/server/repositories.mjs";
 
 const beforeCutoff = new Date("2026-10-28T22:00:00.000Z");
-const afterCutoff = new Date("2026-10-29T12:00:00.000Z");
+const afterRefundCutoff = new Date("2026-10-29T12:00:00.000Z");
+const afterTransferCutoff = new Date("2026-11-28T00:00:00.000Z");
 const runner = (number = 1, overrides = {}) => ({
   email: `runner-${number}@example.com`, firstName: `Runner ${number}`, lastName: "Example",
   phone: "07700 900123", addressLine1: "1 Example Street", addressLine2: "", city: "Abergavenny", postcode: "NP7 5AA",
@@ -46,11 +47,13 @@ test("management eligibility matrix follows existing entry, payment, declaration
   assert.equal(actions.continuePayment.code, "PAYMENT_ALREADY_COMPLETE");
   assert.equal(actions.signDeclaration.code, "DECLARATION_COMPLETE");
 
-  actions = managementActionEligibility(state, created.registration, { at: afterCutoff, paymentsAvailable: true });
+  actions = managementActionEligibility(state, created.registration, { at: afterRefundCutoff, paymentsAvailable: true });
   assert.equal(actions.amend.available, true, "safe contact/race-detail amendments remain available after the cutoff");
-  assert.equal(actions.transfer.code, "TRANSFER_CUTOFF_PASSED");
+  assert.equal(actions.transfer.available, true, "the later transfer deadline remains open after the refund deadline");
   assert.equal(actions.requestRefund.code, "REFUND_CUTOFF_PASSED");
-  assert.equal(actions.transfer.deadline, "2026-10-28T23:59:00.000Z");
+  actions = managementActionEligibility(state, created.registration, { at: afterTransferCutoff, paymentsAvailable: true });
+  assert.equal(actions.transfer.code, "TRANSFER_CUTOFF_PASSED");
+  assert.equal(actions.transfer.deadline, "2026-11-27T23:59:00.000Z");
 
   state.registrations[0].declarationStatus = "pending"; state.declarations = [];
   actions = managementActionEligibility(state, created.registration, { at: beforeCutoff, paymentsAvailable: true });
@@ -61,6 +64,7 @@ test("management eligibility matrix follows existing entry, payment, declaration
   assert.equal(actions.continuePayment.available, true);
   assert.equal(actions.signDeclaration.code, "DECLARATION_AFTER_PAYMENT");
   assert.equal(actions.requestRefund.code, "REFUND_NOT_READY");
+  assert.equal(actions.transfer.code, "TRANSFER_PAYMENT_REQUIRED");
 
   state.payments[0].status = "paid"; state.registrations[0].placeStatus = "confirmed";
   state.refundRequests.push({ id: "refund_rejected", registrationId: created.registration.id, status: "rejected" });
@@ -76,15 +80,45 @@ test("management eligibility matrix follows existing entry, payment, declaration
   assert.equal(actions.amend.code, "ENTRY_INACTIVE");
 });
 
-test("post-cutoff runner may amend safe details but may not transfer or request a refund", async () => {
+test("deadline policies retain safe amendments, close refunds first and close transfers on 27 November", async () => {
   const { state, created } = paidEntry();
   const { service } = serviceFor(state);
-  const amended = await service.amend(created.managementToken, { phone: "07700 900999", club: "Updated Club" }, afterCutoff);
+  const amended = await service.amend(created.managementToken, { phone: "07700 900999", club: "Updated Club" }, afterRefundCutoff);
   assert.equal(amended.ok, true);
   assert.equal(amended.registration.runner.phone, "07700 900999");
   assert.equal(amended.registration.actions.amend.available, true);
-  assert.equal((await service.transfer(created.managementToken, { runner: runner(2) }, afterCutoff)).code, "TRANSFER_CUTOFF_PASSED");
-  assert.equal((await service.requestRefund(created.managementToken, afterCutoff)).code, "REFUND_CUTOFF_PASSED");
+  assert.equal((await service.requestRefund(created.managementToken, afterRefundCutoff)).code, "REFUND_CUTOFF_PASSED");
+  assert.equal((await service.transfer(created.managementToken, { runner: runner(2) }, afterTransferCutoff)).code, "TRANSFER_CUTOFF_PASSED");
+});
+
+test("unpaid and payment-reserved entries cannot be transferred", async () => {
+  for (const { paymentStatus, placeStatus } of [
+    { paymentStatus: "created", placeStatus: "payment_reserved" },
+    { paymentStatus: "checkout_pending", placeStatus: "payment_reserved" },
+    { paymentStatus: "expired", placeStatus: "none" }
+  ]) {
+    const { state, created } = paidEntry();
+    state.payments[0].status = paymentStatus;
+    state.registrations[0].placeStatus = placeStatus;
+    const { service, repository } = serviceFor(state);
+    const before = await repository.read();
+    const result = await service.transfer(created.managementToken, { runner: runner(2) }, beforeCutoff);
+    assert.equal(result.code, "TRANSFER_PAYMENT_REQUIRED", `${paymentStatus}/${placeStatus}`);
+    assert.deepEqual(await repository.read(), before);
+  }
+});
+
+test("a rejected refund request may be followed by another refund request", async () => {
+  const { state, created } = paidEntry();
+  const { service, repository } = serviceFor(state);
+  const first = await service.requestRefund(created.managementToken, beforeCutoff);
+  assert.equal(first.ok, true);
+  assert.equal((await service.decideRefund({ authenticated: true, role: "organiser", actorType: "organiser", id: "organiser_test" }, first.request.id, "rejected", beforeCutoff)).ok, true);
+  const second = await service.requestRefund(created.managementToken, beforeCutoff);
+  assert.equal(second.ok, true);
+  assert.notEqual(second.request.id, first.request.id);
+  const stored = await repository.read();
+  assert.deepEqual(stored.refundRequests.map((item) => item.status), ["rejected", "requested"]);
 });
 
 test("runner transfer preserves the paid place, rotates access, resets declaration and keeps capacity consistent", async () => {

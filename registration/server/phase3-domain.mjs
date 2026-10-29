@@ -15,6 +15,11 @@ export const PHASE3_EVENT = Object.freeze({
   capacity: 120,
   entryFeePence: 600,
   wfraMemberPricePence: 400,
+  transferCutoffLocal: "2026-11-27T23:59:00",
+  transferCutoffUtc: "2026-11-27T23:59:00.000Z",
+  refundCutoffLocal: "2026-10-28T23:59:00",
+  refundCutoffUtc: "2026-10-28T23:59:00.000Z",
+  // Retained as a compatibility alias for stored state and older clients.
   transferRefundCutoffLocal: "2026-10-28T23:59:00",
   transferRefundCutoffUtc: "2026-10-28T23:59:00.000Z",
   waitingListOfferHours: 48,
@@ -390,7 +395,8 @@ export function amendRunner(state, managementToken, changes, { actor = { actorTy
   const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
   const runner = state.runners.find((item) => item.id === registration?.runnerId);
   if (!registration || !runner) return { ok: false, code: "NOT_FOUND" };
-  const beforeCutoff = new Date(at) <= new Date(state.event.transferRefundCutoffUtc);
+  const transferCutoff = state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc;
+  const beforeCutoff = new Date(at) <= new Date(transferCutoff);
   const identityFields = ["firstName", "lastName"];
   if (!organiserOverride && !beforeCutoff && identityFields.some((field) => changes[field] !== undefined && changes[field] !== runner[field])) return { ok: false, code: "NAME_LOCKED_AFTER_CUTOFF" };
   const allowed = ["firstName", "lastName", "email", "phone", "addressLine1", "addressLine2", "city", "postcode", "dateOfBirth", "raceCategory", "club", "wfraMember", "wfraMembershipNumber", "emergencyContactName", "emergencyContactPhone"];
@@ -425,7 +431,8 @@ export function removePhase3RaceNumber(state, registrationId, actor, at = new Da
 }
 
 export function requestRefund(state, registrationId, actor = { actorType: "runner" }, at = new Date()) {
-  if (new Date(at) > new Date(state.event.transferRefundCutoffUtc) && !organiser(actor)) return { ok: false, code: "REFUND_CUTOFF_PASSED" };
+  const refundCutoff = state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc;
+  if (new Date(at) > new Date(refundCutoff) && !organiser(actor)) return { ok: false, code: "REFUND_CUTOFF_PASSED" };
   const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
   if (!registration) return { ok: false, code: "NOT_FOUND" };
   const request = { id: shortId("refund"), registrationId, status: "requested", requestedAt: iso(at), decidedAt: null, refundedAt: null, placeReleasedAt: null };
