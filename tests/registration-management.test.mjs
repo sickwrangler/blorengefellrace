@@ -166,8 +166,10 @@ test("a rejected refund request may be followed by another refund request", asyn
 
 test("runner transfer preserves the paid place, rotates access, resets declaration and keeps capacity consistent", async () => {
   const { state, created } = paidEntry();
+  created.registration.raceNumber = 73;
   const originalRunnerId = created.registration.runnerId;
   const originalPaymentId = state.payments[0].id;
+  const originalRaceNumber = created.registration.raceNumber;
   const originalCapacity = capacitySummary(state);
   const { service, repository, sent } = serviceFor(state);
 
@@ -188,6 +190,7 @@ test("runner transfer preserves the paid place, rotates access, resets declarati
   const registration = after.registrations[0];
   assert.notEqual(registration.runnerId, originalRunnerId);
   assert.equal(registration.placeStatus, "confirmed");
+  assert.equal(registration.raceNumber, originalRaceNumber);
   assert.equal(after.payments[0].id, originalPaymentId);
   assert.equal(after.payments[0].status, "paid");
   assert.deepEqual(capacitySummary(after), originalCapacity);
