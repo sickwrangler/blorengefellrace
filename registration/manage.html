@@ -22,6 +22,7 @@
     </section>
     <section id="entry-panel" class="prototype-card manage-overview" hidden aria-labelledby="entry-title">
       <p class="eyebrow">Your 2026 race place</p><h2 id="entry-title">Entry status</h2>
+      <p>Use this page to manage one runner. A transfer passes the paid place to somebody else. A withdrawal releases the place without an automatic refund. A refund request is a separate action for organiser review.</p>
       <div class="status-badges" aria-live="polite">
         <span id="entry-status-badge" class="status-badge"></span>
         <span id="payment-status-badge" class="status-badge"></span>
@@ -31,8 +32,9 @@
       <section class="manage-section" aria-labelledby="payment-title"><h3 id="payment-title">Payment</h3><p id="payment-summary"></p></section>
       <section class="manage-section" aria-labelledby="declaration-title"><h3 id="declaration-title">Declaration</h3><p id="declaration-summary"></p></section>
       <section class="manage-section" aria-labelledby="contact-title"><h3 id="contact-title">Contact and race details</h3><dl id="contact-summary" class="summary-list"></dl></section>
+      <section id="withdrawal-panel" class="manage-section form-alert" aria-labelledby="withdrawal-title" hidden><h3 id="withdrawal-title">You have withdrawn from the race</h3><p id="withdrawal-summary"></p><p id="withdrawal-refund-message"></p><p>If you change your mind, you must register again or join the waiting list.</p></section>
       <section class="manage-section" aria-labelledby="actions-title"><h3 id="actions-title">Actions</h3>
-        <div class="form-actions"><button id="continue-payment" class="button" type="button" hidden>Continue to payment</button><button id="sign-declaration" class="button" type="button" hidden>Sign your race declaration</button><button id="edit-entry" class="button button--quiet" type="button" hidden>Edit entry</button><button id="transfer-entry" class="button button--quiet" type="button" hidden>Transfer entry</button><button id="request-refund" class="button button--quiet" type="button" hidden>Request refund for this entry</button><button id="refresh-entry" class="text-button" type="button">Refresh status</button></div>
+        <div class="form-actions"><button id="continue-payment" class="button" type="button" hidden>Continue to payment</button><button id="sign-declaration" class="button" type="button" hidden>Sign your race declaration</button><button id="edit-entry" class="button button--quiet" type="button" hidden>Edit entry</button><button id="transfer-entry" class="button button--quiet" type="button" hidden>Transfer entry</button><button id="withdraw-entry" class="button button--quiet" type="button" hidden>Withdraw from race</button><button id="request-refund" class="button button--quiet" type="button" hidden>Request refund for this entry</button><button id="refresh-entry" class="text-button" type="button">Refresh status</button></div>
         <p id="action-message" aria-live="polite"></p>
         <div id="unavailable-actions" class="action-availability" hidden>
           <h4>Why some actions are unavailable</h4>
@@ -75,6 +77,21 @@
         <p id="transfer-message" class="form-alert" role="alert" tabindex="-1" hidden></p>
         <div class="form-actions"><button class="button" type="submit">Transfer entry</button><button class="button button--quiet" type="button" data-close-dialog>Cancel</button></div>
       </form>
+    </dialog>
+
+    <dialog id="withdraw-entry-dialog" class="entry-dialog" aria-labelledby="withdraw-entry-title">
+      <div class="prototype-form">
+        <div class="dialog-heading"><h2 id="withdraw-entry-title">Withdraw from race?</h2><button class="dialog-close" type="button" data-close-dialog aria-label="Close Withdraw from race">×</button></div>
+        <p>This action is permanent:</p>
+        <ul>
+          <li>Your entry will be withdrawn and your race place released.</li>
+          <li>The organiser may offer the place to somebody on the waiting list.</li>
+          <li>You cannot reactivate this entry yourself.</li>
+          <li>Withdrawal does not automatically provide a refund.</li>
+        </ul>
+        <p id="withdraw-message" class="form-alert" role="alert" tabindex="-1" hidden></p>
+        <div class="form-actions"><button id="confirm-withdraw-entry" class="button" type="button">Confirm withdrawal</button><button class="button button--quiet" type="button" data-close-dialog>Keep my entry</button></div>
+      </div>
     </dialog>
   </main>
 </body>

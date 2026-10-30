@@ -1,16 +1,16 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { acceptWaitingListOffer, authorizePrivateInvitation, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, requestRefund, validateProductionRunner } from "./phase3-domain.mjs";
+import { acceptWaitingListOffer, authorizePrivateInvitation, capacitySummary, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, requestRefund, validateProductionRunner, withdrawRegistration } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
-import { OrderRegistrationService, issueDeclarationToken } from "./order-service.mjs";
+import { OrderRegistrationService, issueDeclarationToken, prepareRegistrationEmailOutboxAttempt } from "./order-service.mjs";
 import { reconcileEmailHealth } from "./email-health.mjs";
 
 const hashToken = (value) => crypto.createHash("sha256").update(String(value ?? "")).digest("hex");
 const iso = (value = new Date()) => new Date(value).toISOString();
 const normalizeEmail = (value) => String(value ?? "").trim().toLowerCase();
 const syntheticEmail = /@(example\.(?:com|org|net)|[^@]+\.invalid)$/i;
-const activeRegistration = (item) => item && !item.deletedAt && !["cancelled", "place_released"].includes(item.entryStatus);
+const activeRegistration = (item) => item && !item.deletedAt && !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus);
 const runnerFor = (state, registration) => state.runners.find((item) => item.id === registration?.runnerId);
 const paymentFor = (state, registration) => state.payments.find((item) => item.registrationId === registration?.id || item.registrationIds?.includes(registration?.id));
 const refundFor = (state, registration) => [...state.refundRequests].reverse().find((item) => item.registrationId === registration?.id);
@@ -33,6 +33,7 @@ export function managementActionEligibility(state, registration, { at = new Date
   const payment = paymentFor(state, registration);
   const refund = refundFor(state, registration);
   const active = activeRegistration(registration);
+  const withdrawn = registration?.entryStatus === "withdrawn";
   const transferCutoff = state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc;
   const refundCutoff = state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc;
   const beforeTransferCutoff = new Date(at) <= new Date(transferCutoff);
@@ -62,13 +63,18 @@ export function managementActionEligibility(state, registration, { at = new Date
   else if (!beforeTransferCutoff) transfer = unavailable("TRANSFER_CUTOFF_PASSED", transferCutoff);
 
   let requestRefundAction = available();
-  if (!active) requestRefundAction = unavailable("ENTRY_INACTIVE");
+  if (!active && !withdrawn) requestRefundAction = unavailable("ENTRY_INACTIVE");
   else if (!beforeRefundCutoff) requestRefundAction = unavailable("REFUND_CUTOFF_PASSED", refundCutoff);
   else if (payment?.status !== "paid") requestRefundAction = unavailable("REFUND_NOT_READY");
   else if (["requested", "approved"].includes(refund?.status)) requestRefundAction = unavailable("REFUND_ALREADY_IN_PROGRESS");
   else if (refund?.status === "refunded") requestRefundAction = unavailable("PAYMENT_REFUNDED");
 
-  return { continuePayment, signDeclaration, amend, transfer, requestRefund: requestRefundAction };
+  let withdraw = available();
+  if (withdrawn) withdraw = unavailable("ENTRY_ALREADY_WITHDRAWN");
+  else if (!active) withdraw = unavailable("ENTRY_INACTIVE");
+  else if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") withdraw = unavailable("WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED");
+
+  return { continuePayment, signDeclaration, amend, transfer, requestRefund: requestRefundAction, withdraw };
 }
 
 function managementView(state, registration, at = new Date(), { paymentsAvailable = true } = {}) {
@@ -92,6 +98,7 @@ function managementView(state, registration, at = new Date(), { paymentsAvailabl
       },
       emergencyContact: { name: emergency?.name ?? "", phone: emergency?.phone ?? "" },
       entryStatus: registration.entryStatus, placeStatus: registration.placeStatus,
+      withdrawal: registration.entryStatus === "withdrawn" ? { withdrawnAt: registration.withdrawnAt ?? registration.updatedAt ?? null } : null,
       declaration: { status: registration.declarationStatus ?? "complete", completionMethod: registration.declarationCompletionMethod ?? "digital_during_entry", clearedToStart: (registration.declarationStatus ?? "complete") === "complete" && registration.placeStatus === "confirmed" },
       payment: { state: stateName, label: labels[stateName] ?? paymentState.label, canContinue: actions.continuePayment.available },
       actions,
@@ -108,12 +115,13 @@ function managementView(state, registration, at = new Date(), { paymentsAvailabl
 }
 
 export class Phase3IntegrationService {
-  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "", orderConfiguration = {}, environment = "development" }) {
+  constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "", organiserEmail = null, orderConfiguration = {}, environment = "development" }) {
     this.repository = repository;
     this.stripeGateway = stripeGateway;
     this.emailAdapter = emailAdapter;
     this.environment = environment;
     this.publicBaseUrl = String(publicBaseUrl ?? "").replace(/\/$/, "");
+    this.organiserEmail = normalizeEmail(organiserEmail) || null;
     this.orders = new OrderRegistrationService({ repository, stripeGateway, emailAdapter, publicBaseUrl, ...orderConfiguration });
   }
 
@@ -193,6 +201,58 @@ export class Phase3IntegrationService {
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: "runner", actorId: null, action: "runner_details_amended", subjectId: registration.id, before: null, after: { fields: changedFields }, environment: state.environment });
       return managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) });
     });
+  }
+
+  async withdraw(managementToken, at = new Date()) {
+    const prepared = await this.repository.transaction((state) => {
+      const access = managementAccess(state, managementToken, at);
+      if (!access.ok) return access;
+      const result = withdrawRegistration(state, access.registration.id, { actorType: "runner" }, at);
+      if (!result.ok) return result;
+      const registration = result.registration;
+      const runner = runnerFor(state, registration);
+      const totals = capacitySummary(state);
+      const data = {
+        runnerName: `${runner.firstName} ${runner.lastName}`,
+        entryReference: registration.testReference,
+        raceNumber: registration.raceNumber ?? null,
+        withdrawnAt: registration.withdrawnAt,
+        confirmedCount: totals.confirmed,
+        availableCapacity: totals.remaining,
+        waitingCount: totals.waiting,
+        organiserDashboardUrl: `${this.publicBaseUrl}/registration/dashboard.html`
+      };
+      const runnerAttempt = prepareRegistrationEmailOutboxAttempt(state, {
+        registrationId: registration.id,
+        purpose: "runner_withdrawal_confirmation",
+        idempotencyKey: `registration:${registration.id}:withdrawn:runner:${registration.withdrawnAt}`,
+        message: { registrationId: registration.id, template: "runner_withdrawn", intendedRecipientAddress: runner.email, data }
+      }, at);
+      const organiserAttempt = this.organiserEmail ? prepareRegistrationEmailOutboxAttempt(state, {
+        registrationId: registration.id,
+        purpose: "organiser_withdrawal_notification",
+        idempotencyKey: `registration:${registration.id}:withdrawn:organiser:${registration.withdrawnAt}`,
+        message: { registrationId: registration.id, template: "organiser_runner_withdrawn", intendedRecipientAddress: this.organiserEmail, data }
+      }, at) : null;
+      return {
+        ok: true,
+        duplicate: result.duplicate,
+        registrationId: registration.id,
+        outboxAttemptIds: [runnerAttempt.id, organiserAttempt?.id].filter(Boolean),
+        organiserNotificationConfigured: Boolean(organiserAttempt)
+      };
+    });
+    if (!prepared.ok) return prepared;
+    const notifications = [];
+    for (const attemptId of prepared.outboxAttemptIds) notifications.push(await this.orders.deliverPreparedOutboxAttempt(attemptId, at));
+    const state = await this.repository.read();
+    const registration = state.registrations.find((item) => item.id === prepared.registrationId);
+    return {
+      ...managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }),
+      duplicate: prepared.duplicate,
+      organiserNotificationConfigured: prepared.organiserNotificationConfigured,
+      notificationDeliveryFailed: notifications.some((item) => item.ok === false)
+    };
   }
 
   transferRegistration({ managementToken = null, registrationId = null, input, actor, allowCutoffOverride = false }, at = new Date()) {
@@ -276,7 +336,7 @@ export class Phase3IntegrationService {
       const access = managementAccess(state, managementToken, at);
       if (!access.ok) return access;
       const registration = access.registration;
-      if (!activeRegistration(registration)) return { ok: false, code: "ENTRY_INACTIVE" };
+      if (!activeRegistration(registration) && registration.entryStatus !== "withdrawn") return { ok: false, code: "ENTRY_INACTIVE" };
       const payment = paymentFor(state, registration);
       if (payment?.status !== "paid") return { ok: false, code: "REFUND_NOT_READY" };
       const existing = state.refundRequests.find((item) => item.registrationId === registration.id && ["requested", "approved"].includes(item.status));

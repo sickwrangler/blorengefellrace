@@ -10,7 +10,7 @@ const id = (prefix) => `${prefix}_${crypto.randomUUID()}`;
 const replayableToken = (idempotencyKey, registrationId) => crypto.createHash("sha512").update(`${idempotencyKey}:${registrationId}`).digest("base64url");
 const tokenHash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const normalizeName = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
-const active = (registration) => registration.entryStatus !== "cancelled" && !registration.deletedAt;
+const active = (registration) => !["cancelled", "place_released", "withdrawn"].includes(registration.entryStatus) && !registration.deletedAt;
 export const PHASE2_PAYMENT_STATES = Object.freeze(["created", "pending", "paid", "failed", "abandoned", "refunded"]);
 
 export function createDatabase({ environment = "local", registrationState = "test", capacity = EVENT.capacity } = {}) {
@@ -97,7 +97,7 @@ function view(db, registration, { runnerSafe = false, transferHistory = buildTra
     declaration: completedDeclaration ?? consent?.declaration,
     declarationStatus,
     declarationCompletionMethod: completedDeclaration?.completionMethod ?? registration.declarationCompletionMethod ?? (consent?.declaration ? "digital_during_entry" : null),
-    clearedToStart: declarationStatus === "complete" && registration.placeStatus === "confirmed" && registration.entryStatus !== "place_released",
+    clearedToStart: declarationStatus === "complete" && registration.placeStatus === "confirmed" && !["cancelled", "place_released", "withdrawn"].includes(registration.entryStatus),
     transfer: transferSummaryForRegistration(transferHistory, registration.id)
   };
   delete result.confirmationTokenHash;

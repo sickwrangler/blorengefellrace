@@ -10,12 +10,14 @@ const continuePayment = document.querySelector("#continue-payment");
 const signDeclaration = document.querySelector("#sign-declaration");
 const editEntry = document.querySelector("#edit-entry");
 const transferEntry = document.querySelector("#transfer-entry");
+const withdrawEntry = document.querySelector("#withdraw-entry");
 const requestRefund = document.querySelector("#request-refund");
 const actionMessage = document.querySelector("#action-message");
 const unavailableActions = document.querySelector("#unavailable-actions");
 const actionReasons = document.querySelector("#action-reasons");
 const editDialog = document.querySelector("#edit-entry-dialog");
 const transferDialog = document.querySelector("#transfer-entry-dialog");
+const withdrawDialog = document.querySelector("#withdraw-entry-dialog");
 const amendForm = document.querySelector("#amend-form");
 const transferForm = document.querySelector("#transfer-form");
 let current = null;
@@ -72,7 +74,9 @@ function actionReason(label, action) {
     TRANSFER_CUTOFF_PASSED: `Runner transfers closed on ${deadline}. Contact the organiser if an exceptional change is needed.`,
     REFUND_CUTOFF_PASSED: `Online refund requests closed on ${deadline}. Contact the organiser if you need help.`,
     REFUND_NOT_READY: "A refund can only be requested after payment is confirmed.",
-    REFUND_ALREADY_IN_PROGRESS: "A refund request is already being reviewed or processed."
+    REFUND_ALREADY_IN_PROGRESS: "A refund request is already being reviewed or processed.",
+    ENTRY_ALREADY_WITHDRAWN: "This entry has already been withdrawn.",
+    WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED: "Withdrawal is available once payment has confirmed the race place."
   };
   return `${label}: ${reasons[action.code] ?? "This action is not available for the entry’s current state."}`;
 }
@@ -83,22 +87,24 @@ function renderActions() {
     signDeclaration: { available: current.declaration?.status !== "complete" },
     amend: { available: current.amendmentEligible },
     transfer: { available: current.transferEligible },
-    requestRefund: { available: current.refundEligible }
+    requestRefund: { available: current.refundEligible },
+    withdraw: { available: false }
   };
   const controls = [
     ["Continue payment", continuePayment, actions.continuePayment],
     ["Sign declaration", signDeclaration, actions.signDeclaration],
     ["Edit entry", editEntry, actions.amend],
     ["Transfer entry", transferEntry, actions.transfer],
+    ["Withdraw from race", withdrawEntry, actions.withdraw],
     ["Request refund", requestRefund, actions.requestRefund]
   ];
   for (const [, button, action] of controls) button.hidden = action?.available !== true;
-  const unavailable = controls.filter(([, , action]) => action?.available === false).map(([label, , action]) => {
+  const unavailable = (current.entryStatus === "withdrawn" ? [] : controls.filter(([, , action]) => action?.available === false)).map(([label, , action]) => {
     const item = document.createElement("li"); item.textContent = actionReason(label, action); return item;
   });
   actionReasons.replaceChildren(...unavailable);
   unavailableActions.hidden = unavailable.length === 0;
-  const availableChanges = [actions.continuePayment, actions.signDeclaration, actions.amend, actions.transfer, actions.requestRefund].some((action) => action?.available);
+  const availableChanges = [actions.continuePayment, actions.signDeclaration, actions.amend, actions.transfer, actions.withdraw, actions.requestRefund].some((action) => action?.available);
   actionMessage.textContent = availableChanges ? "" : "There are no self-service changes available for this entry at present.";
 }
 
@@ -122,8 +128,9 @@ async function render() {
   if (!result.ok) { accessPanel.hidden = false; entryPanel.hidden = true; accessMessage.textContent = runnerMessageForCode(result.code); return; }
   current = result.registration; accessPanel.hidden = true; entryPanel.hidden = false;
 
-  const entryConfirmed = current.placeStatus === "confirmed" && !["cancelled", "place_released"].includes(current.entryStatus);
-  setBadge("#entry-status-badge", entryConfirmed ? "Entry confirmed" : "Entry pending", entryConfirmed ? "positive" : "info", entryConfirmed ? "✓" : "…");
+  const withdrawn = current.entryStatus === "withdrawn";
+  const entryConfirmed = current.placeStatus === "confirmed" && !["cancelled", "place_released", "withdrawn"].includes(current.entryStatus);
+  setBadge("#entry-status-badge", withdrawn ? "Withdrawn" : entryConfirmed ? "Entry confirmed" : "Entry pending", withdrawn ? "neutral" : entryConfirmed ? "positive" : "info", withdrawn ? "○" : entryConfirmed ? "✓" : "…");
   const payment = paymentPresentation(current.payment); setBadge("#payment-status-badge", payment.label, payment.tone, payment.icon);
   const declarationComplete = current.declaration?.status === "complete";
   setBadge("#declaration-status-badge", declarationComplete ? "Declaration complete" : "Declaration required", declarationComplete ? "positive" : "required", declarationComplete ? "✓" : "!");
@@ -133,6 +140,16 @@ async function render() {
   rows(contactSummary, [["Email", current.runner.email], ["Phone", current.runner.phone], ["Address", address], ["Emergency contact", current.emergencyContact?.name], ["Emergency phone", current.emergencyContact?.phone]]);
   document.querySelector("#payment-summary").textContent = payment.summary;
   document.querySelector("#declaration-summary").textContent = declarationComplete ? "The race declaration is complete." : "The runner must sign the race declaration before race day.";
+  const withdrawalPanel = document.querySelector("#withdrawal-panel");
+  withdrawalPanel.hidden = !withdrawn;
+  if (withdrawn) {
+    document.querySelector("#withdrawal-summary").textContent = `Your place was released on ${deadlineText(current.withdrawal?.withdrawnAt)}. Withdrawal does not automatically provide a refund.`;
+    document.querySelector("#withdrawal-refund-message").textContent = current.actions?.requestRefund?.available
+      ? "Would you also like to request a refund? Use the separate refund action below."
+      : current.actions?.requestRefund?.code === "REFUND_CUTOFF_PASSED"
+        ? "Your place has been released. The deadline for refund requests has passed, so withdrawing does not qualify for a refund."
+        : "Any existing refund request remains visible in the payment status above.";
+  }
 
   renderActions();
   populateEditForm();
@@ -156,11 +173,24 @@ requestRefund.addEventListener("click", async () => { if (!confirm("Request a re
 
 editEntry.addEventListener("click", () => { populateEditForm(); document.querySelector("#amend-message").hidden = true; openDialog(editDialog, editEntry); });
 transferEntry.addEventListener("click", () => { transferForm.reset(); document.querySelector("#transfer-message").hidden = true; openDialog(transferDialog, transferEntry); });
+withdrawEntry.addEventListener("click", () => { document.querySelector("#withdraw-message").hidden = true; openDialog(withdrawDialog, withdrawEntry); });
 
-for (const dialog of [editDialog, transferDialog]) {
+for (const dialog of [editDialog, transferDialog, withdrawDialog]) {
   dialog.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => dialog.close()));
   dialog.addEventListener("close", () => dialog.returnFocusTo?.focus());
 }
+
+document.querySelector("#confirm-withdraw-entry").addEventListener("click", async (event) => {
+  const button = event.currentTarget; const message = document.querySelector("#withdraw-message");
+  button.disabled = true; message.hidden = true;
+  const result = await prototype.withdrawEntry();
+  button.disabled = false;
+  if (!result.ok) { message.textContent = runnerMessageForCode(result.code); message.hidden = false; message.focus(); return; }
+  withdrawDialog.close(); await render();
+  actionMessage.textContent = result.notificationDeliveryFailed
+    ? "You have withdrawn from the race. Your place is released; an email notification is awaiting retry."
+    : "You have withdrawn from the race. Your place has been released.";
+});
 
 amendForm.addEventListener("submit", async (event) => {
   event.preventDefault(); if (!amendForm.checkValidity()) return amendForm.reportValidity();

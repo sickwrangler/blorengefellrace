@@ -135,7 +135,7 @@ export function submitRegistration(state, input, { source = "runner" } = {}) {
   const errors = validateRunner(input, { requireSynthetic: state.registrationState === "test" });
   if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
   const email = String(input.email).trim().toLowerCase();
-  if (state.registrations.some((item) => item.runner.email === email && item.entryStatus !== "cancelled")) {
+  if (state.registrations.some((item) => item.runner.email === email && !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus))) {
     return { ok: false, code: "DUPLICATE", message: "A test registration already uses this email address." };
   }
   const entryStatus = acceptedCount(state) < state.event.capacity ? "accepted" : "waiting_list";

@@ -14,7 +14,7 @@ const opaqueToken = () => crypto.randomBytes(32).toString("base64url");
 const hashToken = (value) => crypto.createHash("sha256").update(String(value ?? "")).digest("hex");
 const normalizeEmail = (value) => String(value ?? "").trim().toLowerCase();
 const normalizeText = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
-const active = (entry) => entry && !entry.deletedAt && !["cancelled", "place_released"].includes(entry.entryStatus);
+const active = (entry) => entry && !entry.deletedAt && !["cancelled", "place_released", "withdrawn"].includes(entry.entryStatus);
 
 function closedProviderProofAvailable(state, stripeGateway, emailAdapter) {
   return state.environment === "production"
@@ -112,7 +112,7 @@ function declarationView(state, registration) {
     label: declaration ? "Complete" : "Declaration required",
     completionMethod: declaration?.completionMethod ?? null,
     completedAt: declaration?.completedAt ?? null,
-    clearedToStart: Boolean(declaration && registration.placeStatus === "confirmed" && registration.entryStatus !== "place_released")
+    clearedToStart: Boolean(declaration && registration.placeStatus === "confirmed" && !["cancelled", "place_released", "withdrawn"].includes(registration.entryStatus))
   };
 }
 
@@ -214,6 +214,10 @@ function prepareOutboxAttempt(state, { registrationId = null, orderId = null, so
   };
   state.emailOutbox.push(attempt);
   return attempt;
+}
+
+export function prepareRegistrationEmailOutboxAttempt(state, input, at = new Date()) {
+  return prepareOutboxAttempt(state, input, at);
 }
 
 function recordDigitalDeclaration(state, registration, runner, input, completionMethod, at = new Date()) {

@@ -5,7 +5,7 @@ import { deliverRegistrationCommunication } from "./communications.mjs";
 import { buildPrivateWorkbookModel, buildTransferHistory, buildWaitingListView, transferSummaryForRegistration, waitingListSummary } from "./private-export.mjs";
 
 const now = () => new Date().toISOString();
-const active = (registration) => registration.entryStatus !== "cancelled" && registration.entryStatus !== "place_released" && !registration.deletedAt;
+const active = (registration) => !["cancelled", "place_released", "withdrawn"].includes(registration.entryStatus) && !registration.deletedAt;
 const normalizeName = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
 const formulaSafe = (value) => /^[\s]*[=+\-@]/.test(String(value ?? "")) ? `'${value}` : String(value ?? "");
 const quote = (value) => `"${formulaSafe(value).replaceAll('"', '""')}"`;
@@ -34,7 +34,7 @@ function registrationView(state, registration, transferHistory = buildTransferHi
     runner: { ...runner, emergencyName: emergency?.name, emergencyPhone: emergency?.phone },
     termsVersion: consent?.termsVersion, privacyVersion: consent?.privacyVersion, consentRecordedAt: consent?.recordedAt,
     declaration, declarationStatus, declarationCompletionMethod: declaration?.completionMethod ?? registration.declarationCompletionMethod ?? null,
-    clearedToStart: declarationStatus === "complete" && registration.placeStatus === "confirmed" && registration.entryStatus !== "place_released",
+    clearedToStart: declarationStatus === "complete" && registration.placeStatus === "confirmed" && !["cancelled", "place_released", "withdrawn"].includes(registration.entryStatus),
     providerProof: order?.providerProof === true,
     transfer: transferSummaryForRegistration(transferHistory, registration.id)
   };
