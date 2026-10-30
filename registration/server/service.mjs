@@ -17,7 +17,7 @@ export function createDatabase({ environment = "local", registrationState = "tes
   return {
     schemaVersion: 3,
     environment,
-    event: { ...EVENT, capacity, raceDate: EVENT.date, transferCutoffUtc: EVENT.transferCutoff, refundCutoffUtc: EVENT.refundCutoff, transferRefundCutoffUtc: EVENT.transferRefundCutoff, intendedOpeningDate: null },
+    event: { ...EVENT, capacity, raceDate: EVENT.date, raceStartUtc: EVENT.raceStartUtc, transferCutoffUtc: EVENT.transferCutoff, refundCutoffUtc: EVENT.refundCutoff, transferRefundCutoffUtc: EVENT.transferRefundCutoff, intendedOpeningDate: null },
     registrationState: safeRegistrationState(registrationState, environment),
     phase3RegistrationState: "CLOSED",
     counters: { waitingSequence: 0 },
@@ -37,6 +37,8 @@ export function migrateDevelopmentDatabase(input) {
     ...(db.event ?? {}),
     capacity: EVENT.capacity,
     raceDate: db.event?.raceDate ?? db.event?.date ?? EVENT.date,
+    raceStartLocal: EVENT.raceStartLocal,
+    raceStartUtc: EVENT.raceStartUtc,
     transferCutoffUtc: EVENT.transferCutoff,
     refundCutoffUtc: EVENT.refundCutoff,
     transferRefundCutoffUtc: db.event?.transferRefundCutoffUtc ?? db.event?.transferRefundCutoff ?? EVENT.transferRefundCutoff

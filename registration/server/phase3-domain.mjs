@@ -13,6 +13,8 @@ export const PHASE3_EVENT = Object.freeze({
   name: "Blorenge Fell Race 2026",
   raceDate: "2026-11-28",
   timezone: "Europe/London",
+  raceStartLocal: "2026-11-28T13:00:00",
+  raceStartUtc: "2026-11-28T13:00:00.000Z",
   capacity: 120,
   entryFeePence: 600,
   wfraMemberPricePence: 400,
@@ -450,6 +452,8 @@ export function withdrawRegistration(state, registrationId, actor = { actorType:
   if (!registration) return { ok: false, code: "NOT_FOUND" };
   if (registration.entryStatus === "withdrawn") return { ok: true, duplicate: true, registration };
   if (!activeRegistration(registration)) return { ok: false, code: "ENTRY_INACTIVE" };
+  const raceStart = state.event.raceStartUtc ?? PHASE3_EVENT.raceStartUtc;
+  if (!organiser(actor) && new Date(at) >= new Date(raceStart)) return { ok: false, code: "WITHDRAWAL_RACE_STARTED" };
   const payment = state.payments.find((item) => item.registrationId === registration.id || item.registrationIds?.includes(registration.id));
   if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") return { ok: false, code: "WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED" };
   const before = { entryStatus: registration.entryStatus, placeStatus: registration.placeStatus, raceNumber: registration.raceNumber ?? null };

@@ -50,6 +50,7 @@ export function runnerMessageForCode(code) {
     TRANSFER_DELIVERY_FAILED: "The transfer was not completed because the new runner’s secure links could not be delivered. No entry details were changed. Please try again later or contact the organiser.",
     WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED: "Only a paid, confirmed race place can be withdrawn through runner self-service.",
     ENTRY_ALREADY_WITHDRAWN: "This entry has already been withdrawn and its place released.",
+    WITHDRAWAL_RACE_STARTED: "The race has started, so this entry cannot be withdrawn online. Please contact the organiser if you need help.",
     MANAGEMENT_UNAVAILABLE: "Entry management is temporarily unavailable. Please try again later."
   };
   return messages[code] ?? "We could not complete that request. Please review your details and try again.";

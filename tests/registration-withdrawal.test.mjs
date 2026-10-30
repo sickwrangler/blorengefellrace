@@ -10,6 +10,8 @@ import { Phase3IntegrationService } from "../registration/server/phase3-service.
 
 const beforeRefundCutoff = new Date("2026-10-28T22:00:00.000Z");
 const afterRefundCutoff = new Date("2026-10-29T12:00:00.000Z");
+const beforeRaceStart = new Date("2026-11-28T12:59:59.000Z");
+const raceStart = new Date("2026-11-28T13:00:00.000Z");
 const organiser = { authenticated: true, role: "organiser", actorType: "organiser", id: "synthetic-organiser" };
 
 const runner = (number = 1) => ({
@@ -111,6 +113,36 @@ test("withdrawal preserves refund policy before and after the configured deadlin
   assert.equal((await late.service.requestRefund(late.created.managementToken, afterRefundCutoff)).code, "REFUND_CUTOFF_PASSED");
 });
 
+test("withdrawal is available until the recorded race start and then directs the runner to the organiser", async () => {
+  const eligible = setup({ at: new Date("2026-11-28T12:30:00.000Z") });
+  assert.equal((await eligible.service.withdraw(eligible.created.managementToken, beforeRaceStart)).ok, true);
+
+  const started = setup({ at: new Date("2026-11-28T12:30:00.000Z") });
+  const view = await started.service.managementEntry(started.created.managementToken, raceStart);
+  assert.equal(view.registration.policy.raceStartUtc, raceStart.toISOString());
+  assert.equal(view.registration.actions.withdraw.code, "WITHDRAWAL_RACE_STARTED");
+  assert.equal(view.registration.actions.withdraw.deadline, raceStart.toISOString());
+  assert.equal((await started.service.withdraw(started.created.managementToken, raceStart)).code, "WITHDRAWAL_RACE_STARTED");
+  const state = await started.repository.read();
+  assert.equal(state.registrations[0].entryStatus, "active");
+  assert.equal(capacitySummary(state).confirmed, 1);
+});
+
+test("withdrawal while registration is closed releases capacity without progressing or creating a waiting-list offer", async () => {
+  const current = setup({ at: new Date("2026-11-28T12:00:00.000Z") });
+  await current.repository.transaction((state) => {
+    state.registrationState = "CLOSED";
+    state.waitingList.push({ id: "waiting-closed", firstName: "Waiting", lastName: "Runner", email: "waiting@example.com", sequence: 1, status: "waiting", joinedAt: beforeRaceStart.toISOString() });
+    return { ok: true };
+  });
+  assert.equal((await current.service.withdraw(current.created.managementToken, beforeRaceStart)).ok, true);
+  const state = await current.repository.read();
+  assert.equal(state.registrationState, "CLOSED");
+  assert.equal(capacitySummary(state).remaining, 120);
+  assert.equal(state.waitingList[0].status, "waiting");
+  assert.equal(state.waitingListOffers.length, 0);
+});
+
 test("withdrawal succeeds with an existing refund request and retains it for organiser review", async () => {
   const current = setup();
   const requested = await current.service.requestRefund(current.created.managementToken, beforeRefundCutoff);
@@ -189,6 +221,30 @@ test("email failure leaves withdrawal committed with durable retryable failure r
   assert.equal(state.emailOutbox.length, 2);
   assert.equal(state.emailOutbox.every((item) => item.status === "failed" && item.retryAfterAt), true);
   assert.equal(state.communications.every((item) => item.delivery === "failed"), true);
+});
+
+test("scheduled work retries due withdrawal notifications once without duplicate email", async () => {
+  let providerAvailable = false;
+  let attempts = 0;
+  const current = setup({ emailAdapter: { kind: "acs-test", async send() {
+    attempts += 1;
+    return providerAvailable
+      ? { delivery: "sent", externalCall: true, providerReference: `synthetic-${attempts}` }
+      : { delivery: "failed", externalCall: true, failureCategory: "throttled", retryAfterMs: 60_000 };
+  } } });
+  assert.equal((await current.service.withdraw(current.created.managementToken, beforeRefundCutoff)).notificationDeliveryFailed, true);
+  assert.equal(attempts, 2);
+  providerAvailable = true;
+  const scheduledAt = new Date(beforeRefundCutoff.getTime() + 60_001);
+  const scheduled = await current.service.runScheduledWork(organiser, scheduledAt);
+  assert.deepEqual(scheduled.withdrawalNotificationRetries, { ok: true, attempted: 2, sent: 2, failed: 0, remaining: 0 });
+  assert.equal(attempts, 4);
+  const duplicate = await current.service.runScheduledWork(organiser, new Date(scheduledAt.getTime() + 30 * 60_000));
+  assert.deepEqual(duplicate.withdrawalNotificationRetries, { ok: true, attempted: 0, sent: 0, failed: 0, remaining: 0 });
+  assert.equal(attempts, 4);
+  const state = await current.repository.read();
+  assert.equal(state.emailOutbox.every((item) => item.status === "sent" && item.message === null), true);
+  assert.equal(state.communications.filter((item) => ["runner_withdrawn", "organiser_runner_withdrawn"].includes(item.template) && item.delivery === "sent").length, 2);
 });
 
 test("editing and transfer are rejected after withdrawal while read-only access remains", async () => {

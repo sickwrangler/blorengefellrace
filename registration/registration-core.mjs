@@ -8,6 +8,8 @@ export const EVENT = Object.freeze({
   entryFeePence: 600,
   wfraMemberPricePence: 400,
   timezone: "Europe/London",
+  raceStartLocal: "2026-11-28T13:00:00",
+  raceStartUtc: "2026-11-28T13:00:00.000Z",
   transferCutoff: "2026-11-27T23:59:00.000Z",
   refundCutoff: "2026-10-28T23:59:00.000Z",
   transferRefundCutoff: "2026-10-28T23:59:00.000Z",

@@ -76,6 +76,7 @@ function actionReason(label, action) {
     REFUND_NOT_READY: "A refund can only be requested after payment is confirmed.",
     REFUND_ALREADY_IN_PROGRESS: "A refund request is already being reviewed or processed.",
     ENTRY_ALREADY_WITHDRAWN: "This entry has already been withdrawn.",
+    WITHDRAWAL_RACE_STARTED: `Online withdrawal closed when the race started on ${deadline}. Contact the organiser if you need help.`,
     WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED: "Withdrawal is available once payment has confirmed the race place."
   };
   return `${label}: ${reasons[action.code] ?? "This action is not available for the entry’s current state."}`;

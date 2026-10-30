@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { acceptWaitingListOffer, authorizePrivateInvitation, capacitySummary, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, requestRefund, validateProductionRunner, withdrawRegistration } from "./phase3-domain.mjs";
+import { acceptWaitingListOffer, authorizePrivateInvitation, capacitySummary, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, requestRefund, validateProductionRunner, withdrawRegistration } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken, prepareRegistrationEmailOutboxAttempt } from "./order-service.mjs";
@@ -15,6 +15,7 @@ const runnerFor = (state, registration) => state.runners.find((item) => item.id 
 const paymentFor = (state, registration) => state.payments.find((item) => item.registrationId === registration?.id || item.registrationIds?.includes(registration?.id));
 const refundFor = (state, registration) => [...state.refundRequests].reverse().find((item) => item.registrationId === registration?.id);
 const emergencyFor = (state, registration) => state.emergencyContacts?.find((item) => item.registrationId === registration?.id);
+const WITHDRAWAL_NOTIFICATION_PURPOSES = new Set(["runner_withdrawal_confirmation", "organiser_withdrawal_notification"]);
 
 function managementAccess(state, token, at = new Date()) {
   const tokenHash = hashToken(token);
@@ -36,6 +37,7 @@ export function managementActionEligibility(state, registration, { at = new Date
   const withdrawn = registration?.entryStatus === "withdrawn";
   const transferCutoff = state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc;
   const refundCutoff = state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc;
+  const raceStart = state.event.raceStartUtc ?? PHASE3_EVENT.raceStartUtc;
   const beforeTransferCutoff = new Date(at) <= new Date(transferCutoff);
   const beforeRefundCutoff = new Date(at) <= new Date(refundCutoff);
   const acceptingPayments = ["PRIVATE_LIVE", "OPEN", "test"].includes(state.registrationState);
@@ -72,6 +74,7 @@ export function managementActionEligibility(state, registration, { at = new Date
   let withdraw = available();
   if (withdrawn) withdraw = unavailable("ENTRY_ALREADY_WITHDRAWN");
   else if (!active) withdraw = unavailable("ENTRY_INACTIVE");
+  else if (new Date(at) >= new Date(raceStart)) withdraw = unavailable("WITHDRAWAL_RACE_STARTED", raceStart);
   else if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") withdraw = unavailable("WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED");
 
   return { continuePayment, signDeclaration, amend, transfer, requestRefund: requestRefundAction, withdraw };
@@ -104,7 +107,8 @@ function managementView(state, registration, at = new Date(), { paymentsAvailabl
       actions,
       policy: {
         transferCutoffUtc: state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc,
-        refundCutoffUtc: state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc
+        refundCutoffUtc: state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc,
+        raceStartUtc: state.event.raceStartUtc ?? PHASE3_EVENT.raceStartUtc
       },
       amendmentEligible: actions.amend.available,
       transferEligible: actions.transfer.available,
@@ -499,6 +503,30 @@ export class Phase3IntegrationService {
     });
   }
 
+  async retryDueWithdrawalNotifications(actor, { maxMessages = 4 } = {}, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    if (!Number.isInteger(maxMessages) || maxMessages < 1 || maxMessages > 4) return { ok: false, code: "INVALID_RETRY_BATCH_SIZE" };
+    const due = ((await this.repository.read()).emailOutbox ?? [])
+      .filter((item) => WITHDRAWAL_NOTIFICATION_PURPOSES.has(item.purpose)
+        && ["prepared", "failed"].includes(item.status)
+        && item.message
+        && (!item.retryAfterAt || new Date(item.retryAfterAt) <= new Date(at)))
+      .sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt))
+      .slice(0, maxMessages)
+      .map((item) => item.id);
+    let sent = 0;
+    let failed = 0;
+    for (const attemptId of due) {
+      const result = await this.orders.deliverPreparedOutboxAttempt(attemptId, at);
+      if (result.sent === 1) sent += 1;
+      else if (result.ok === false) failed += 1;
+    }
+    const remaining = ((await this.repository.read()).emailOutbox ?? []).filter((item) => WITHDRAWAL_NOTIFICATION_PURPOSES.has(item.purpose)
+      && ["prepared", "failed"].includes(item.status)
+      && item.message).length;
+    return { ok: true, attempted: due.length, sent, failed, remaining };
+  }
+
   runScheduledWork(actor, at = new Date()) {
     if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
     return this.repository.transaction(async (state) => {
@@ -518,8 +546,9 @@ export class Phase3IntegrationService {
     }).then(async (result) => {
       if (!result.ok) return result;
       const orderResult = await this.orders.runScheduledWork(at);
+      const withdrawalNotificationRetries = await this.retryDueWithdrawalNotifications(actor, { maxMessages: 4 }, at);
       const emailHealth = reconcileEmailHealth(await this.repository.read(), at);
-      return { ...result, declarationReminders: orderResult.declarationReminders, abandonedOrders: orderResult.abandonedOrders, emailHealth: { failed: emailHealth.initialConfirmations.failed, missing: emailHealth.initialConfirmations.missing, backlog: emailHealth.failedCommunicationBacklog, oldestFailedAgeMinutes: emailHealth.oldestFailedCommunicationAgeMinutes } };
+      return { ...result, declarationReminders: orderResult.declarationReminders, abandonedOrders: orderResult.abandonedOrders, withdrawalNotificationRetries, emailHealth: { failed: emailHealth.initialConfirmations.failed, missing: emailHealth.initialConfirmations.missing, backlog: emailHealth.failedCommunicationBacklog, oldestFailedAgeMinutes: emailHealth.oldestFailedCommunicationAgeMinutes } };
     });
   }
 
