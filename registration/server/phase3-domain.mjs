@@ -13,6 +13,8 @@ export const PHASE3_EVENT = Object.freeze({
   name: "Blorenge Fell Race 2026",
   raceDate: "2026-11-28",
   timezone: "Europe/London",
+  raceStartLocal: "2026-11-28T13:00:00",
+  raceStartUtc: "2026-11-28T13:00:00.000Z",
   capacity: 120,
   entryFeePence: 600,
   wfraMemberPricePence: 400,
@@ -46,7 +48,7 @@ const opaqueToken = () => crypto.randomBytes(32).toString("base64url");
 const iso = (value = new Date()) => new Date(value).toISOString();
 const organiser = (actor) => Boolean(actor?.authenticated && ["organiser", "Organiser", "administrator"].includes(actor.role));
 const systemActor = Object.freeze({ authenticated: true, role: "administrator", actorType: "system", id: "waiting-list-progression" });
-const activeRegistration = (entry) => !entry.deletedAt && !["cancelled", "place_released"].includes(entry.entryStatus);
+const activeRegistration = (entry) => !entry.deletedAt && !["cancelled", "place_released", "withdrawn"].includes(entry.entryStatus);
 
 export function managementTokenExpiry(at = new Date()) {
   const issuedAt = new Date(at);
@@ -428,7 +430,7 @@ export function assignPhase3RaceNumber(state, registrationId, raceNumber, actor,
   const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
   const number = Number(raceNumber);
   if (!registration || !Number.isInteger(number) || number < 1 || number > 999) return { ok: false, code: "INVALID_RACE_NUMBER" };
-  if (state.registrations.some((item) => item.id !== registrationId && activeRegistration(item) && item.raceNumber === number)) return { ok: false, code: "DUPLICATE_RACE_NUMBER" };
+  if (state.registrations.some((item) => item.id !== registrationId && !item.deletedAt && item.raceNumber === number)) return { ok: false, code: "DUPLICATE_RACE_NUMBER" };
   const before = registration.raceNumber;
   registration.raceNumber = number;
   recordAudit(state, actor, before == null ? "race_number_assigned" : "race_number_changed", registrationId, { raceNumber: before }, { raceNumber: number }, at);
@@ -445,10 +447,33 @@ export function removePhase3RaceNumber(state, registrationId, actor, at = new Da
   return { ok: true, releasedRaceNumber: before };
 }
 
+export function withdrawRegistration(state, registrationId, actor = { actorType: "runner" }, at = new Date()) {
+  const registration = state.registrations.find((item) => item.id === registrationId && !item.deletedAt);
+  if (!registration) return { ok: false, code: "NOT_FOUND" };
+  if (registration.entryStatus === "withdrawn") return { ok: true, duplicate: true, registration };
+  if (!activeRegistration(registration)) return { ok: false, code: "ENTRY_INACTIVE" };
+  const raceStart = state.event.raceStartUtc ?? PHASE3_EVENT.raceStartUtc;
+  if (!organiser(actor) && new Date(at) >= new Date(raceStart)) return { ok: false, code: "WITHDRAWAL_RACE_STARTED" };
+  const payment = state.payments.find((item) => item.registrationId === registration.id || item.registrationIds?.includes(registration.id));
+  if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") return { ok: false, code: "WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED" };
+  const before = { entryStatus: registration.entryStatus, placeStatus: registration.placeStatus, raceNumber: registration.raceNumber ?? null };
+  registration.entryStatus = "withdrawn";
+  registration.placeStatus = "none";
+  registration.withdrawnAt = iso(at);
+  registration.updatedAt = iso(at);
+  recordAudit(state, actor, "entry_withdrawn", registration.id, before, {
+    entryStatus: registration.entryStatus,
+    placeStatus: registration.placeStatus,
+    raceNumber: registration.raceNumber ?? null,
+    withdrawnAt: registration.withdrawnAt
+  }, at);
+  return { ok: true, duplicate: false, registration };
+}
+
 export function requestRefund(state, registrationId, actor = { actorType: "runner" }, at = new Date()) {
   const refundCutoff = state.event.refundCutoffUtc ?? state.event.transferRefundCutoffUtc;
   if (new Date(at) > new Date(refundCutoff) && !organiser(actor)) return { ok: false, code: "REFUND_CUTOFF_PASSED" };
-  const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
+  const registration = state.registrations.find((item) => item.id === registrationId && !item.deletedAt && (activeRegistration(item) || item.entryStatus === "withdrawn"));
   if (!registration) return { ok: false, code: "NOT_FOUND" };
   const request = { id: shortId("refund"), registrationId, status: "requested", requestedAt: iso(at), decidedAt: null, refundedAt: null, placeReleasedAt: null };
   state.refundRequests.push(request);
@@ -478,9 +503,10 @@ export function markRefunded(state, refundRequestId, actor, at = new Date()) {
 export function releaseRefundedPlace(state, refundRequestId, actor, at = new Date()) {
   if (!organiser(actor)) return { ok: false, code: "FORBIDDEN" };
   const request = state.refundRequests.find((item) => item.id === refundRequestId && item.status === "refunded");
-  const registration = state.registrations.find((item) => item.id === request?.registrationId && activeRegistration(item));
+  const registration = state.registrations.find((item) => item.id === request?.registrationId && !item.deletedAt && (activeRegistration(item) || item.entryStatus === "withdrawn"));
   if (!request || !registration) return { ok: false, code: "NOT_FOUND" };
-  registration.entryStatus = "place_released"; registration.placeStatus = "none"; request.placeReleasedAt = iso(at);
+  if (registration.entryStatus !== "withdrawn") registration.entryStatus = "place_released";
+  registration.placeStatus = "none"; request.placeReleasedAt = iso(at);
   recordAudit(state, actor, "place_released", registration.id, null, { refundRequestId }, at);
   return { ok: true, registration };
 }

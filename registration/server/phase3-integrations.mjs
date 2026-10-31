@@ -13,7 +13,7 @@ export const STRIPE_WEBHOOK_EVENTS = Object.freeze([
 ]);
 
 const iso = (value = new Date()) => new Date(value).toISOString();
-const activeRegistration = (entry) => entry && !entry.deletedAt && !["cancelled", "place_released"].includes(entry.entryStatus);
+const activeRegistration = (entry) => entry && !entry.deletedAt && !["cancelled", "place_released", "withdrawn"].includes(entry.entryStatus);
 const eventId = (prefix) => `${prefix}_${crypto.randomUUID()}`;
 
 function audit(state, action, registrationId, detail = {}, at = new Date(), actorType = "system") {
@@ -163,7 +163,8 @@ export function reconcileStripeEvent(state, event, { at = new Date() } = {}) {
     }
   } else if (event.type === "charge.refunded") {
     payment.status = "refunded"; payment.refundState = "refunded"; payment.refundedAt = iso(at);
-    registration.entryStatus = "place_released"; registration.placeStatus = "none";
+    if (registration.entryStatus !== "withdrawn") registration.entryStatus = "place_released";
+    registration.placeStatus = "none";
     audit(state, "stripe_refund_reconciled", registration.id, {}, at);
   } else if (event.type === "refund.failed") {
     payment.refundState = "failed";
@@ -195,7 +196,7 @@ export function expireStalePaymentReservations(state, at = new Date()) {
 export function prepareApprovedStripeRefund(state, refundRequestId, actor, at = new Date()) {
   const request = state.refundRequests.find((item) => item.id === refundRequestId && item.status === "approved");
   const payment = paymentFor(state, request?.registrationId);
-  const registration = state.registrations.find((item) => item.id === request?.registrationId && activeRegistration(item));
+  const registration = state.registrations.find((item) => item.id === request?.registrationId && !item.deletedAt && (activeRegistration(item) || item.entryStatus === "withdrawn"));
   if (!request || !payment || !registration || payment.status !== "paid" || payment.refundedRegistrationIds?.includes(registration.id)) return { ok: false, code: "REFUND_NOT_READY" };
   const partial = Boolean(payment.orderId);
   const refundAmountPence = partial ? registration.priceActuallyChargedPence : payment.expectedAmountPence;
@@ -208,7 +209,7 @@ export function prepareApprovedStripeRefund(state, refundRequestId, actor, at = 
 export function completeApprovedStripeRefund(state, prepared, refund, at = new Date()) {
   const request = state.refundRequests.find((item) => item.id === prepared.refundRequestId && item.status === "approved");
   const payment = state.payments.find((item) => item.id === prepared.paymentId);
-  const registration = state.registrations.find((item) => item.id === prepared.registrationId && activeRegistration(item));
+  const registration = state.registrations.find((item) => item.id === prepared.registrationId && !item.deletedAt && (activeRegistration(item) || item.entryStatus === "withdrawn"));
   if (!request || !payment || !registration || payment.status !== "paid" || payment.refundedRegistrationIds?.includes(registration.id)) return { ok: false, code: "REFUND_NOT_READY" };
   if (!refund?.id || !["succeeded", "pending"].includes(refund.status)) return failApprovedStripeRefund(state, prepared, at);
   payment.refundId = refund.id; payment.refundState = refund.status === "succeeded" ? "refunded" : "pending"; payment.updatedAt = iso(at);
@@ -219,7 +220,8 @@ export function completeApprovedStripeRefund(state, prepared, refund, at = new D
     payment.status = payment.refundedAmountPence === payment.expectedAmountPence ? "refunded" : "paid";
     payment.refundedAt = iso(at); request.refundedAt = iso(at); request.placeReleasedAt = iso(at);
     const order = state.orders?.find((item) => item.id === payment.orderId); if (order) order.status = payment.status === "refunded" ? "refunded" : "partially_refunded";
-    registration.entryStatus = "place_released"; registration.placeStatus = "none"; registration.updatedAt = iso(at);
+    if (registration.entryStatus !== "withdrawn") registration.entryStatus = "place_released";
+    registration.placeStatus = "none"; registration.updatedAt = iso(at);
     audit(state, "stripe_refund_completed", registration.id, { amountPence: prepared.refundAmountPence, orderStatus: order?.status ?? null }, at, prepared.actorType);
   }
   return { ok: true, refundState: payment.refundState, placeReleased: registration.placeStatus === "none", registrationId: registration.id };

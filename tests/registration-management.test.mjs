@@ -43,7 +43,7 @@ test("management eligibility matrix follows existing entry, payment, declaration
   const { state, created } = paidEntry();
   let actions = managementActionEligibility(state, created.registration, { at: beforeCutoff, paymentsAvailable: true });
   assert.deepEqual(Object.fromEntries(Object.entries(actions).map(([name, action]) => [name, action.available])), {
-    continuePayment: false, signDeclaration: false, amend: true, transfer: true, requestRefund: true
+    continuePayment: false, signDeclaration: false, amend: true, transfer: true, requestRefund: true, withdraw: true
   });
   assert.equal(actions.continuePayment.code, "PAYMENT_ALREADY_COMPLETE");
   assert.equal(actions.signDeclaration.code, "DECLARATION_COMPLETE");

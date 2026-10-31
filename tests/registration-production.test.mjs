@@ -38,23 +38,28 @@ test("the production junior launch setting is authoritative for existing stored 
   assert.equal(enabled.event.under18EntriesEnabled, true);
   assert.equal(enabled.event.transferCutoffUtc, "2026-11-27T23:59:00.000Z");
   assert.equal(enabled.event.refundCutoffUtc, "2026-10-28T23:59:00.000Z");
+  assert.equal(enabled.event.raceStartUtc, "2026-11-28T13:00:00.000Z");
   assert.deepEqual(enabled.registrations, stored.registrations);
   const disabledAgain = applyProductionRuntimeConfiguration(enabled, { under18EntriesEnabled: false });
   assert.equal(disabledAgain.event.under18EntriesEnabled, false);
   assert.deepEqual(disabledAgain.registrations, stored.registrations);
 });
 
-test("runtime configuration applies the new transfer deadline to existing persisted entries", () => {
+test("runtime configuration applies transfer and race-start deadlines to existing persisted entries", () => {
   const stored = createProductionBootstrap();
   stored.event.transferCutoffUtc = "2026-10-28T23:59:00.000Z";
+  delete stored.event.raceStartUtc;
   stored.runners.push({ id: "runner_existing", email: "existing@example.com" });
   stored.registrations.push({ id: "registration_existing", runnerId: "runner_existing", entryStatus: "accepted", placeStatus: "confirmed", declarationStatus: "complete", createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:00:00.000Z", deletedAt: null });
   stored.payments.push({ id: "payment_existing", registrationId: "registration_existing", status: "paid" });
   const configured = applyProductionRuntimeConfiguration(stored);
   assert.equal(configured.event.transferCutoffUtc, "2026-11-27T23:59:00.000Z");
   assert.equal(configured.event.refundCutoffUtc, "2026-10-28T23:59:00.000Z");
+  assert.equal(configured.event.raceStartUtc, "2026-11-28T13:00:00.000Z");
   assert.equal(managementActionEligibility(configured, configured.registrations[0], { at: new Date("2026-11-01T12:00:00.000Z") }).transfer.available, true);
   assert.equal(managementActionEligibility(configured, configured.registrations[0], { at: new Date("2026-11-28T00:00:00.000Z") }).transfer.code, "TRANSFER_CUTOFF_PASSED");
+  assert.equal(managementActionEligibility(configured, configured.registrations[0], { at: new Date("2026-11-28T12:59:59.000Z") }).withdraw.available, true);
+  assert.equal(managementActionEligibility(configured, configured.registrations[0], { at: new Date("2026-11-28T13:00:00.000Z") }).withdraw.code, "WITHDRAWAL_RACE_STARTED");
   assert.deepEqual(configured.registrations, stored.registrations);
   assert.deepEqual(configured.payments, stored.payments);
 });

@@ -216,6 +216,11 @@ export const prototype = {
     try { return await phase3Api("/management/transfer", { method: "POST", body: JSON.stringify(input), headers: { "x-management-token": token } }); }
     catch { return { ok: false, code: "MANAGEMENT_UNAVAILABLE" }; }
   },
+  async withdrawEntry(token = this.managementToken()) {
+    if (!usesApi || !token) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
+    try { return await phase3Api("/management/withdraw", { method: "POST", headers: { "x-management-token": token } }); }
+    catch { return { ok: false, code: "MANAGEMENT_UNAVAILABLE" }; }
+  },
   async decideRefund(id, decision) {
     if (!usesApi || !["approve", "reject"].includes(decision)) return { ok: false, code: "REFUND_UNAVAILABLE" };
     try { return await phase3Api(`/organiser/refunds/${encodeURIComponent(id)}/${decision}`, { method: "POST" }, true); }

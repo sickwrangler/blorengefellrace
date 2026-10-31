@@ -8,6 +8,8 @@ export const EVENT = Object.freeze({
   entryFeePence: 600,
   wfraMemberPricePence: 400,
   timezone: "Europe/London",
+  raceStartLocal: "2026-11-28T13:00:00",
+  raceStartUtc: "2026-11-28T13:00:00.000Z",
   transferCutoff: "2026-11-27T23:59:00.000Z",
   refundCutoff: "2026-10-28T23:59:00.000Z",
   transferRefundCutoff: "2026-10-28T23:59:00.000Z",
@@ -135,7 +137,7 @@ export function submitRegistration(state, input, { source = "runner" } = {}) {
   const errors = validateRunner(input, { requireSynthetic: state.registrationState === "test" });
   if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
   const email = String(input.email).trim().toLowerCase();
-  if (state.registrations.some((item) => item.runner.email === email && item.entryStatus !== "cancelled")) {
+  if (state.registrations.some((item) => item.runner.email === email && !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus))) {
     return { ok: false, code: "DUPLICATE", message: "A test registration already uses this email address." };
   }
   const entryStatus = acceptedCount(state) < state.event.capacity ? "accepted" : "waiting_list";

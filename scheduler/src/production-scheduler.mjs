@@ -31,7 +31,7 @@ export function createProductionSchedulerHandler({ service, environment = proces
       if (result.emailHealth?.backlog > 0) logger.error("registration_email_failed_backlog", { environment: "production", count: result.emailHealth.backlog, oldestAgeMinutes: result.emailHealth.oldestFailedAgeMinutes });
       const emailRecovery = recovery.enabled ? await service.runScheduledConfirmationRecovery(schedulerActor, { maxMessages: recovery.maxMessages }, scheduledAt) : { ok: true, status: "disabled", sent: 0 };
       if (!emailRecovery?.ok) throw new Error(`Production confirmation recovery paused: ${emailRecovery?.code ?? "UNKNOWN"}`);
-      logger.log("Production registration scheduled work completed", { scheduledAt: scheduledAt.toISOString(), reminders: result.reminders, expiredOffers: result.expiredOffers, expiredPayments: result.expiredPayments, nextOfferCreated: result.nextOfferCreated, confirmationRecoveryStatus: emailRecovery.status, confirmationRecoverySent: emailRecovery.sent, confirmationRecoveryRemaining: emailRecovery.remaining });
+      logger.log("Production registration scheduled work completed", { scheduledAt: scheduledAt.toISOString(), reminders: result.reminders, expiredOffers: result.expiredOffers, expiredPayments: result.expiredPayments, nextOfferCreated: result.nextOfferCreated, withdrawalNotificationRetries: result.withdrawalNotificationRetries, confirmationRecoveryStatus: emailRecovery.status, confirmationRecoverySent: emailRecovery.sent, confirmationRecoveryRemaining: emailRecovery.remaining });
       return { ...result, emailRecovery };
     } catch (error) {
       logger.error("Production registration scheduled work failed", { scheduledAt: scheduledAt.toISOString(), category: error?.name ?? "Error" });

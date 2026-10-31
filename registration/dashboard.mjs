@@ -18,7 +18,7 @@ function showNotice(message, error = false) {
 }
 async function render() {
   const [snapshot, integrations] = await Promise.all([prototype.all(), prototype.integrationStatus()]); currentState = snapshot.state; currentIntegrations = integrations;
-  const active = currentState.registrations.filter((item) => item.entryStatus !== "cancelled");
+  const active = currentState.registrations.filter((item) => !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus));
   const accepted = active.filter((item) => item.placeStatus === "confirmed").length;
   const reserved = active.filter((item) => item.placeStatus === "payment_reserved").length;
   const waiting = active.filter((item) => item.entryStatus === "waiting_list").length;
