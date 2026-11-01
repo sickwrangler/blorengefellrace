@@ -73,6 +73,7 @@ export const prototype = {
   recoverManagementLink(email) { return v3("/management/recover", { method: "POST", body: JSON.stringify({ email }) }); },
   amendEntry(changes, token = this.managementToken()) { return v3("/management/amend", { method: "POST", body: JSON.stringify(changes), headers: { "x-management-token": token } }); },
   transferEntry(input, token = this.managementToken()) { return v3("/management/transfer", { method: "POST", body: JSON.stringify(input), headers: { "x-management-token": token } }); },
+  withdrawEntry(token = this.managementToken()) { return token ? v3("/management/withdraw", { method: "POST", headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
   decideRefund(id, decision) { return v3(`/organiser/refunds/${encodeURIComponent(id)}/${decision}`, { method: "POST" }); },
   executeRefund(id) { return v3(`/organiser/refunds/${encodeURIComponent(id)}/execute`, { method: "POST" }); },
   resendManagementLink(id) { return v3(`/organiser/registrations/${encodeURIComponent(id)}/resend-management`, { method: "POST" }); },

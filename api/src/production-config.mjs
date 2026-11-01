@@ -34,6 +34,7 @@ export function loadProductionConfiguration(environment = process.env) {
     stripeWebhookSecret: stripeEnabled ? required(environment, "STRIPE_WEBHOOK_SIGNING_SECRET") : null,
     emailEndpoint: emailEnabled ? required(environment, "ACS_EMAIL_ENDPOINT") : null,
     emailConnectionString: emailEnabled ? String(environment.ACS_EMAIL_CONNECTION_STRING ?? "").trim() || null : null,
-    emailSender: emailEnabled ? required(environment, "REGISTRATION_EMAIL_SENDER") : null
+    emailSender: emailEnabled ? required(environment, "REGISTRATION_EMAIL_SENDER") : null,
+    organiserEmail: String(environment.REGISTRATION_ORGANISER_EMAIL ?? "").trim() || null
   });
 }

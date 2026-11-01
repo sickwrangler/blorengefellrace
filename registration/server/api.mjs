@@ -61,6 +61,10 @@ export function createApi({ service, phase3Integrations = null, environment = "l
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.transfer(headers["x-management-token"], body));
     }
+    if (method === "POST" && pathname === "/api/v3/management/withdraw") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.withdraw(headers["x-management-token"]));
+    }
     if (method === "POST" && pathname === "/api/v3/refunds/request") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.requestRefund(headers["x-management-token"]), 201);

@@ -29,7 +29,7 @@ export function createFixtureState(fixtures, environment = "preview") {
     if (fixture.payment) applyMockPayment(state, result.registration.id, fixture.payment);
     if (fixture.refund) applyMockPayment(state, result.registration.id, "refunded");
     if (fixture.cancel) cancelRegistration(state, result.registration.id);
-    if (fixture.seedEntryStatus === "waiting_list" && result.registration.entryStatus !== "cancelled") waiting.push(result.registration);
+    if (fixture.seedEntryStatus === "waiting_list" && !["cancelled", "place_released", "withdrawn"].includes(result.registration.entryStatus)) waiting.push(result.registration);
   }
   waiting.forEach((registration, index) => {
     registration.entryStatus = "waiting_list";

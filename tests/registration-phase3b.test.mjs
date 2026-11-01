@@ -164,7 +164,7 @@ test("amount mismatch cannot confirm an entry", async () => {
 });
 
 test("all production-quality email templates render without duplicated Welsh content", () => {
-  assert.equal(REGISTRATION_EMAIL_TEMPLATE_NAMES.length, 23);
+  assert.equal(REGISTRATION_EMAIL_TEMPLATE_NAMES.length, 25);
   for (const name of REGISTRATION_EMAIL_TEMPLATE_NAMES) {
     const rendered = renderRegistrationEmail(name, { intendedRecipientAddress: "runner@example.com", secureUrl: "https://example.test/secure", expiresAt: "2026-10-03T12:00:00Z" });
     assert.ok(rendered.subject && rendered.text && rendered.html); assert.equal(/Cymraeg|Cyfeiriad|Cofrestru/.test(rendered.text), false);

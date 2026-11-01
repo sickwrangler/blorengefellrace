@@ -18,11 +18,13 @@ const copies = [
   ["registration/server/auth.mjs", "src/shared/server/auth.mjs"],
   ["registration/server/communications.mjs", "src/shared/server/communications.mjs"],
   ["registration/server/development-email.mjs", "src/shared/server/development-email.mjs"],
+  ["registration/server/email-health.mjs", "src/shared/server/email-health.mjs"],
   ["registration/server/email-templates.mjs", "src/shared/server/email-templates.mjs"],
   ["registration/server/phase3-domain.mjs", "src/shared/server/phase3-domain.mjs"],
   ["registration/server/phase3-integrations.mjs", "src/shared/server/phase3-integrations.mjs"],
   ["registration/server/phase3-service.mjs", "src/shared/server/phase3-service.mjs"],
   ["registration/server/order-service.mjs", "src/shared/server/order-service.mjs"],
+  ["registration/server/private-export.mjs", "src/shared/server/private-export.mjs"],
   ["registration/server/repositories.mjs", "src/shared/server/repositories.mjs"],
   ["registration/server/service.mjs", "src/shared/server/service.mjs"]
 ];

@@ -5,7 +5,7 @@ export const INITIAL_CONFIRMATION_TEMPLATES = Object.freeze([
   "entry_confirmed_declaration_required"
 ]);
 
-const active = (registration) => registration.entryStatus !== "cancelled" && registration.entryStatus !== "place_released" && !registration.deletedAt;
+const active = (registration) => !["cancelled", "place_released", "withdrawn"].includes(registration.entryStatus) && !registration.deletedAt;
 const sent = (receipt) => receipt.delivery === "sent";
 
 function paymentFor(state, registration) {

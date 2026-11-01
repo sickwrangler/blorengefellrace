@@ -47,6 +47,7 @@ export function createProductionApi({ service, phase3Integrations, repository, s
     if (method === "POST" && pathname === "/api/v3/management/recover") return response(202, await phase3Integrations.recoverManagementLink(body.email));
     if (method === "POST" && pathname === "/api/v3/management/amend") return resultResponse(await phase3Integrations.amend(headers["x-management-token"], body));
     if (method === "POST" && pathname === "/api/v3/management/transfer") return resultResponse(await phase3Integrations.transfer(headers["x-management-token"], body));
+    if (method === "POST" && pathname === "/api/v3/management/withdraw") return resultResponse(await phase3Integrations.withdraw(headers["x-management-token"]));
     if (method === "POST" && pathname === "/api/v3/refunds/request") return resultResponse(await phase3Integrations.requestRefund(headers["x-management-token"]), 201);
     if (method === "POST" && pathname === "/api/v3/waiting-list/join") return resultResponse(await phase3Integrations.joinWaitingList(body, new Date(), headers["x-private-invitation"]), 201);
     if (method === "POST" && pathname === "/api/v3/waiting-list/accept") return resultResponse(await phase3Integrations.acceptWaitingPlace(headers["x-private-invitation"], body, new Date()), 201);

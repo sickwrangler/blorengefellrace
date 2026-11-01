@@ -140,9 +140,12 @@ test("manage page is read-only by default with separate accessible dialogs", asy
   assert.match(html, /id="declaration-status-badge"/);
   assert.match(html, /id="edit-entry-dialog"[^>]*aria-labelledby="edit-entry-title"/);
   assert.match(html, /id="transfer-entry-dialog"[^>]*aria-labelledby="transfer-entry-title"/);
+  assert.match(html, /id="withdraw-entry-dialog"[^>]*aria-labelledby="withdraw-entry-title"/);
   assert.match(html, /<button[^>]*id="edit-entry"[^>]*>Edit entry<\/button>/);
   assert.match(html, /<button[^>]*id="transfer-entry"[^>]*>Transfer entry<\/button>/);
+  assert.match(html, /<button[^>]*id="withdraw-entry"[^>]*>Withdraw from race<\/button>/);
   assert.match(html, /Transfer this race place to another runner\./);
+  assert.match(html, /Withdrawal does not automatically provide a refund/);
   assert.match(html, /id="unavailable-actions"/);
   assert.match(html, /Why some actions are unavailable/);
   assert.doesNotMatch(html, /id="edit-entry"[^>]*>Transfer entry/);
@@ -158,6 +161,8 @@ test("manage page is read-only by default with separate accessible dialogs", asy
   assert.match(script, /TRANSFER_CUTOFF_PASSED/);
   assert.match(script, /Runner transfers closed on/);
   assert.match(script, /REFUND_ALREADY_IN_PROGRESS/);
+  assert.match(script, /prototype\.withdrawEntry\(\)/);
+  assert.match(script, /You have withdrawn from the race/);
   assert.match(script, /MANAGEMENT_TOKEN_EXPIRED|runnerMessageForCode/);
   assert.match(script, /✓/);
   assert.match(script, /!/);

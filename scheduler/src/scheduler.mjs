@@ -37,7 +37,8 @@ export function createSchedulerHandler({ service, environment = process.env, clo
         reminders: result.reminders,
         expiredOffers: result.expiredOffers,
         expiredPayments: result.expiredPayments,
-        nextOfferCreated: result.nextOfferCreated
+        nextOfferCreated: result.nextOfferCreated,
+        withdrawalNotificationRetries: result.withdrawalNotificationRetries
       });
       return result;
     } catch (error) {

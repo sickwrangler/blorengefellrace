@@ -31,6 +31,8 @@ export function createProductionBootstrap({ under18EntriesEnabled = false } = {}
       transferRefundCutoffUtc: PHASE3_EVENT.transferRefundCutoffUtc,
       transferCutoffUtc: PHASE3_EVENT.transferCutoffUtc,
       refundCutoffUtc: PHASE3_EVENT.refundCutoffUtc,
+      raceStartLocal: PHASE3_EVENT.raceStartLocal,
+      raceStartUtc: PHASE3_EVENT.raceStartUtc,
       under18EntriesEnabled: under18EntriesEnabled === true
     },
     counters: { waitingSequence: 0 },
@@ -57,6 +59,8 @@ export function applyProductionRuntimeConfiguration(state, { under18EntriesEnabl
       ...state.event,
       transferCutoffUtc: PHASE3_EVENT.transferCutoffUtc,
       refundCutoffUtc: PHASE3_EVENT.refundCutoffUtc,
+      raceStartLocal: PHASE3_EVENT.raceStartLocal,
+      raceStartUtc: PHASE3_EVENT.raceStartUtc,
       under18EntriesEnabled: under18EntriesEnabled === true
     }
   };

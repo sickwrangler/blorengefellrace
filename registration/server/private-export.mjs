@@ -188,7 +188,7 @@ function currentEntry(state, registration, transferHistory) {
     placeStatus: registration.placeStatus ?? "",
     paymentStatus,
     declarationStatus,
-    clearedToStart: yesNo(declarationStatus === "complete" && registration.placeStatus === "confirmed" && !["cancelled", "released", "place_released"].includes(registration.entryStatus) && !refunded),
+    clearedToStart: yesNo(declarationStatus === "complete" && registration.placeStatus === "confirmed" && !["cancelled", "released", "place_released", "withdrawn"].includes(registration.entryStatus) && !refunded),
     priceActuallyCharged: Number.isFinite(registration.priceActuallyChargedPence) ? registration.priceActuallyChargedPence / 100 : Number.isFinite(registration.pricing?.priceActuallyChargedPence) ? registration.pricing.priceActuallyChargedPence / 100 : Number.isFinite(payment?.priceActuallyChargedPence) ? payment.priceActuallyChargedPence / 100 : Number.isFinite(payment?.actualPaidAmountPence) ? payment.actualPaidAmountPence / 100 : null,
     currency: String(payment?.currency ?? "").toUpperCase(),
     refundState: refunded ? "refunded" : payment?.refundState ?? "",
@@ -210,7 +210,7 @@ export function buildPrivateWorkbookModel(state, generatedAt = new Date()) {
   const waitingSummary = waitingListSummary(waitingListProjection);
   const registrations = (state.registrations ?? []).filter((item) => !item.deletedAt);
   const currentEntries = registrations.map((registration) => currentEntry(state, registration, transferHistory));
-  const active = registrations.filter((item) => !["cancelled", "place_released"].includes(item.entryStatus));
+  const active = registrations.filter((item) => !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus));
   const summary = {
     event: state.event?.name ?? "Blorenge Fell Race 2026",
     raceDate: asDate(state.event?.raceDate),
@@ -223,7 +223,7 @@ export function buildPrivateWorkbookModel(state, generatedAt = new Date()) {
     acceptedFromWaitingList: waitingSummary.accepted,
     declinedWaitingListOffers: waitingSummary.declined,
     expiredWaitingListOffers: waitingSummary.expired,
-    cancelledReleasedCount: registrations.filter((item) => ["cancelled", "place_released"].includes(item.entryStatus)).length,
+    cancelledReleasedCount: registrations.filter((item) => ["cancelled", "place_released", "withdrawn"].includes(item.entryStatus)).length,
     registrationsEverTransferred: new Set(transferHistory.map((item) => item.registrationId)).size,
     totalTransferEvents: transferHistory.length,
     pendingDeclarations: currentEntries.filter((item) => item.placeStatus === "confirmed" && item.declarationStatus !== "complete").length,

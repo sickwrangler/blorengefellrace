@@ -44,6 +44,7 @@ const phase3Integrations = new Phase3IntegrationService({
   stripeGateway: stripeEnabled ? createDevelopmentStripeGateway() : null,
   emailAdapter: lifecycleEmailAdapter,
   publicBaseUrl,
+  organiserEmail: process.env.REGISTRATION_ORGANISER_EMAIL || String(process.env.REGISTRATION_EMAIL_SAFE_RECIPIENTS ?? "").split(",")[0],
   orderConfiguration: {
     maxRunnersPerOrder: positiveInteger("REGISTRATION_MAX_RUNNERS_PER_ORDER", 5),
     emailRecoveryMaxPerHour: positiveInteger("REGISTRATION_EMAIL_RECOVERY_MAX_PER_HOUR", 8),

@@ -28,7 +28,7 @@ const storageTransport = createProductionAzureTableTransport({
 const repository = createAzureTableRepository(storageTransport);
 const emailAdapter = createProductionEmailAdapter(configuration);
 const stripeGateway = createProductionStripeGateway(configuration);
-const phase3Integrations = new Phase3IntegrationService({ repository, stripeGateway, emailAdapter, publicBaseUrl: configuration.publicBaseUrl, environment: "production", orderConfiguration: { maxRunnersPerOrder: configuration.maxRunnersPerOrder, emailRecoveryMaxPerHour: configuration.emailRecoveryMaxPerHour } });
+const phase3Integrations = new Phase3IntegrationService({ repository, stripeGateway, emailAdapter, publicBaseUrl: configuration.publicBaseUrl, organiserEmail: configuration.organiserEmail, environment: "production", orderConfiguration: { maxRunnersPerOrder: configuration.maxRunnersPerOrder, emailRecoveryMaxPerHour: configuration.emailRecoveryMaxPerHour } });
 const handle = createProductionApi({ service: new ProductionRegistrationService({ repository, emailAdapter, stripeMode: stripeGateway?.mode ?? "disabled" }), phase3Integrations, repository, storageDiagnostics: storageTransport.storageMetadata, privateWorkbookExporter });
 
 const handler = async (request, context) => {

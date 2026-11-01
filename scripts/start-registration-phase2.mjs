@@ -24,7 +24,12 @@ await repository.transaction((stored) => {
   return { ok: true };
 });
 const service = new RegistrationService({ repository, paymentAdapter: adapters.payment, emailAdapter: adapters.email });
-const phase3Integrations = new Phase3IntegrationService({ repository, emailAdapter: createControlledDevelopmentEmail() });
+const phase3Integrations = new Phase3IntegrationService({
+  repository,
+  emailAdapter: createControlledDevelopmentEmail(),
+  publicBaseUrl: `http://127.0.0.1:${port}`,
+  organiserEmail: process.env.REGISTRATION_ORGANISER_EMAIL || "organiser@example.com"
+});
 const api = createApi({ service, phase3Integrations, environment, privateWorkbookExporter: createPrivateRegistrationWorkbook });
 const mime = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gpx": "application/gpx+xml" };
 
