@@ -37,11 +37,11 @@
       <p id="waiting-list-operations-note" class="hint">There must be both a waiting runner and an available place.</p>
       <div class="waiting-list-filters">
         <label>Search waiting list<input id="waiting-list-search" type="search" placeholder="Name or email"></label>
-        <label>Status<select id="waiting-list-filter"><option value="">All</option><option value="waiting">Waiting</option><option value="offered">Offer outstanding</option><option value="accepted">Accepted</option><option value="declined">Declined</option><option value="expired">Expired</option></select></label>
+        <label>Status<select id="waiting-list-filter"><option value="">All</option><option value="waiting">Waiting</option><option value="offered">Offer outstanding</option><option value="accepted">Accepted</option><option value="declined">Declined</option><option value="expired">Expired</option><option value="withdrawn">Withdrawn</option></select></label>
       </div>
       <div class="waiting-list-table-wrap">
         <table class="waiting-list-table">
-          <thead><tr><th scope="col">Position</th><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Joined</th><th scope="col">Offer details</th></tr></thead>
+          <thead><tr><th scope="col">Position</th><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Joined</th><th scope="col">Offer details</th><th scope="col">Actions</th></tr></thead>
           <tbody id="waiting-list-rows"></tbody>
         </table>
       </div>
@@ -134,6 +134,24 @@
         <label>Club<input id="entry-correction-club" name="club"></label>
       </div>
       <div class="form-actions"><button id="close-entry-correction" class="button button--quiet" type="button">Cancel</button><button class="button" type="submit">Save details</button></div>
+    </form>
+  </dialog>
+  <dialog id="waiting-list-action-dialog" class="confirmation-dialog" aria-labelledby="waiting-list-action-title">
+    <form id="waiting-list-action-form">
+      <h2 id="waiting-list-action-title">Waiting-list action</h2>
+      <p id="waiting-list-action-runner"></p>
+      <p id="waiting-list-action-warning" class="helper-text"></p>
+      <label>Reason (optional)<input id="waiting-list-action-reason" name="reason" maxlength="250" placeholder="For example, requested by email"></label>
+      <div class="form-actions"><button id="close-waiting-list-action" class="button button--quiet" type="button">Cancel</button><button id="confirm-waiting-list-action" class="button" type="submit">Confirm</button></div>
+    </form>
+  </dialog>
+  <dialog id="withdraw-entry-dialog" class="confirmation-dialog" aria-labelledby="withdraw-entry-title">
+    <form id="withdraw-entry-form">
+      <h2 id="withdraw-entry-title">Withdraw runner</h2>
+      <p id="withdraw-entry-runner"></p>
+      <p>This releases the race place and removes the runner from the active participant list. Payment and financial history are preserved, and no refund is issued automatically.</p>
+      <label>Reason (optional)<input id="withdraw-entry-reason" name="reason" maxlength="250" placeholder="For example, requested by email"></label>
+      <div class="form-actions"><button id="close-withdraw-entry" class="button button--quiet" type="button">Cancel</button><button class="button danger-button" type="submit">Withdraw runner</button></div>
     </form>
   </dialog>
 </body>

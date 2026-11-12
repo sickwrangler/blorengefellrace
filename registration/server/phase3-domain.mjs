@@ -305,19 +305,31 @@ export function joinWaitingList(state, input, { invitationToken = null, at = new
   return { ok: true, waitingListEntry: item };
 }
 
-export function createNextWaitingListOffer(state, actor, at = new Date()) {
+function waitingListReason(value) {
+  const reason = String(value ?? "").trim();
+  return reason.length <= 250 ? { ok: true, reason: reason || null } : { ok: false, code: "WAITING_LIST_REASON_TOO_LONG" };
+}
+
+export function createWaitingListOffer(state, waitingListId, actor, { reason = null } = {}, at = new Date()) {
   if (!organiser(actor)) return { ok: false, code: "FORBIDDEN" };
   if (capacitySummary(state).remaining < 1) return { ok: false, code: "CAPACITY_FULL" };
-  const waiting = state.waitingList.filter((item) => item.status === "waiting").sort((a, b) => a.sequence - b.sequence)[0];
-  if (!waiting) return { ok: false, code: "WAITING_LIST_EMPTY" };
+  const reasonResult = waitingListReason(reason);
+  if (!reasonResult.ok) return reasonResult;
+  const eligible = state.waitingList.filter((item) => item.status === "waiting").sort((a, b) => a.sequence - b.sequence);
+  const waiting = waitingListId ? eligible.find((item) => item.id === waitingListId) : eligible[0];
+  if (!waiting) return { ok: false, code: waitingListId ? "WAITING_LIST_ENTRY_NOT_ELIGIBLE" : "WAITING_LIST_EMPTY" };
   const expiresAt = new Date(new Date(at).getTime() + state.event.waitingListOfferHours * 3_600_000);
   const reminderAt = new Date(new Date(at).getTime() + state.event.waitingListReminderHours * 3_600_000);
   const issued = issuePrivateInvitation(state, { kind: "waiting_list_offer", waitingListId: waiting.id, expiresAt }, actor, at);
   const offer = { id: shortId("offer"), waitingListId: waiting.id, invitationId: issued.invitation.id, status: "offered", createdAt: iso(at), reminderAt: reminderAt.toISOString(), expiresAt: expiresAt.toISOString() };
   waiting.status = "offered";
   state.waitingListOffers.push(offer);
-  recordAudit(state, actor, "waiting_list_offer_created", offer.id, null, { waitingListId: waiting.id, expiresAt: offer.expiresAt }, at);
+  recordAudit(state, actor, "waiting_list_offer_created", offer.id, null, { waitingListId: waiting.id, expiresAt: offer.expiresAt, selection: waitingListId ? "specific" : "next", reason: reasonResult.reason }, at);
   return { ok: true, offer, token: issued.token };
+}
+
+export function createNextWaitingListOffer(state, actor, at = new Date()) {
+  return createWaitingListOffer(state, null, actor, {}, at);
 }
 
 function finishOffer(state, offer, status, actor, at) {
@@ -328,6 +340,23 @@ function finishOffer(state, offer, status, actor, at) {
   const invitation = state.privateInvitations.find((item) => item.id === offer.invitationId);
   if (invitation && !invitation.revokedAt) invitation.revokedAt = iso(at);
   recordAudit(state, actor, `waiting_list_offer_${status}`, offer.id, null, { waitingListId: offer.waitingListId }, at);
+}
+
+export function withdrawWaitingListEntry(state, waitingListId, actor, { reason = null } = {}, at = new Date()) {
+  if (!organiser(actor)) return { ok: false, code: "FORBIDDEN" };
+  const reasonResult = waitingListReason(reason);
+  if (!reasonResult.ok) return reasonResult;
+  const waiting = state.waitingList.find((item) => item.id === waitingListId);
+  if (!waiting) return { ok: false, code: "WAITING_LIST_ENTRY_NOT_FOUND" };
+  if (waiting.status === "withdrawn") return { ok: true, duplicate: true, waitingListEntry: waiting, activeOfferCancelled: false };
+  if (!['waiting', 'offered'].includes(waiting.status)) return { ok: false, code: "WAITING_LIST_ENTRY_INACTIVE" };
+  const before = { status: waiting.status };
+  const offer = state.waitingListOffers.find((item) => item.waitingListId === waiting.id && item.status === "offered");
+  if (offer) finishOffer(state, offer, "cancelled", actor, at);
+  waiting.status = "withdrawn";
+  waiting.withdrawnAt = iso(at);
+  recordAudit(state, actor, "waiting_list_withdrawn", waiting.id, before, { status: "withdrawn", reason: reasonResult.reason, activeOfferCancelled: Boolean(offer) }, at);
+  return { ok: true, duplicate: false, waitingListEntry: waiting, activeOfferCancelled: Boolean(offer) };
 }
 
 export function expireWaitingListOffers(state, actor, at = new Date()) {
@@ -447,7 +476,7 @@ export function removePhase3RaceNumber(state, registrationId, actor, at = new Da
   return { ok: true, releasedRaceNumber: before };
 }
 
-export function withdrawRegistration(state, registrationId, actor = { actorType: "runner" }, at = new Date()) {
+export function withdrawRegistration(state, registrationId, actor = { actorType: "runner" }, at = new Date(), { reason = null } = {}) {
   const registration = state.registrations.find((item) => item.id === registrationId && !item.deletedAt);
   if (!registration) return { ok: false, code: "NOT_FOUND" };
   if (registration.entryStatus === "withdrawn") return { ok: true, duplicate: true, registration };
@@ -465,7 +494,8 @@ export function withdrawRegistration(state, registrationId, actor = { actorType:
     entryStatus: registration.entryStatus,
     placeStatus: registration.placeStatus,
     raceNumber: registration.raceNumber ?? null,
-    withdrawnAt: registration.withdrawnAt
+    withdrawnAt: registration.withdrawnAt,
+    reason: String(reason ?? "").trim() || null
   }, at);
   return { ok: true, duplicate: false, registration };
 }

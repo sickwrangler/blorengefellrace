@@ -85,6 +85,19 @@ export function createApi({ service, phase3Integrations = null, environment = "l
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.offerNextWaitingPlace(actor));
     }
+    const waitingListAction = pathname.match(/^\/api\/v3\/organiser\/waiting-list\/([^/]+)\/(offer|withdraw)$/);
+    if (method === "POST" && waitingListAction) {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      const waitingListId = decodeURIComponent(waitingListAction[1]);
+      return resultResponse(await (waitingListAction[2] === "offer"
+        ? phase3Integrations.offerWaitingPlace(actor, waitingListId, body)
+        : phase3Integrations.withdrawWaitingPlace(actor, waitingListId, body)));
+    }
+    const organiserWithdrawal = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/withdraw$/);
+    if (method === "POST" && organiserWithdrawal) {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.organiserWithdraw(actor, decodeURIComponent(organiserWithdrawal[1]), body));
+    }
     const revokeManagement = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/revoke-management$/);
     if (method === "POST" && revokeManagement) {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });

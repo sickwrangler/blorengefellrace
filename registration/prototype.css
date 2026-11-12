@@ -65,6 +65,7 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border: .15rem solid #
 .secondary-link { align-self: center; }
 .text-button { min-height: 2.5rem; padding: .25rem; border: 0; color: var(--colour-forest); background: transparent; font-weight: 650; text-decoration: underline; text-decoration-color: var(--colour-bracken); text-underline-offset: .2em; }
 .text-button:hover { color: var(--colour-bracken); }
+.text-button:disabled { color: var(--colour-ink-soft); cursor: not-allowed; opacity: .65; text-decoration-color: transparent; }
 .danger-link, .danger-button { color: #7b241c; }
 .secondary-actions { display: grid; gap: .25rem; margin-top: 1.25rem; color: var(--colour-ink-soft); font-size: .9rem; }
 .reset-row { margin: 2rem 0; text-align: right; }
@@ -77,6 +78,7 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border: .15rem solid #
 .waiting-list-table-wrap { overflow-x: auto; }
 .waiting-list-table { width: 100%; min-width: 52rem; border-collapse: collapse; }
 .waiting-list-table th, .waiting-list-table td { padding: .7rem .55rem; border-bottom: 1px solid var(--colour-stone); text-align: left; vertical-align: top; }
+.waiting-list-table td:last-child .text-button + .text-button { margin-left: .65rem; }
 .waiting-list-table th { color: var(--colour-forest-dark); font-size: .78rem; letter-spacing: .03em; text-transform: uppercase; }
 .waiting-list-table td:first-child { text-align: center; font-weight: 750; }
 .waiting-list-row--historical { color: var(--colour-ink-soft); background: rgb(233 231 223 / .45); }

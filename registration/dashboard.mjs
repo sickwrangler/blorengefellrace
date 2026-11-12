@@ -3,12 +3,15 @@ import { queryRegistrations } from "./preview-repository.mjs";
 import { availableOrganiserActions } from "./organiser-view.mjs";
 
 let currentState;
+let currentRemainingPlaces = 0;
 let selectedReference = new URLSearchParams(window.location.search).get("ref");
 let markingViewed = false;
 let pendingCancellation = null;
 let pendingTransfer = null;
 let pendingRaceNumber = null;
 let pendingCorrection = null;
+let pendingWaitingListAction = null;
+let pendingOrganiserWithdrawal = null;
 let currentIntegrations = { paymentsAvailable: false, email: "captured-only" };
 if (canTest) await render();
 
@@ -27,6 +30,7 @@ async function render() {
   document.querySelector("#summary-accepted").textContent = accepted;
   const waitingCount = currentState.waitingListSummary?.currentlyWaiting ?? snapshot.totals?.waiting ?? waiting;
   const remainingPlaces = snapshot.totals?.remaining ?? Math.max(0, currentState.event.capacity - accepted - reserved);
+  currentRemainingPlaces = remainingPlaces;
   document.querySelector("#summary-waiting").textContent = waitingCount;
   document.querySelector("#summary-payments").textContent = attention;
   document.querySelector("#summary-declarations").textContent = declarations;
@@ -61,8 +65,8 @@ async function render() {
 }
 function waitingListStatus(item) {
   if (item.offerStatus === "offered") return { label: "Offer sent", className: "status-badge--info" };
-  const labels = { waiting: "Waiting", accepted: "Accepted", declined: "Declined", expired: "Expired", offered: "Offer sent" };
-  const classNames = { waiting: "status-badge--positive", accepted: "status-badge--positive", declined: "status-badge--neutral", expired: "status-badge--neutral", offered: "status-badge--info" };
+  const labels = { waiting: "Waiting", accepted: "Accepted", declined: "Declined", expired: "Expired", withdrawn: "Withdrawn", offered: "Offer sent" };
+  const classNames = { waiting: "status-badge--positive", accepted: "status-badge--positive", declined: "status-badge--neutral", expired: "status-badge--neutral", withdrawn: "status-badge--neutral", offered: "status-badge--info" };
   return { label: labels[item.status] ?? String(item.status || "Unknown").replaceAll("_", " "), className: classNames[item.status] ?? "status-badge--neutral" };
 }
 function formatWaitingTime(value, dateOnly = false) {
@@ -104,7 +108,16 @@ function renderWaitingList() {
     if (item.offerCompletedAt) offerParts.push(`Completed ${formatWaitingTime(item.offerCompletedAt)}`);
     if (item.entryReference) offerParts.push(`Entry ${item.entryReference}`);
     offer.textContent = offerParts.join(" · ") || "—";
-    row.append(position, name, email, status, joined, offer); rows.append(row);
+    const actions = document.createElement("td");
+    if (item.status === "waiting") {
+      const offerButton = actionButton("Offer place", () => openWaitingListAction(item, "offer"), "text-button");
+      offerButton.disabled = currentRemainingPlaces < 1;
+      if (offerButton.disabled) offerButton.title = "No race place is currently available";
+      actions.append(offerButton);
+    }
+    if (["waiting", "offered"].includes(item.status)) actions.append(actionButton("Withdraw", () => openWaitingListAction(item, "withdraw"), "text-button danger-link"));
+    if (!actions.childElementCount) actions.textContent = "—";
+    row.append(position, name, email, status, joined, offer, actions); rows.append(row);
   }
   document.querySelector("#waiting-list-empty").hidden = items.length > 0;
 }
@@ -196,6 +209,22 @@ function renderDetail(item) {
 function actionButton(label, handler, className = "button button--quiet") {
   const button = document.createElement("button"); button.type = "button"; button.className = className; button.textContent = label; button.addEventListener("click", handler); return button;
 }
+function openWaitingListAction(item, action) {
+  pendingWaitingListAction = { waitingListId: item.waitingListId, action };
+  const runnerName = `${item.firstName} ${item.lastName}`.trim();
+  document.querySelector("#waiting-list-action-title").textContent = action === "offer" ? "Offer a place to selected runner" : "Withdraw from waiting list";
+  document.querySelector("#waiting-list-action-runner").textContent = `${runnerName} · ${item.email}${item.currentPosition ? ` · current position ${item.currentPosition}` : ""}`;
+  document.querySelector("#waiting-list-action-warning").textContent = action === "offer"
+    ? "This manually selects this runner rather than the next person in queue. One available place will be reserved for 48 hours and the offer email will be sent immediately."
+    : item.offerStatus === "offered"
+      ? "This person has an active offer. Confirming will revoke its private link, cancel its capacity reservation and preserve the offer history. It will not automatically offer the place to somebody else."
+      : "This preserves the record for audit, removes the person from future offers and recalculates the active queue positions.";
+  document.querySelector("#confirm-waiting-list-action").textContent = action === "offer" ? "Send 48-hour offer" : "Withdraw from waiting list";
+  document.querySelector("#confirm-waiting-list-action").className = action === "offer" ? "button" : "button danger-button";
+  document.querySelector("#waiting-list-action-reason").value = "";
+  document.querySelector("#waiting-list-action-dialog").showModal();
+  document.querySelector("#waiting-list-action-reason").focus();
+}
 function renderActions(item) {
   const actions = document.querySelector("#entry-actions"); actions.replaceChildren();
   const available = availableOrganiserActions(item);
@@ -215,6 +244,15 @@ function renderActions(item) {
     }));
     actions.append(actionButton("Transfer entry", () => openTransferDialog(item)));
     actions.append(actionButton("Resend management link", async () => { const result = await prototype.resendManagementLink(item.id); showNotice(result.ok ? "A new management link was sent through the controlled development channel." : `Management link unavailable: ${result.code}`, !result.ok); await render(); }));
+  }
+  if (item.placeStatus === "confirmed" && item.paymentStatus === "successful" && !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus)) {
+    actions.append(actionButton("Withdraw runner", () => {
+      pendingOrganiserWithdrawal = item.id;
+      document.querySelector("#withdraw-entry-runner").textContent = `${item.runner.firstName} ${item.runner.lastName} · ${item.testReference}`;
+      document.querySelector("#withdraw-entry-reason").value = "";
+      document.querySelector("#withdraw-entry-dialog").showModal();
+      document.querySelector("#withdraw-entry-reason").focus();
+    }, "button button--quiet danger-button"));
   }
   if (available.includes("race_number")) actions.append(actionButton(item.raceNumber ? "Change race number" : "Assign race number", () => {
     pendingRaceNumber = item.id;
@@ -296,6 +334,51 @@ document.querySelector("#offer-next-waiting-place")?.addEventListener("click", a
   if (!window.confirm("Offer the available place to the next person on the waiting list? The place will be reserved for 48 hours and the runner will be emailed.")) return;
   const result = await prototype.offerNextWaitingPlace();
   showNotice(result.ok ? "The next waiting-list runner has been emailed a 48-hour place offer." : `A place offer could not be created: ${result.code}`, !result.ok);
+  await render();
+});
+document.querySelector("#close-waiting-list-action")?.addEventListener("click", () => {
+  pendingWaitingListAction = null;
+  document.querySelector("#waiting-list-action-dialog").close();
+});
+document.querySelector("#waiting-list-action-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!pendingWaitingListAction) return;
+  const pending = pendingWaitingListAction;
+  const reason = document.querySelector("#waiting-list-action-reason").value.trim();
+  const result = pending.action === "offer"
+    ? await prototype.offerWaitingPlace(pending.waitingListId, reason)
+    : await prototype.withdrawWaitingPlace(pending.waitingListId, reason);
+  if (result.ok) {
+    document.querySelector("#waiting-list-action-dialog").close();
+    pendingWaitingListAction = null;
+  }
+  const success = pending.action === "offer"
+    ? result.emailDeliveryFailed
+      ? "The 48-hour offer was created, but email delivery failed. The reservation is active; review email health before taking further action."
+      : "The selected runner has been emailed a 48-hour place offer."
+    : result.activeOfferCancelled
+      ? "The runner was withdrawn from the waiting list and their active offer was cancelled. The released place remains available for an organiser to offer."
+      : "The runner was withdrawn from the waiting list and active queue positions were updated.";
+  showNotice(result.ok ? success : `Waiting-list action unavailable: ${result.code}`, !result.ok || result.emailDeliveryFailed === true);
+  await render();
+});
+document.querySelector("#close-withdraw-entry")?.addEventListener("click", () => {
+  pendingOrganiserWithdrawal = null;
+  document.querySelector("#withdraw-entry-dialog").close();
+});
+document.querySelector("#withdraw-entry-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!pendingOrganiserWithdrawal) return;
+  const registrationId = pendingOrganiserWithdrawal;
+  const reason = document.querySelector("#withdraw-entry-reason").value.trim();
+  const result = await prototype.organiserWithdrawEntry(registrationId, reason);
+  if (result.ok) {
+    pendingOrganiserWithdrawal = null;
+    document.querySelector("#withdraw-entry-dialog").close();
+  }
+  showNotice(result.ok
+    ? "The runner has been withdrawn. Their place is available, no refund was issued, and no waiting-list offer was created automatically."
+    : `Runner withdrawal unavailable: ${result.code}`, !result.ok);
   await render();
 });
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });

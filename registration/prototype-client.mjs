@@ -134,6 +134,16 @@ export const prototype = {
     try { return await phase3Api("/organiser/waiting-list/offer-next", { method: "POST" }, true); }
     catch { return { ok: false, code: "API_UNAVAILABLE" }; }
   },
+  async offerWaitingPlace(waitingListId, reason = "") {
+    if (!usesApi) return { ok: false, code: "API_UNAVAILABLE" };
+    try { return await phase3Api(`/organiser/waiting-list/${encodeURIComponent(waitingListId)}/offer`, { method: "POST", body: JSON.stringify({ reason }) }, true); }
+    catch { return { ok: false, code: "API_UNAVAILABLE" }; }
+  },
+  async withdrawWaitingPlace(waitingListId, reason = "") {
+    if (!usesApi) return { ok: false, code: "API_UNAVAILABLE" };
+    try { return await phase3Api(`/organiser/waiting-list/${encodeURIComponent(waitingListId)}/withdraw`, { method: "POST", body: JSON.stringify({ reason }) }, true); }
+    catch { return { ok: false, code: "API_UNAVAILABLE" }; }
+  },
   submit(payload) {
     if (usesApi) return api("/registrations", { method: "POST", body: JSON.stringify(payload), headers: { "idempotency-key": submissionKey, ...(privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {}) } }).then((result) => { if (result.ok) { confirmationTokens.set(result.registration.id, result.confirmationToken); this.rememberManagementToken(result.managementToken); submissionKey = crypto.randomUUID(); } return result; }).catch(() => ({ ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable." }));
     return localApiOrRepository("/registrations", { method: "POST", body: JSON.stringify(payload) }, (state) => submitRegistration(state, payload, { source: "runner" }));
@@ -219,6 +229,11 @@ export const prototype = {
   async withdrawEntry(token = this.managementToken()) {
     if (!usesApi || !token) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
     try { return await phase3Api("/management/withdraw", { method: "POST", headers: { "x-management-token": token } }); }
+    catch { return { ok: false, code: "MANAGEMENT_UNAVAILABLE" }; }
+  },
+  async organiserWithdrawEntry(registrationId, reason = "") {
+    if (!usesApi) return { ok: false, code: "MANAGED_API_REQUIRED" };
+    try { return await phase3Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/withdraw`, { method: "POST", body: JSON.stringify({ reason }) }, true); }
     catch { return { ok: false, code: "MANAGEMENT_UNAVAILABLE" }; }
   },
   async decideRefund(id, decision) {
