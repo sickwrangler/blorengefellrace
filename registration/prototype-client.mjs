@@ -144,6 +144,16 @@ export const prototype = {
     try { return await phase3Api(`/organiser/waiting-list/${encodeURIComponent(waitingListId)}/withdraw`, { method: "POST", body: JSON.stringify({ reason }) }, true); }
     catch { return { ok: false, code: "API_UNAVAILABLE" }; }
   },
+  async cancelWaitingPlaceOffer(waitingListId, reason = "") {
+    if (!usesApi) return { ok: false, code: "API_UNAVAILABLE" };
+    try { return await phase3Api(`/organiser/waiting-list/${encodeURIComponent(waitingListId)}/cancel-offer`, { method: "POST", body: JSON.stringify({ reason }) }, true); }
+    catch { return { ok: false, code: "API_UNAVAILABLE" }; }
+  },
+  async retryWaitingPlaceOfferEmail(waitingListId) {
+    if (!usesApi) return { ok: false, code: "API_UNAVAILABLE" };
+    try { return await phase3Api(`/organiser/waiting-list/${encodeURIComponent(waitingListId)}/retry-email`, { method: "POST" }, true); }
+    catch { return { ok: false, code: "API_UNAVAILABLE" }; }
+  },
   submit(payload) {
     if (usesApi) return api("/registrations", { method: "POST", body: JSON.stringify(payload), headers: { "idempotency-key": submissionKey, ...(privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {}) } }).then((result) => { if (result.ok) { confirmationTokens.set(result.registration.id, result.confirmationToken); this.rememberManagementToken(result.managementToken); submissionKey = crypto.randomUUID(); } return result; }).catch(() => ({ ok: false, code: "API_UNAVAILABLE", message: "The persistent development API is unavailable." }));
     return localApiOrRepository("/registrations", { method: "POST", body: JSON.stringify(payload) }, (state) => submitRegistration(state, payload, { source: "runner" }));

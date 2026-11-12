@@ -28,7 +28,9 @@ async function render() {
   const attention = active.filter((item) => ["created", "not_configured", "declined", "abandoned", "failed", "expired"].includes(item.paymentStatus)).length;
   const declarations = active.filter((item) => item.placeStatus === "confirmed" && item.declarationStatus === "pending").length;
   document.querySelector("#summary-accepted").textContent = accepted;
+  document.querySelector("#summary-payment-reservations").textContent = reserved;
   const waitingCount = currentState.waitingListSummary?.currentlyWaiting ?? snapshot.totals?.waiting ?? waiting;
+  document.querySelector("#summary-offer-reservations").textContent = currentState.waitingListSummary?.outstandingOffers ?? 0;
   const remainingPlaces = snapshot.totals?.remaining ?? Math.max(0, currentState.event.capacity - accepted - reserved);
   currentRemainingPlaces = remainingPlaces;
   document.querySelector("#summary-waiting").textContent = waitingCount;
@@ -64,7 +66,11 @@ async function render() {
   }
 }
 function waitingListStatus(item) {
-  if (item.offerStatus === "offered") return { label: "Offer sent", className: "status-badge--info" };
+  if (item.offerStatus === "offered") return item.offerEmailDelivery === "failed"
+    ? { label: "Offer reserved · email failed", className: "status-badge--warning" }
+    : item.offerEmailDelivery === "pending"
+      ? { label: "Offer reserved · email pending", className: "status-badge--info" }
+      : { label: "Offer sent", className: "status-badge--info" };
   const labels = { waiting: "Waiting", accepted: "Accepted", declined: "Declined", expired: "Expired", withdrawn: "Withdrawn", offered: "Offer sent" };
   const classNames = { waiting: "status-badge--positive", accepted: "status-badge--positive", declined: "status-badge--neutral", expired: "status-badge--neutral", withdrawn: "status-badge--neutral", offered: "status-badge--info" };
   return { label: labels[item.status] ?? String(item.status || "Unknown").replaceAll("_", " "), className: classNames[item.status] ?? "status-badge--neutral" };
@@ -85,12 +91,13 @@ function filteredWaitingList() {
   });
 }
 function renderWaitingList() {
-  const summary = currentState.waitingListSummary ?? { currentlyWaiting: 0, outstandingOffers: 0, accepted: 0, declined: 0, expired: 0 };
+  const summary = currentState.waitingListSummary ?? { currentlyWaiting: 0, outstandingOffers: 0, accepted: 0, declined: 0, expired: 0, failedOfferEmails: 0 };
   document.querySelector("#waiting-summary-waiting").textContent = summary.currentlyWaiting;
   document.querySelector("#waiting-summary-offered").textContent = summary.outstandingOffers;
   document.querySelector("#waiting-summary-accepted").textContent = summary.accepted;
   document.querySelector("#waiting-summary-declined").textContent = summary.declined;
   document.querySelector("#waiting-summary-expired").textContent = summary.expired;
+  document.querySelector("#waiting-summary-email-failed").textContent = summary.failedOfferEmails ?? 0;
   const rows = document.querySelector("#waiting-list-rows"); rows.replaceChildren();
   const items = filteredWaitingList();
   for (const item of items) {
@@ -106,6 +113,9 @@ function renderWaitingList() {
     if (item.offerCreatedAt) offerParts.push(`Sent ${formatWaitingTime(item.offerCreatedAt)}`);
     if (item.offerExpiresAt) offerParts.push(`${item.offerStatus === "expired" || item.status === "expired" ? "Expired" : "Expires"} ${formatWaitingTime(item.offerExpiresAt)}`);
     if (item.offerCompletedAt) offerParts.push(`Completed ${formatWaitingTime(item.offerCompletedAt)}`);
+    if (item.offerEmailDelivery) offerParts.push(`Email ${item.offerEmailDelivery}`);
+    if (item.offerEmailDelivery === "failed" && item.offerEmailFailureCategory) offerParts.push(`Failure ${String(item.offerEmailFailureCategory).replaceAll("_", " ")}`);
+    if (item.offerEmailRetryAfterAt) offerParts.push(`Retry available after ${formatWaitingTime(item.offerEmailRetryAfterAt)}`);
     if (item.entryReference) offerParts.push(`Entry ${item.entryReference}`);
     offer.textContent = offerParts.join(" · ") || "—";
     const actions = document.createElement("td");
@@ -114,6 +124,18 @@ function renderWaitingList() {
       offerButton.disabled = currentRemainingPlaces < 1;
       if (offerButton.disabled) offerButton.title = "No race place is currently available";
       actions.append(offerButton);
+    }
+    if (item.status === "offered") {
+      actions.append(actionButton("Cancel offer", () => openWaitingListAction(item, "cancel"), "text-button"));
+      if (item.offerEmailDelivery === "failed") actions.append(actionButton("Retry email", async () => {
+        if (!window.confirm(`Retry the existing offer email for ${item.firstName} ${item.lastName}? This does not create another offer or extend the original expiry.`)) return;
+        const result = await prototype.retryWaitingPlaceOfferEmail(item.waitingListId);
+        const message = result.ok
+          ? result.emailDeliveryFailed ? "The retry failed. The original offer remains reserved until its existing expiry; cancel it if the place should be released now." : result.inProgress ? "An email retry is already in progress." : result.duplicate ? "The offer email was already sent; no duplicate was sent." : "The existing offer email was sent successfully. Its original expiry is unchanged."
+          : result.code === "OFFER_EMAIL_RETRY_NOT_DUE" ? "The email provider has requested a delay before retrying. Try again after the time shown in the offer details." : "This email cannot be retried. Cancel the offer and create a fresh offer if appropriate.";
+        showNotice(message, !result.ok || result.emailDeliveryFailed === true);
+        await render();
+      }, "text-button"));
     }
     if (["waiting", "offered"].includes(item.status)) actions.append(actionButton("Withdraw", () => openWaitingListAction(item, "withdraw"), "text-button danger-link"));
     if (!actions.childElementCount) actions.textContent = "—";
@@ -212,18 +234,24 @@ function actionButton(label, handler, className = "button button--quiet") {
 function openWaitingListAction(item, action) {
   pendingWaitingListAction = { waitingListId: item.waitingListId, action };
   const runnerName = `${item.firstName} ${item.lastName}`.trim();
-  document.querySelector("#waiting-list-action-title").textContent = action === "offer" ? "Offer a place to selected runner" : "Withdraw from waiting list";
+  document.querySelector("#waiting-list-action-title").textContent = action === "offer" ? "Offer a place to selected runner" : action === "cancel" ? "Cancel active offer" : "Withdraw from waiting list";
   document.querySelector("#waiting-list-action-runner").textContent = `${runnerName} · ${item.email}${item.currentPosition ? ` · current position ${item.currentPosition}` : ""}`;
   document.querySelector("#waiting-list-action-warning").textContent = action === "offer"
     ? "This manually selects this runner rather than the next person in queue. One available place will be reserved for 48 hours and the offer email will be sent immediately."
-    : item.offerStatus === "offered"
+    : action === "cancel"
+      ? "This revokes the offer link, releases its reserved place and returns the runner to their original queue order. No automatic cancellation email is sent; contact them directly if needed."
+      : item.offerStatus === "offered"
       ? "This person has an active offer. Confirming will revoke its private link, cancel its capacity reservation and preserve the offer history. It will not automatically offer the place to somebody else."
       : "This preserves the record for audit, removes the person from future offers and recalculates the active queue positions.";
-  document.querySelector("#confirm-waiting-list-action").textContent = action === "offer" ? "Send 48-hour offer" : "Withdraw from waiting list";
+  document.querySelector("#confirm-waiting-list-action").textContent = action === "offer" ? "Send 48-hour offer" : action === "cancel" ? "Cancel offer" : "Withdraw from waiting list";
   document.querySelector("#confirm-waiting-list-action").className = action === "offer" ? "button" : "button danger-button";
-  document.querySelector("#waiting-list-action-reason").value = "";
+  const reasonInput = document.querySelector("#waiting-list-action-reason");
+  const reasonRequired = action === "offer" && Number(item.currentPosition) > 1;
+  reasonInput.value = "";
+  reasonInput.required = reasonRequired;
+  document.querySelector("#waiting-list-action-reason-label").textContent = reasonRequired ? "Reason for bypassing queue (required)" : "Reason (optional)";
   document.querySelector("#waiting-list-action-dialog").showModal();
-  document.querySelector("#waiting-list-action-reason").focus();
+  reasonInput.focus();
 }
 function renderActions(item) {
   const actions = document.querySelector("#entry-actions"); actions.replaceChildren();
@@ -333,7 +361,8 @@ for (const selector of ["#waiting-list-search", "#waiting-list-filter"]) documen
 document.querySelector("#offer-next-waiting-place")?.addEventListener("click", async () => {
   if (!window.confirm("Offer the available place to the next person on the waiting list? The place will be reserved for 48 hours and the runner will be emailed.")) return;
   const result = await prototype.offerNextWaitingPlace();
-  showNotice(result.ok ? "The next waiting-list runner has been emailed a 48-hour place offer." : `A place offer could not be created: ${result.code}`, !result.ok);
+  const message = result.ok ? result.emailDeliveryFailed ? "The 48-hour offer was created, but email delivery failed. The place remains reserved until the existing expiry; retry or cancel it from the waiting-list row." : "The next waiting-list runner has been emailed a 48-hour place offer." : `A place offer could not be created: ${result.code}`;
+  showNotice(message, !result.ok || result.emailDeliveryFailed === true);
   await render();
 });
 document.querySelector("#close-waiting-list-action")?.addEventListener("click", () => {
@@ -347,7 +376,9 @@ document.querySelector("#waiting-list-action-form")?.addEventListener("submit", 
   const reason = document.querySelector("#waiting-list-action-reason").value.trim();
   const result = pending.action === "offer"
     ? await prototype.offerWaitingPlace(pending.waitingListId, reason)
-    : await prototype.withdrawWaitingPlace(pending.waitingListId, reason);
+    : pending.action === "cancel"
+      ? await prototype.cancelWaitingPlaceOffer(pending.waitingListId, reason)
+      : await prototype.withdrawWaitingPlace(pending.waitingListId, reason);
   if (result.ok) {
     document.querySelector("#waiting-list-action-dialog").close();
     pendingWaitingListAction = null;
@@ -356,7 +387,9 @@ document.querySelector("#waiting-list-action-form")?.addEventListener("submit", 
     ? result.emailDeliveryFailed
       ? "The 48-hour offer was created, but email delivery failed. The reservation is active; review email health before taking further action."
       : "The selected runner has been emailed a 48-hour place offer."
-    : result.activeOfferCancelled
+    : pending.action === "cancel"
+      ? "The offer was cancelled, its link was revoked, the reserved place was released and the runner returned to their original queue order."
+      : result.activeOfferCancelled
       ? "The runner was withdrawn from the waiting list and their active offer was cancelled. The released place remains available for an organiser to offer."
       : "The runner was withdrawn from the waiting list and active queue positions were updated.";
   showNotice(result.ok ? success : `Waiting-list action unavailable: ${result.code}`, !result.ok || result.emailDeliveryFailed === true);

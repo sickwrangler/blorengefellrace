@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   beginProductionRegistration,
+  acceptWaitingListOffer,
+  cancelWaitingListOffer,
   capacitySummary,
   createNextWaitingListOffer,
   createPhase3State,
@@ -63,6 +65,15 @@ test("specific waiting-list selection preserves queue order and reserves exactly
   assert.equal((await service.offerWaitingPlace(organiser, second.id, {}, at)).code, "CAPACITY_FULL");
 });
 
+test("bypassing FIFO requires an audited reason", () => {
+  const state = baseState();
+  joinWaitingList(state, waitingRunner(1), { at });
+  const second = joinWaitingList(state, waitingRunner(2), { at }).waitingListEntry;
+  assert.equal(createWaitingListOffer(state, second.id, organiser, {}, at).code, "WAITING_LIST_BYPASS_REASON_REQUIRED");
+  assert.equal(state.waitingListOffers.length, 0);
+  assert.equal(capacitySummary(state).remaining, 1);
+});
+
 test("default offer remains first-in-first-out and repeated requests cannot over-reserve", () => {
   const state = baseState();
   const first = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
@@ -72,6 +83,22 @@ test("default offer remains first-in-first-out and repeated requests cannot over
   assert.equal(offered.offer.waitingListId, first.id);
   assert.equal(createNextWaitingListOffer(state, organiser, at).code, "CAPACITY_FULL");
   assert.equal(state.waitingListOffers.length, 1);
+});
+
+test("concurrent targeted offers cannot overbook the final available place", async () => {
+  const state = baseState();
+  const first = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
+  const second = joinWaitingList(state, waitingRunner(2), { at }).waitingListEntry;
+  const { repository, service } = serviceFor(state);
+  const results = await Promise.all([
+    service.offerWaitingPlace(organiser, first.id, {}, at),
+    service.offerWaitingPlace(organiser, second.id, { reason: "Manual exception" }, at)
+  ]);
+  assert.equal(results.filter((item) => item.ok).length, 1);
+  assert.equal(results.filter((item) => item.code === "CAPACITY_FULL").length, 1);
+  const final = await repository.read();
+  assert.equal(final.waitingListOffers.filter((item) => item.status === "offered").length, 1);
+  assert.equal(capacitySummary(final).reserved, 1);
 });
 
 test("production API protects targeted offer and waiting-list withdrawal routes", async () => {
@@ -84,9 +111,18 @@ test("production API protects targeted offer and waiting-list withdrawal routes"
   assert.equal(anonymous.status, 403);
   const offered = await api({ method: "POST", pathname: path, hostname: "www.blorengefellrace.cymru", headers: { "x-ms-client-principal": principal }, body: { reason: "Manual selection" } });
   assert.equal(offered.status, 200);
+  const retry = await api({ method: "POST", pathname: `/api/v3/organiser/waiting-list/${encodeURIComponent(waiting.id)}/retry-email`, hostname: "www.blorengefellrace.cymru", headers: { "x-ms-client-principal": principal }, body: {} });
+  assert.equal(retry.status, 200);
+  assert.equal(retry.body.duplicate, true);
+  const cancelled = await api({ method: "POST", pathname: `/api/v3/organiser/waiting-list/${encodeURIComponent(waiting.id)}/cancel-offer`, hostname: "www.blorengefellrace.cymru", headers: { "x-ms-client-principal": principal }, body: { reason: "Synthetic cancellation" } });
+  assert.equal(cancelled.status, 200);
+  const afterCancellation = await repository.read();
+  assert.equal(afterCancellation.registrations.length, 0);
+  assert.equal(afterCancellation.payments.length, 0);
+  assert.equal(afterCancellation.emailOutbox.find((item) => item.waitingListId === waiting.id).status, "sent");
   const withdrawn = await api({ method: "POST", pathname: `/api/v3/organiser/waiting-list/${encodeURIComponent(waiting.id)}/withdraw`, hostname: "www.blorengefellrace.cymru", headers: { "x-ms-client-principal": principal }, body: { reason: "Requested by email" } });
   assert.equal(withdrawn.status, 200);
-  assert.equal(withdrawn.body.activeOfferCancelled, true);
+  assert.equal(withdrawn.body.activeOfferCancelled, false);
 });
 
 test("withdrawing a waiting person is audited, retained and updates active positions", () => {
@@ -118,6 +154,91 @@ test("withdrawing somebody with an active offer revokes access and releases capa
   assert.equal(state.waitingList.find((item) => item.id === second.id).status, "waiting");
   assert.equal(state.waitingListOffers.length, 1);
   assert.deepEqual(capacitySummary(state), { capacity: 1, confirmed: 0, paymentReserved: 0, offerReserved: 0, reserved: 0, remaining: 1, waiting: 1 });
+});
+
+test("cancelling an active offer releases capacity, restores original eligibility and invalidates its link", () => {
+  const state = baseState();
+  const first = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
+  const second = joinWaitingList(state, waitingRunner(2), { at }).waitingListEntry;
+  const offered = createWaitingListOffer(state, first.id, organiser, {}, at);
+  const cancelled = cancelWaitingListOffer(state, first.id, organiser, { reason: "Offer sent in error" }, at);
+  assert.equal(cancelled.ok, true);
+  assert.equal(state.waitingListOffers[0].status, "cancelled");
+  assert.equal(state.waitingList.find((item) => item.id === first.id).status, "waiting");
+  assert.deepEqual(buildWaitingListView(state).filter((item) => item.status === "waiting").map((item) => [item.waitingListId, item.currentPosition]), [[first.id, 1], [second.id, 2]]);
+  assert.equal(capacitySummary(state).remaining, 1);
+  const acceptance = acceptWaitingListOffer(state, offered.token, { runner: { ...runner, email: first.email }, declaration }, new Date(at.getTime() + 60_000));
+  assert.equal(acceptance.ok, false);
+  assert.equal(state.registrations.length, 0);
+  const audit = state.auditEvents.find((item) => item.action === "waiting_list_offer_cancelled");
+  assert.equal(audit.after.returnedToWaiting, true);
+  assert.equal(audit.after.reason, "Offer sent in error");
+});
+
+test("cancelling an offer supersedes a failed email retry without creating payment state", async () => {
+  const state = baseState();
+  const waiting = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
+  const emailAdapter = { kind: "test", async send() { return { delivery: "failed", externalCall: true, failureCategory: "network" }; } };
+  const repository = createMemoryRepository(state);
+  const service = new Phase3IntegrationService({ repository, stripeGateway: { mode: "test" }, emailAdapter, publicBaseUrl: "https://development.example", organiserEmail: "organiser@example.com" });
+  assert.equal((await service.offerWaitingPlace(organiser, waiting.id, {}, at)).emailDeliveryFailed, true);
+  assert.equal((await service.cancelWaitingPlaceOffer(organiser, waiting.id, { reason: "Runner contacted organiser" }, new Date(at.getTime() + 60_000))).ok, true);
+  assert.equal((await service.retryWaitingPlaceOfferEmail(organiser, waiting.id, new Date(at.getTime() + 120_000))).code, "OFFER_NOT_ACTIVE");
+  const final = await repository.read();
+  const attempt = final.emailOutbox.find((item) => item.waitingListId === waiting.id);
+  assert.equal(attempt.status, "superseded");
+  assert.equal(attempt.message, null);
+  assert.equal(final.orders.length, 0);
+  assert.equal(final.payments.length, 0);
+  assert.equal((final.reservations ?? []).length, 0);
+});
+
+test("failed offer email can be retried without duplicating the offer, reservation or successful email", async () => {
+  const state = baseState();
+  const waiting = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
+  let attempts = 0;
+  const emailAdapter = { kind: "test", async send() { attempts += 1; return attempts === 1 ? { delivery: "failed", externalCall: true, failureCategory: "network" } : { delivery: "sent", externalCall: true, providerReference: "synthetic-message" }; } };
+  const repository = createMemoryRepository(state);
+  const service = new Phase3IntegrationService({ repository, stripeGateway: { mode: "test" }, emailAdapter, publicBaseUrl: "https://development.example", organiserEmail: "organiser@example.com" });
+  const offered = await service.offerWaitingPlace(organiser, waiting.id, {}, at);
+  assert.equal(offered.ok, true);
+  assert.equal(offered.emailDeliveryFailed, true);
+  const failedState = await repository.read();
+  const failedView = buildWaitingListView(failedState)[0];
+  assert.equal(failedView.offerEmailDelivery, "failed");
+  assert.equal(failedView.offerEmailRetryAvailable, true);
+  assert.equal(failedView.offerExpiresAt, new Date(at.getTime() + 48 * 60 * 60_000).toISOString());
+  const retries = await Promise.all([
+    service.retryWaitingPlaceOfferEmail(organiser, waiting.id, new Date(at.getTime() + 60_000)),
+    service.retryWaitingPlaceOfferEmail(organiser, waiting.id, new Date(at.getTime() + 60_000))
+  ]);
+  assert.equal(retries.every((item) => item.ok), true);
+  const final = await repository.read();
+  assert.equal(attempts, 2);
+  assert.equal(final.waitingListOffers.length, 1);
+  assert.equal(final.waitingListOffers[0].status, "offered");
+  assert.equal(capacitySummary(final).offerReserved, 1);
+  assert.equal(final.communications.filter((item) => item.idempotencyKey === `waiting-list:${final.waitingListOffers[0].id}:offered`).length, 1);
+  assert.equal(final.communications.find((item) => item.waitingListId === waiting.id).delivery, "sent");
+  assert.equal(final.emailOutbox.filter((item) => item.waitingListOfferId === final.waitingListOffers[0].id).length, 1);
+});
+
+test("persistent offer-email failure cannot reserve capacity beyond the original 48-hour expiry", async () => {
+  const state = baseState();
+  const first = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
+  const second = joinWaitingList(state, waitingRunner(2), { at }).waitingListEntry;
+  const emailAdapter = { kind: "test", async send() { return { delivery: "failed", externalCall: true, failureCategory: "provider_5xx" }; } };
+  const repository = createMemoryRepository(state);
+  const service = new Phase3IntegrationService({ repository, stripeGateway: { mode: "test" }, emailAdapter, publicBaseUrl: "https://development.example", organiserEmail: "organiser@example.com" });
+  assert.equal((await service.offerWaitingPlace(organiser, first.id, {}, at)).emailDeliveryFailed, true);
+  const result = await service.runScheduledWork(organiser, new Date(at.getTime() + 48 * 60 * 60_000 + 1));
+  const final = await repository.read();
+  assert.equal(result.expiredOffers, 1);
+  assert.equal(result.availablePlaceReleased, true);
+  assert.equal(final.waitingListOffers.length, 1);
+  assert.equal(final.waitingListOffers[0].status, "expired");
+  assert.equal(final.waitingList.find((item) => item.id === second.id).status, "waiting");
+  assert.equal(capacitySummary(final).remaining, 1);
 });
 
 test("accepted, declined and expired waiting-list history cannot be withdrawn or re-offered", () => {

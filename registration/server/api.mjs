@@ -85,13 +85,17 @@ export function createApi({ service, phase3Integrations = null, environment = "l
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.offerNextWaitingPlace(actor));
     }
-    const waitingListAction = pathname.match(/^\/api\/v3\/organiser\/waiting-list\/([^/]+)\/(offer|withdraw)$/);
+    const waitingListAction = pathname.match(/^\/api\/v3\/organiser\/waiting-list\/([^/]+)\/(offer|cancel-offer|retry-email|withdraw)$/);
     if (method === "POST" && waitingListAction) {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       const waitingListId = decodeURIComponent(waitingListAction[1]);
-      return resultResponse(await (waitingListAction[2] === "offer"
-        ? phase3Integrations.offerWaitingPlace(actor, waitingListId, body)
-        : phase3Integrations.withdrawWaitingPlace(actor, waitingListId, body)));
+      const handlers = {
+        offer: () => phase3Integrations.offerWaitingPlace(actor, waitingListId, body),
+        "cancel-offer": () => phase3Integrations.cancelWaitingPlaceOffer(actor, waitingListId, body),
+        "retry-email": () => phase3Integrations.retryWaitingPlaceOfferEmail(actor, waitingListId),
+        withdraw: () => phase3Integrations.withdrawWaitingPlace(actor, waitingListId, body)
+      };
+      return resultResponse(await handlers[waitingListAction[2]]());
     }
     const organiserWithdrawal = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/withdraw$/);
     if (method === "POST" && organiserWithdrawal) {

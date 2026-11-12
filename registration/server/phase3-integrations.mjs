@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { capacitySummary, createNextWaitingListOffer, expireWaitingListOffers } from "./phase3-domain.mjs";
+import { capacitySummary, expireWaitingListOffers } from "./phase3-domain.mjs";
 
 export const CHECKOUT_RESERVATION_MINUTES = 30;
 export const PAYMENT_CURRENCY = "gbp";
@@ -252,7 +252,7 @@ export function dueWaitingListReminders(state, at = new Date()) {
   return state.waitingListOffers.filter((offer) => offer.status === "offered" && !offer.reminderSentAt && new Date(offer.reminderAt) <= new Date(at) && new Date(offer.expiresAt) > new Date(at));
 }
 
-export async function processScheduledRegistrationWork(state, { email, at = new Date(), actor = { authenticated: true, role: "administrator", actorType: "system" }, offerUrl = (token) => token } = {}) {
+export async function processScheduledRegistrationWork(state, { email, at = new Date(), actor = { authenticated: true, role: "administrator", actorType: "system" } } = {}) {
   const reminders = dueWaitingListReminders(state, at);
   for (const offer of reminders) {
     const waiting = state.waitingList.find((item) => item.id === offer.waitingListId);
@@ -260,10 +260,6 @@ export async function processScheduledRegistrationWork(state, { email, at = new 
     offer.reminderSentAt = iso(at); audit(state, "waiting_list_reminder_sent", offer.id, {}, at);
   }
   const offers = expireWaitingListOffers(state, actor, at);
-  if (offers.nextOffer) {
-    const waiting = state.waitingList.find((item) => item.id === offers.nextOffer.offer.waitingListId);
-    await email.send({ template: "waiting_list_offer", intendedRecipientAddress: waiting.email, data: { firstName: waiting.firstName, expiresAt: offers.nextOffer.offer.expiresAt, secureUrl: offerUrl(offers.nextOffer.token) } });
-  }
   const payments = expireStalePaymentReservations(state, at);
-  return { ok: true, reminders: reminders.length, expiredOffers: offers.expired, expiredPayments: payments.expired, nextOfferCreated: Boolean(offers.nextOffer) };
+  return { ok: true, reminders: reminders.length, expiredOffers: offers.expired, expiredPayments: payments.expired, availablePlaceReleased: offers.expired > 0 && offers.capacity.remaining > 0 };
 }

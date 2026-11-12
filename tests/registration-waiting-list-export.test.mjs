@@ -101,10 +101,10 @@ test("organiser snapshot exposes only the deliberately limited waiting-list proj
   const service = new ProductionRegistrationService({ repository: createMemoryRepository(source), emailAdapter });
   const snapshot = await service.snapshot(organiser);
   assert.equal(snapshot.ok, true);
-  assert.deepEqual(Object.keys(snapshot.state.waitingList[0]).sort(), ["currentPosition", "email", "entryReference", "firstName", "joinedAt", "lastName", "offerCompletedAt", "offerCreatedAt", "offerExpiresAt", "offerReminderAt", "offerStatus", "originalSequence", "registrationId", "status", "waitingListId"].sort());
+  assert.deepEqual(Object.keys(snapshot.state.waitingList[0]).sort(), ["currentPosition", "email", "entryReference", "firstName", "joinedAt", "lastName", "offerCompletedAt", "offerCreatedAt", "offerEmailAttemptedAt", "offerEmailDelivery", "offerEmailFailureCategory", "offerEmailRetryAfterAt", "offerEmailRetryAvailable", "offerEmailSentAt", "offerExpiresAt", "offerReminderAt", "offerStatus", "originalSequence", "registrationId", "status", "waitingListId"].sort());
   const serialized = JSON.stringify(snapshot.state.waitingList);
   for (const forbidden of ["never-expose-waiting-secret", "never-expose-token", "never-expose-hash", "secret.invalid", "private-invitation-A"]) assert.doesNotMatch(serialized, new RegExp(forbidden));
-  assert.deepEqual(snapshot.state.waitingListSummary, { currentlyWaiting: 0, outstandingOffers: 1, accepted: 0, declined: 0, expired: 0 });
+  assert.deepEqual(snapshot.state.waitingListSummary, { currentlyWaiting: 0, outstandingOffers: 1, accepted: 0, declined: 0, expired: 0, failedOfferEmails: 0 });
 });
 
 test("waiting-list CSV is private, UTF-8 safe, formula safe and operationally ordered", async () => {
@@ -150,7 +150,7 @@ test("workbook Waiting List sheet and Summary agree with the shared projection",
   source.waitingList = [waiting("Waiting", 4, "waiting", { firstName: "=Waiting" }), waiting("Offered", 1, "offered"), waiting("Accepted", 2, "accepted"), waiting("Declined", 3, "declined"), waiting("Expired", 5, "expired")];
   source.waitingListOffers = [offer("active", "waiting-Offered", "offered", 12), offer("accepted", "waiting-Accepted", "accepted", 10, { completedAt: iso(11) }), offer("declined", "waiting-Declined", "declined", 9, { completedAt: iso(10) }), offer("expired", "waiting-Expired", "expired", 8, { completedAt: iso(9) })];
   const projection = buildWaitingListView(source);
-  assert.deepEqual(waitingListSummary(projection), { currentlyWaiting: 1, outstandingOffers: 1, accepted: 1, declined: 1, expired: 1 });
+  assert.deepEqual(waitingListSummary(projection), { currentlyWaiting: 1, outstandingOffers: 1, accepted: 1, declined: 1, expired: 1, failedOfferEmails: 0 });
   const model = buildPrivateWorkbookModel(source, new Date("2026-10-23T12:00:00Z"));
   const bytes = await createPrivateRegistrationWorkbook(model);
   const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(bytes);

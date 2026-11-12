@@ -199,15 +199,24 @@ function prepareDeclarationToken(state, registrationId, at = new Date()) {
 function tokenSetStillValid(state, attempt, at = new Date()) {
   const managementValid = !attempt.managementTokenId || state.managementTokens.some((item) => item.id === attempt.managementTokenId && !item.invalidatedAt && !managementTokenIsExpired(item, at));
   const declarationValid = !attempt.declarationTokenId || state.declarationTokens.some((item) => item.id === attempt.declarationTokenId && !item.revokedAt);
-  return managementValid && declarationValid;
+  const waitingOffer = attempt.waitingListOfferId ? state.waitingListOffers.find((item) => item.id === attempt.waitingListOfferId) : null;
+  const waitingInvitation = attempt.waitingListInvitationId ? state.privateInvitations.find((item) => item.id === attempt.waitingListInvitationId) : null;
+  const waitingOfferValid = !attempt.waitingListOfferId || Boolean(waitingOffer
+    && waitingOffer.status === "offered"
+    && new Date(waitingOffer.expiresAt) > new Date(at)
+    && waitingInvitation
+    && !waitingInvitation.revokedAt
+    && waitingInvitation.uses < waitingInvitation.maximumUses
+    && new Date(waitingInvitation.expiresAt) > new Date(at));
+  return managementValid && declarationValid && waitingOfferValid;
 }
 
-function prepareOutboxAttempt(state, { registrationId = null, orderId = null, sourceEventId = null, purpose, idempotencyKey, message, managementTokenId = null, declarationTokenId = null, invalidatePriorTokensOnSuccess = false }, at = new Date()) {
+function prepareOutboxAttempt(state, { registrationId = null, orderId = null, waitingListId = null, waitingListOfferId = null, waitingListInvitationId = null, sourceEventId = null, purpose, idempotencyKey, message, managementTokenId = null, declarationTokenId = null, invalidatePriorTokensOnSuccess = false }, at = new Date()) {
   ensureCollections(state);
   const existing = state.emailOutbox.find((item) => item.idempotencyKey === idempotencyKey && item.status !== "superseded");
   if (existing) return existing;
   const attempt = {
-    id: id("email_outbox"), registrationId, orderId, sourceEventId, purpose, idempotencyKey,
+    id: id("email_outbox"), registrationId, orderId, waitingListId, waitingListOfferId, waitingListInvitationId, sourceEventId, purpose, idempotencyKey,
     status: "prepared", message, managementTokenId, declarationTokenId,
     invalidatePriorTokensOnSuccess, attemptTimestamps: [], providerReference: null,
     failureCategory: null, retryAfterAt: null, createdAt: iso(at), updatedAt: iso(at)

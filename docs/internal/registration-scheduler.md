@@ -7,7 +7,7 @@
 The scheduler exists only in the isolated synthetic development environment. Every 30 minutes it invokes the existing shared scheduled-work domain service to:
 
 - send one waiting-list reminder when a 48-hour offer reaches 24 hours;
-- expire an unanswered offer after 48 hours and progress exactly one next eligible runner;
+- expire an unanswered offer after 48 hours, release its reservation and leave the next offer under organiser control;
 - release stale Stripe Checkout capacity reservations and communicate expiry.
 
 It does not open registration, create entries, take payments, approve refunds or allocate race numbers. It has no application HTTP route. Production has no scheduler resource or package.

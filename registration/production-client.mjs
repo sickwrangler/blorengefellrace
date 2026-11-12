@@ -46,6 +46,8 @@ export const prototype = {
   offerNextWaitingPlace() { return v3("/organiser/waiting-list/offer-next", { method: "POST" }); },
   offerWaitingPlace(id, reason = "") { return v3(`/organiser/waiting-list/${encodeURIComponent(id)}/offer`, { method: "POST", body: JSON.stringify({ reason }) }); },
   withdrawWaitingPlace(id, reason = "") { return v3(`/organiser/waiting-list/${encodeURIComponent(id)}/withdraw`, { method: "POST", body: JSON.stringify({ reason }) }); },
+  cancelWaitingPlaceOffer(id, reason = "") { return v3(`/organiser/waiting-list/${encodeURIComponent(id)}/cancel-offer`, { method: "POST", body: JSON.stringify({ reason }) }); },
+  retryWaitingPlaceOfferEmail(id) { return v3(`/organiser/waiting-list/${encodeURIComponent(id)}/retry-email`, { method: "POST" }); },
   rememberManagementToken(token) { if (token) sessionStorage.setItem(MANAGEMENT_TOKEN_SESSION_KEY, token); },
   forgetManagementToken() { sessionStorage.removeItem(MANAGEMENT_TOKEN_SESSION_KEY); },
   managementToken() { return sessionStorage.getItem(MANAGEMENT_TOKEN_SESSION_KEY); },

@@ -188,7 +188,6 @@ export function applyMockPayment(state, registrationId, outcome) {
 export function cancelRegistration(state, registrationId, { releaseRaceNumber = false } = {}) {
   const registration = state.registrations.find((item) => item.id === registrationId);
   if (!registration || registration.entryStatus === "cancelled") return { ok: false, code: "NOT_FOUND" };
-  const releasedPlace = registration.entryStatus === "accepted";
   const releasedRaceNumber = releaseRaceNumber && registration.raceNumber ? registration.raceNumber : null;
   if (releasedRaceNumber) {
     registration.raceNumber = null;
@@ -199,20 +198,8 @@ export function cancelRegistration(state, registrationId, { releaseRaceNumber = 
   registration.updatedAt = new Date().toISOString();
   addAudit(state, "registration_cancelled", registration.id);
   addCommunication(state, registration, "registration_cancelled");
-  let promoted = null;
-  if (releasedPlace) {
-    promoted = state.registrations.filter((item) => item.entryStatus === "waiting_list")
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0] ?? null;
-    if (promoted) {
-      promoted.entryStatus = "accepted";
-      promoted.waitingListPosition = null;
-      promoted.updatedAt = new Date().toISOString();
-      addAudit(state, "waiting_list_promoted", promoted.id);
-      if (promoted.paymentStatus === "successful") addCommunication(state, promoted, "entry_confirmed");
-    }
-  }
   refreshWaitingList(state);
-  return { ok: true, registration, promoted, releasedRaceNumber };
+  return { ok: true, registration, promoted: null, releasedRaceNumber };
 }
 
 export function promoteRegistration(state, registrationId) {

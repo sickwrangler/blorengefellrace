@@ -60,7 +60,7 @@ From the protected dashboard:
 
 ## E. Capacity, waiting list and scheduler
 
-Use the existing controlled fixtures or automated suite for high-volume setup rather than manually creating 120 people. Verify the final-place concurrency rule, first-in waiting-list order, one active offer, reminder timing, expiry, decline and progression to the next runner. Confirm repeated scheduler execution does not duplicate work.
+Use the existing controlled fixtures or automated suite for high-volume setup rather than manually creating 120 people. Verify the final-place concurrency rule, first-in waiting-list order, one active offer, reminder timing, expiry and decline. Confirm that released places return to organiser control, no next invitation is sent automatically, and repeated scheduler execution does not duplicate work.
 
 ## Reset after the rehearsal
 

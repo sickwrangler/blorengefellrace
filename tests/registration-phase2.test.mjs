@@ -63,9 +63,9 @@ test("atomic final place allocation and waiting-list ordering survive concurrenc
   assert.deepEqual([a.registration.entryStatus, b.registration.entryStatus].sort(), ["accepted", "waiting_list"]); const snapshot = await service.snapshot(admin); assert.equal(snapshot.state.registrations.find((item) => item.entryStatus === "waiting_list").waitingListPosition, 1);
 });
 
-test("cancellation releases a place and atomically promotes the first waiting entry", async () => {
+test("cancellation releases a place without automatically promoting a waiting entry", async () => {
   const { service } = setup({ capacity: 1 }); const accepted = await service.create(runner(7), { idempotencyKey: "cancel-create-a" }); const waiting = await service.create(runner(8), { idempotencyKey: "cancel-create-b" });
-  await service.manage(admin, accepted.registration.id, "cancel", { releaseRaceNumber: true }); const snapshot = await service.snapshot(admin); assert.equal(snapshot.state.registrations.find((item) => item.id === waiting.registration.id).entryStatus, "accepted");
+  await service.manage(admin, accepted.registration.id, "cancel", { releaseRaceNumber: true }); const snapshot = await service.snapshot(admin); assert.equal(snapshot.state.registrations.find((item) => item.id === waiting.registration.id).entryStatus, "waiting_list"); assert.equal(snapshot.totals.remaining, 1);
 });
 
 test("entry status changes enforce valid capacity-aware transitions", async () => {

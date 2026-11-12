@@ -245,7 +245,7 @@ test("capacity counts confirmed, payment reservations and live offers and never 
   assert.equal(addPlaceRegistration(state, { runnerId: "runner_121" }).code, "CAPACITY_FULL");
 });
 
-test("waiting list stores minimum data and advances in order after offer expiry", () => {
+test("waiting list stores minimum data and releases capacity for organiser control after offer expiry", () => {
   const state = createPhase3State({ registrationState: "OPEN" });
   const first = joinWaitingList(state, { firstName: "Alys", lastName: "Example", email: "alys@example.com", phone: "must-not-store" }, { at: beforeCutoff });
   const second = joinWaitingList(state, { firstName: "Bryn", lastName: "Example", email: "bryn@example.com" }, { at: beforeCutoff });
@@ -254,18 +254,22 @@ test("waiting list stores minimum data and advances in order after offer expiry"
   assert.equal(offered.offer.waitingListId, first.waitingListEntry.id);
   assert.equal(offered.offer.reminderAt, "2026-10-02T12:00:00.000Z");
   assert.equal(offered.offer.expiresAt, "2026-10-03T12:00:00.000Z");
-  const advanced = expireWaitingListOffers(state, admin, "2026-10-03T12:00:01.000Z");
-  assert.equal(advanced.expired, 1); assert.equal(advanced.nextOffer.offer.waitingListId, second.waitingListEntry.id);
+  const expired = expireWaitingListOffers(state, admin, "2026-10-03T12:00:01.000Z");
+  assert.equal(expired.expired, 1); assert.equal(expired.capacity.remaining, 120);
+  assert.equal(state.waitingList.find((item) => item.id === second.waitingListEntry.id).status, "waiting");
+  assert.equal(state.waitingListOffers.length, 1);
 });
 
-test("declining an offer automatically progresses to the next eligible person", () => {
+test("declining an offer releases capacity without progressing the next eligible person", () => {
   const state = createPhase3State({ registrationState: "OPEN" });
   const first = joinWaitingList(state, runner(1), { at: beforeCutoff }).waitingListEntry;
   const second = joinWaitingList(state, runner(2), { at: beforeCutoff }).waitingListEntry;
   const offered = createNextWaitingListOffer(state, admin, beforeCutoff);
   const declined = declineWaitingListOffer(state, offered.offer.id, { actorType: "runner" }, beforeCutoff);
   assert.equal(state.waitingList.find((item) => item.id === first.id).status, "declined");
-  assert.equal(declined.nextOffer.offer.waitingListId, second.id);
+  assert.equal(declined.capacity.remaining, 120);
+  assert.equal(state.waitingList.find((item) => item.id === second.id).status, "waiting");
+  assert.equal(state.waitingListOffers.length, 1);
 });
 
 test("a waiting-list offer collects full details only on acceptance and converts its reserved place", () => {
