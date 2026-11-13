@@ -180,6 +180,7 @@ test("cancelling an active offer releases capacity, restores original eligibilit
 
 test("119 confirmed plus one valid offer converts the existing reservation through Checkout and payment without exceeding 120", async () => {
   const state = baseState({ capacity: 120 });
+  assert.equal(state.environment, "development");
   for (let number = 1; number <= 119; number += 1) {
     state.runners.push({ id: `confirmed-runner-${number}`, ...runner, email: `confirmed-${number}@example.com` });
     assert.equal(addPlaceRegistration(state, { runnerId: `confirmed-runner-${number}`, placeStatus: "confirmed" }, organiser, at).ok, true);
@@ -188,6 +189,9 @@ test("119 confirmed plus one valid offer converts the existing reservation throu
   joinWaitingList(state, waitingRunner(2), { at });
   const offered = createNextWaitingListOffer(state, organiser, at);
   assert.deepEqual(capacitySummary(state), { capacity: 120, confirmed: 119, paymentReserved: 0, offerReserved: 1, reserved: 120, remaining: 0, waiting: 1 });
+  // The deployed development store uses this legacy state label. Existing offers
+  // created during test setup must remain usable without relaxing production.
+  state.registrationState = "test";
   const stripeCalls = [];
   const repository = createMemoryRepository(state);
   const service = new Phase3IntegrationService({
@@ -219,6 +223,26 @@ test("119 confirmed plus one valid offer converts the existing reservation throu
   assert.equal(final.waitingListOffers[0].status, "accepted");
   assert.equal(final.payments.find((item) => item.registrationId === accepted.registrationId).status, "paid");
   assert.equal(final.waitingListOffers.length, 1);
+});
+
+test("development test-state allowance does not relax production waiting-offer authorisation", () => {
+  const state = baseState();
+  const waiting = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
+  const offered = createWaitingListOffer(state, waiting.id, organiser, {}, at);
+  state.environment = "production";
+  state.registrationState = "CLOSED";
+
+  const acceptance = acceptWaitingListOffer(
+    state,
+    offered.token,
+    { runner: { ...runner, email: waiting.email }, declaration },
+    new Date(at.getTime() + 60_000)
+  );
+
+  assert.equal(acceptance.code, "REGISTRATION_NOT_ACCEPTING");
+  assert.equal(state.registrations.length, 0);
+  assert.equal(state.waitingListOffers[0].status, "offered");
+  assert.equal(state.privateInvitations[0].uses, 0);
 });
 
 test("public status suppresses ordinary registration while an eligible waiting list exists", async () => {

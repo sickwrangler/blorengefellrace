@@ -410,7 +410,7 @@ export function declineWaitingListOffer(state, offerId, actor = { actorType: "ru
 }
 
 export function acceptWaitingListOffer(state, invitationToken, input, at = new Date()) {
-  const checked = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_offer", at });
+  const checked = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_offer", at, allowDevelopmentTest: true });
   if (!checked.ok) return checked;
   const offer = state.waitingListOffers.find((item) => item.invitationId === checked.invitation.id && item.status === "offered");
   if (!offer || new Date(offer.expiresAt) <= new Date(at)) return { ok: false, code: "OFFER_NOT_ACTIVE" };
@@ -422,7 +422,7 @@ export function acceptWaitingListOffer(state, invitationToken, input, at = new D
   if (!declarationCheck.ok) return declarationCheck;
   const under18Check = validateUnder18Declaration(state, input.runner, input.declaration);
   if (!under18Check.ok) return under18Check;
-  const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_offer", at, consume: true });
+  const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_offer", at, consume: true, allowDevelopmentTest: true });
   if (!consumed.ok) return consumed;
   const runner = storeRunner(state, input.runner);
   // The active offer already reserves this place, so convert that reservation atomically.
