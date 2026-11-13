@@ -1,7 +1,9 @@
+import { privateAccessPurposeCandidates } from "./runner-access.mjs";
+
 export const canTest = true;
 export const supportsManagedApi = true;
 const privateInvitationToken = new URLSearchParams(window.location.search).get("invite");
-const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : new URLSearchParams(window.location.search).get("offer") === "1" ? "waiting_list_offer" : "registration";
+const privateInvitationPurposes = privateAccessPurposeCandidates({ proofHint: new URLSearchParams(window.location.search).get("proof") === "stripe", offerHint: new URLSearchParams(window.location.search).get("offer") === "1" });
 const MANAGEMENT_TOKEN_SESSION_KEY = "blorenge-management-token";
 const ORDER_TOKEN_SESSION_KEY = "blorenge-order-token";
 
@@ -39,7 +41,16 @@ async function waitingListCsv() {
 
 export const prototype = {
   hasPrivateInvitation: Boolean(privateInvitationToken),
-  inspectPrivateAccess(purpose = privateInvitationPurpose) { return privateInvitationToken ? v2(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }) : Promise.resolve({ ok: true }); },
+  async inspectPrivateAccess(purpose = null) {
+    if (!privateInvitationToken) return { ok: true };
+    let unavailable = { ok: false, code: "LINK_UNAVAILABLE" };
+    for (const candidate of purpose ? [purpose] : privateInvitationPurposes) {
+      const result = await v2(`/private-access?purpose=${encodeURIComponent(candidate)}`, { headers: { "x-private-invitation": privateInvitationToken } });
+      if (result.ok) return result;
+      unavailable = result;
+    }
+    return unavailable;
+  },
   status() { return v2("/registration/status"); },
   joinWaitingList(input) { return v3("/waiting-list/join", { method: "POST", body: JSON.stringify(input), headers: privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {} }); },
   async acceptWaitingListOffer(input) { const result = await v3("/waiting-list/accept", { method: "POST", body: JSON.stringify(input), headers: { "x-private-invitation": privateInvitationToken } }); if (result.ok) this.rememberManagementToken(result.managementToken); return result; },

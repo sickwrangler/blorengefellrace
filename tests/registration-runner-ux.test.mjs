@@ -77,8 +77,9 @@ test("a full or waiting-list-priority race presents an accessible waiting-list j
   assert.match(html, /There is no payment to join/);
   for (const field of ["firstName", "lastName", "email"]) assert.match(html, new RegExp(`name="${field}"`));
   assert.match(html, /id="waiting-list-message"[^>]*role="status"/);
-  assert.match(runner, /status\.publicRegistrationAvailable/);
-  assert.match(runner, /status\.waiting > 0/);
+  assert.match(runner, /runnerEntryAvailability/);
+  assert.match(runner, /validatedPrivateAccess/);
+  assert.match(runner, /Your race place is reserved\. Complete your registration and payment before the invitation expires/);
   assert.match(runner, /prototype\.joinWaitingList/);
   assert.match(runner, /already on the waiting list/);
   assert.match(productionClient, /\/waiting-list\/join/);

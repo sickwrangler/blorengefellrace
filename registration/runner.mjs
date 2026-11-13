@@ -2,7 +2,7 @@ import { prototype, canTest } from "./prototype-client.mjs";
 import { validateRunner } from "./registration-core.mjs";
 import { WFRA_SENIOR_ENTRY_DECLARATION } from "./declarations.mjs";
 import { normalizeRunnerErrors, RUNNER_FIELD_STAGES, runnerMessageForCode } from "./runner-errors.mjs";
-import { runnerAccessDecision } from "./runner-access.mjs";
+import { runnerAccessDecision, runnerEntryAvailability } from "./runner-access.mjs";
 
 const form = document.querySelector("#registration-form");
 const alert = document.querySelector("#form-alert");
@@ -12,7 +12,8 @@ let stage = 1;
 let currentOrder = null;
 let submitting = false;
 let editingRegistrationId = null;
-const waitingListOffer = new URLSearchParams(location.search).get("offer") === "1";
+let waitingListOffer = false;
+let validatedPrivateAccess = null;
 
 function runnerAgeOnRaceDay(dateOfBirth) {
   const birth = new Date(`${dateOfBirth}T00:00:00Z`); const race = new Date("2026-11-28T00:00:00Z");
@@ -155,16 +156,15 @@ function showApiError(result) {
   alert.textContent = result.message ?? messages[result.code] ?? runnerMessageForCode(result.code); alert.hidden = false; alert.focus(); if (result.errors) showErrors(result.errors);
 }
 
-async function refreshStatus(allowOfferedPlace = waitingListOffer) {
+async function refreshStatus() {
   const status = await prototype.status();
   if (!Number.isFinite(status.accepted) || !Number.isFinite(status.capacity)) return { environment: "production", operationalState: "CLOSED", unavailable: true };
   const placesTaken = status.capacity - status.remaining;
   document.querySelector("#status-places").textContent = `${placesTaken} / ${status.capacity}`; document.querySelector("#status-waiting").textContent = status.waiting; const standard = (status.pricing?.standardPricePence ?? 600) / 100; const member = (status.pricing?.wfraMemberPricePence ?? 400) / 100; document.querySelector("#status-price").textContent = `£${standard.toFixed(0)} standard · £${member.toFixed(0)} Welsh Fell Runners Association member`;
   const recovery = document.querySelector("#runner-recovery"); recovery.hidden = !status.recovery; recovery.textContent = status.recovery?.message || ""; document.querySelector("#start-test").disabled = Boolean(status.recovery);
-  const publicRegistrationAvailable = status.publicRegistrationAvailable ?? (status.remaining > 0 && !(status.waiting > 0));
-  const full = !publicRegistrationAvailable && !allowOfferedPlace;
-  document.querySelector("#entry-available-controls").hidden = full;
-  document.querySelector("#waiting-list-panel").hidden = !full;
+  const availability = runnerEntryAvailability({ status, privateAccess: validatedPrivateAccess, hasPrivateInvitation: prototype.hasPrivateInvitation });
+  document.querySelector("#entry-available-controls").hidden = !availability.entryFormAvailable;
+  document.querySelector("#waiting-list-panel").hidden = !availability.waitingListAvailable;
   return status;
 }
 
@@ -185,12 +185,20 @@ async function beginOrRecover(recovered = null) {
 }
 
 const accessCheckStatus = document.querySelector("#access-check-status");
-const showUnavailable = () => { accessCheckStatus.hidden = true; document.querySelector("#closed-panel").hidden = false; };
-const showExperience = async (recovered) => {
+const showUnavailable = (invalidPrivateLink = false) => {
+  accessCheckStatus.hidden = true;
+  if (invalidPrivateLink) {
+    document.querySelector("#unavailable-heading").textContent = "This secure invitation link is no longer available";
+    document.querySelector("#unavailable-message").textContent = "It may have expired, been cancelled or already been used. Contact the organiser if you believe you should still have access.";
+  }
+  document.querySelector("#closed-panel").hidden = false;
+};
+const showExperience = async (recovered, privateAccess = null) => {
   accessCheckStatus.hidden = true; document.querySelector("#test-experience").hidden = false;
   if (waitingListOffer) {
     document.querySelector("#entry-landing-heading").textContent = "A race place is available";
-    document.querySelector("#entry-landing-description").textContent = "Complete one runner's details and payment while this waiting-list offer is available.";
+    const expiry = privateAccess?.invitation?.expiresAt ? new Date(privateAccess.invitation.expiresAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/London" }) : null;
+    document.querySelector("#entry-landing-description").textContent = `Your race place is reserved. Complete your registration and payment before the invitation expires${expiry ? ` (${expiry})` : ""}.`;
     document.querySelector("#purchaser-email-control").hidden = true;
     document.querySelector("#start-test").textContent = "Enter runner details";
     document.querySelector("#submit-test").textContent = "Continue to payment";
@@ -201,10 +209,12 @@ const showExperience = async (recovered) => {
 if (!canTest) showUnavailable();
 else {
   const privateAccess = prototype.hasPrivateInvitation ? await prototype.inspectPrivateAccess() : null;
+  validatedPrivateAccess = privateAccess;
+  waitingListOffer = privateAccess?.ok === true && privateAccess.purpose === "waiting_list_offer";
   const recovered = waitingListOffer ? { ok: false, code: "ORDER_TOKEN_INVALID" } : await prototype.currentOrder();
-  const status = await refreshStatus(waitingListOffer && privateAccess?.ok === true && privateAccess.purpose === "waiting_list_offer");
-  if (runnerAccessDecision({ canTest, status, privateAccess, recovered }) === "available") await showExperience(recovered);
-  else showUnavailable();
+  const status = await refreshStatus();
+  if (runnerAccessDecision({ canTest, status, privateAccess, recovered, hasPrivateInvitation: prototype.hasPrivateInvitation }) === "available") await showExperience(recovered, privateAccess);
+  else showUnavailable(prototype.hasPrivateInvitation && privateAccess?.ok !== true);
 }
 
 document.querySelector("#start-test")?.addEventListener("click", () => { const purchaser = document.querySelector("#purchaser-email"); if (!waitingListOffer && !purchaser.checkValidity()) return purchaser.reportValidity(); document.querySelector("#test-landing").hidden = true; document.querySelector("#runner-flow").hidden = false; showStage(1); });

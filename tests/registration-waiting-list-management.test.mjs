@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  addPlaceRegistration,
   beginProductionRegistration,
   acceptWaitingListOffer,
   cancelWaitingListOffer,
@@ -12,6 +13,7 @@ import {
   joinWaitingList,
   withdrawWaitingListEntry
 } from "../registration/server/phase3-domain.mjs";
+import { reconcileStripeEvent } from "../registration/server/phase3-integrations.mjs";
 import { createMemoryRepository } from "../registration/server/repositories.mjs";
 import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
 import { ProductionRegistrationService } from "../registration/server/production-service.mjs";
@@ -176,11 +178,16 @@ test("cancelling an active offer releases capacity, restores original eligibilit
   assert.equal(audit.after.reason, "Offer sent in error");
 });
 
-test("a valid active offer converts its reservation and can pay while another eligible runner remains", async () => {
-  const state = baseState({ capacity: 2 });
+test("119 confirmed plus one valid offer converts the existing reservation through Checkout and payment without exceeding 120", async () => {
+  const state = baseState({ capacity: 120 });
+  for (let number = 1; number <= 119; number += 1) {
+    state.runners.push({ id: `confirmed-runner-${number}`, ...runner, email: `confirmed-${number}@example.com` });
+    assert.equal(addPlaceRegistration(state, { runnerId: `confirmed-runner-${number}`, placeStatus: "confirmed" }, organiser, at).ok, true);
+  }
   const first = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
   joinWaitingList(state, waitingRunner(2), { at });
   const offered = createNextWaitingListOffer(state, organiser, at);
+  assert.deepEqual(capacitySummary(state), { capacity: 120, confirmed: 119, paymentReserved: 0, offerReserved: 1, reserved: 120, remaining: 0, waiting: 1 });
   const stripeCalls = [];
   const repository = createMemoryRepository(state);
   const service = new Phase3IntegrationService({
@@ -200,10 +207,18 @@ test("a valid active offer converts its reservation and can pay while another el
   const checkout = await service.checkout(accepted.managementToken, new Date(at.getTime() + 120_000));
   assert.equal(checkout.ok, true);
   assert.equal(stripeCalls.length, 1);
+  await repository.transaction((current) => {
+    assert.deepEqual(capacitySummary(current), { capacity: 120, confirmed: 119, paymentReserved: 1, offerReserved: 0, reserved: 120, remaining: 0, waiting: 1 });
+    const payment = current.payments.find((item) => item.registrationId === accepted.registrationId);
+    const reconciled = reconcileStripeEvent(current, { id: "evt_waiting_offer_paid", type: "checkout.session.completed", data: { object: { id: payment.checkoutSessionId, amount_total: payment.expectedAmountPence, currency: payment.currency, payment_status: "paid", payment_intent: "pi_waiting_offer" } } }, { at: new Date(at.getTime() + 180_000) });
+    assert.equal(reconciled.ok, true);
+    return { ok: true };
+  });
   const final = await repository.read();
-  assert.deepEqual(capacitySummary(final), { capacity: 2, confirmed: 0, paymentReserved: 1, offerReserved: 0, reserved: 1, remaining: 1, waiting: 1 });
+  assert.deepEqual(capacitySummary(final), { capacity: 120, confirmed: 120, paymentReserved: 0, offerReserved: 0, reserved: 120, remaining: 0, waiting: 1 });
   assert.equal(final.waitingListOffers[0].status, "accepted");
-  assert.equal(final.payments[0].status, "checkout_pending");
+  assert.equal(final.payments.find((item) => item.registrationId === accepted.registrationId).status, "paid");
+  assert.equal(final.waitingListOffers.length, 1);
 });
 
 test("public status suppresses ordinary registration while an eligible waiting list exists", async () => {

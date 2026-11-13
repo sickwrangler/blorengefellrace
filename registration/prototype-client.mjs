@@ -1,5 +1,6 @@
 import { initialState, submitRegistration, applyMockPayment, cancelRegistration, promoteRegistration, updateTestSettings, assignRaceNumber, removeRaceNumber, markOrganiserViewed, statusSummary, sanitizedCsv } from "./registration-core.mjs";
 import { createPreviewRepository, STORAGE_KEY, SCHEMA_VERSION, UPDATE_EVENT, isRepositoryStorageEvent, environmentForHostname } from "./preview-repository.mjs";
+import { privateAccessPurposeCandidates } from "./runner-access.mjs";
 
 const hostname = window.location.hostname;
 const environment = environmentForHostname(hostname);
@@ -9,7 +10,7 @@ export const isDevelopment = environment === "development";
 export const canTest = isLocal || isPreview || isDevelopment;
 const usesApi = isLocal || isDevelopment;
 const privateInvitationToken = new URLSearchParams(window.location.search).get("invite");
-const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : new URLSearchParams(window.location.search).get("offer") === "1" ? "waiting_list_offer" : "registration";
+const privateInvitationPurposes = privateAccessPurposeCandidates({ proofHint: new URLSearchParams(window.location.search).get("proof") === "stripe", offerHint: new URLSearchParams(window.location.search).get("offer") === "1" });
 export const supportsManagedApi = usesApi;
 const storageAdapter = {
   getItem(key) { return window.localStorage.getItem(key); },
@@ -106,9 +107,17 @@ function repositorySnapshot() {
 
 export const prototype = {
   hasPrivateInvitation: Boolean(privateInvitationToken),
-  async inspectPrivateAccess(purpose = privateInvitationPurpose) {
+  async inspectPrivateAccess(purpose = null) {
     if (!privateInvitationToken || !usesApi) return { ok: !privateInvitationToken };
-    try { return await api(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }); }
+    try {
+      let unavailable = { ok: false, code: "LINK_UNAVAILABLE" };
+      for (const candidate of purpose ? [purpose] : privateInvitationPurposes) {
+        const result = await api(`/private-access?purpose=${encodeURIComponent(candidate)}`, { headers: { "x-private-invitation": privateInvitationToken } });
+        if (result.ok) return result;
+        unavailable = result;
+      }
+      return unavailable;
+    }
     catch { return { ok: false, code: "LINK_UNAVAILABLE" }; }
   },
   async status() {
