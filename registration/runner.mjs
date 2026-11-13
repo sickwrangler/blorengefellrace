@@ -161,7 +161,8 @@ async function refreshStatus(allowOfferedPlace = waitingListOffer) {
   const placesTaken = status.capacity - status.remaining;
   document.querySelector("#status-places").textContent = `${placesTaken} / ${status.capacity}`; document.querySelector("#status-waiting").textContent = status.waiting; const standard = (status.pricing?.standardPricePence ?? 600) / 100; const member = (status.pricing?.wfraMemberPricePence ?? 400) / 100; document.querySelector("#status-price").textContent = `£${standard.toFixed(0)} standard · £${member.toFixed(0)} Welsh Fell Runners Association member`;
   const recovery = document.querySelector("#runner-recovery"); recovery.hidden = !status.recovery; recovery.textContent = status.recovery?.message || ""; document.querySelector("#start-test").disabled = Boolean(status.recovery);
-  const full = status.remaining === 0 && !allowOfferedPlace;
+  const publicRegistrationAvailable = status.publicRegistrationAvailable ?? (status.remaining > 0 && !(status.waiting > 0));
+  const full = !publicRegistrationAvailable && !allowOfferedPlace;
   document.querySelector("#entry-available-controls").hidden = full;
   document.querySelector("#waiting-list-panel").hidden = !full;
   return status;

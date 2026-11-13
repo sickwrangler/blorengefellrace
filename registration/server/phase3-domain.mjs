@@ -309,12 +309,20 @@ function waitingListReason(value) {
   return reason.length <= 250 ? { ok: true, reason: reason || null } : { ok: false, code: "WAITING_LIST_REASON_TOO_LONG" };
 }
 
+export function eligibleWaitingListEntries(state) {
+  return (state.waitingList ?? []).filter((item) => item.status === "waiting").sort((a, b) => a.sequence - b.sequence);
+}
+
+export function waitingListPriorityActive(state) {
+  return eligibleWaitingListEntries(state).length > 0;
+}
+
 export function createWaitingListOffer(state, waitingListId, actor, { reason = null } = {}, at = new Date()) {
   if (!organiser(actor)) return { ok: false, code: "FORBIDDEN" };
   if (capacitySummary(state).remaining < 1) return { ok: false, code: "CAPACITY_FULL" };
   const reasonResult = waitingListReason(reason);
   if (!reasonResult.ok) return reasonResult;
-  const eligible = state.waitingList.filter((item) => item.status === "waiting").sort((a, b) => a.sequence - b.sequence);
+  const eligible = eligibleWaitingListEntries(state);
   const waiting = waitingListId ? eligible.find((item) => item.id === waitingListId) : eligible[0];
   if (!waiting) return { ok: false, code: waitingListId ? "WAITING_LIST_ENTRY_NOT_ELIGIBLE" : "WAITING_LIST_EMPTY" };
   const bypassedFifo = Boolean(waitingListId && eligible[0]?.id !== waiting.id);

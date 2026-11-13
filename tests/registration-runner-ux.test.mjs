@@ -62,7 +62,7 @@ test("runner membership wording introduces the association and links to joining 
   }
 });
 
-test("a full race presents an accessible waiting-list journey and organiser offer control", async () => {
+test("a full or waiting-list-priority race presents an accessible waiting-list journey and organiser offer control", async () => {
   const [html, runner, productionClient, dashboardHtml, dashboard] = await Promise.all([
     read("registration/index.html"),
     read("registration/runner.mjs"),
@@ -72,11 +72,13 @@ test("a full race presents an accessible waiting-list journey and organiser offe
   ]);
 
   assert.match(html, /id="waiting-list-panel"[^>]*aria-labelledby="waiting-list-heading"[^>]*hidden/);
-  assert.match(html, /Entries are full — join the waiting list/);
+  assert.match(html, /<h3 id="waiting-list-heading">Join the waiting list<\/h3>/);
+  assert.match(html, /New places are offered through the waiting list/);
   assert.match(html, /There is no payment to join/);
   for (const field of ["firstName", "lastName", "email"]) assert.match(html, new RegExp(`name="${field}"`));
   assert.match(html, /id="waiting-list-message"[^>]*role="status"/);
-  assert.match(runner, /status\.remaining === 0/);
+  assert.match(runner, /status\.publicRegistrationAvailable/);
+  assert.match(runner, /status\.waiting > 0/);
   assert.match(runner, /prototype\.joinWaitingList/);
   assert.match(runner, /already on the waiting list/);
   assert.match(productionClient, /\/waiting-list\/join/);

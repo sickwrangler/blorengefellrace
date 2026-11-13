@@ -32,6 +32,7 @@ export function runnerMessageForCode(code) {
     DUPLICATE: "An active test entry already uses this email address.",
     LINK_UNAVAILABLE: "This private link is no longer available.",
     REGISTRATION_NOT_ACCEPTING: "Registration is not currently accepting entries.",
+    WAITING_LIST_PRIORITY: "Available places are being offered through the waiting list. Join the waiting list, or use the active secure offer link sent to you.",
     GUARDIAN_DECLARATION_REQUIRED: "A parent or legal guardian must complete the declaration for a runner aged 16 or 17.",
     GUARDIAN_MUST_COMPLETE_DECLARATION: "A parent or legal guardian must provide their full name and confirm the declaration.",
     GUARDIAN_NAME_MATCHES_RUNNER: "Enter the parent or legal guardian's full name, not the runner's name.",

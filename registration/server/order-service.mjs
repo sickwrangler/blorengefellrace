@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, managementTokenExpiry, managementTokenIsExpired, validateProductionRunner } from "./phase3-domain.mjs";
+import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, managementTokenExpiry, managementTokenIsExpired, validateProductionRunner, waitingListPriorityActive } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { confirmationRecoveryPlan, reconcileEmailHealth, recoveryFingerprint } from "./email-health.mjs";
 
@@ -35,6 +35,12 @@ function validProviderProofRunner(state, runner) {
   return ageOnRaceDate(runner.dateOfBirth, state.event.raceDate) >= 18
     && runner.wfraMember !== true
     && calculateEntryPrice(state.event, runner).priceActuallyChargedPence === 600;
+}
+
+function waitingListBlocksOrdinaryOrder(state) {
+  const publicOpen = state.environment === "production" && state.registrationState === "OPEN";
+  const developmentTest = ["local", "development"].includes(state.environment) && state.registrationState === "test";
+  return (publicOpen || developmentTest) && waitingListPriorityActive(state);
 }
 
 function audit(state, action, subjectId, detail = {}, at = new Date(), actor = { actorType: "system" }) {
@@ -390,6 +396,7 @@ export class OrderRegistrationService {
         : { ok: false };
       const providerProof = proofAccess.ok === true && providerProofBaselineEmpty(state);
       if (!developmentAccepting && !productionAccepting && !providerProof) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
+      if (!providerProof && waitingListBlocksOrdinaryOrder(state)) return { ok: false, code: "WAITING_LIST_PRIORITY" };
       if (providerProof && (state.orders ?? []).some((order) => order.providerProof === true)) return { ok: false, code: "LINK_UNAVAILABLE" };
       if (state.environment === "production" && state.registrationState === "PRIVATE_LIVE") {
         const access = authorizePrivateInvitation(state, invitationToken, { kind: "registration", at });
@@ -499,6 +506,7 @@ export class OrderRegistrationService {
       const registrations = registrationsFor(state, order).filter(active);
       if (!registrations.length || registrations.length > this.maxRunnersPerOrder) return reject({ ok: false, code: "ORDER_RUNNER_COUNT_INVALID" });
       if (order.providerProof && (registrations.length !== 1 || !validProviderProofRunner(state, runnerFor(state, registrations[0])))) return reject({ ok: false, code: "PROVIDER_PROOF_REQUIREMENTS" });
+      if (!order.providerProof && waitingListBlocksOrdinaryOrder(state)) return reject({ ok: false, code: "WAITING_LIST_PRIORITY" });
       let recalculatedTotal = 0;
       for (const registration of registrations) {
         const runner = runnerFor(state, registration);
@@ -540,6 +548,17 @@ export class OrderRegistrationService {
         if (paid !== payment.expectedAmountPence || currency !== "gbp") return { ok: false, code: "PAYMENT_MISMATCH" };
         if (event.type === "checkout.session.completed" && object.payment_status && object.payment_status !== "paid") { payment.status = "processing"; order.status = "payment_processing"; }
         else {
+          const unreserved = registrations.some((registration) => registration.placeStatus === "none");
+          const capacityUnavailable = capacitySummary(state).remaining < registrations.length;
+          const waitingListConflict = !order.providerProof && waitingListBlocksOrdinaryOrder(state);
+          if (unreserved && (capacityUnavailable || waitingListConflict)) {
+            payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.sessionId === object.id ? { ...attempt, status: "completed", completedAt: iso(at) } : attempt);
+            payment.status = "paid_capacity_conflict"; payment.actualPaidAmountPence = paid; payment.paymentIntentId = typeof object.payment_intent === "string" ? object.payment_intent : object.payment_intent?.id; payment.completedAt = iso(at); payment.webhookReconciliationState = "manual_review"; payment.updatedAt = iso(at);
+            order.status = "payment_review"; order.updatedAt = iso(at);
+            state.processedPaymentEvents.push({ id: event.id, type: event.type, processedAt: iso(at) });
+            audit(state, "order_payment_capacity_conflict", order.id, { runnerCount: registrations.length, reason: waitingListConflict ? "waiting_list_priority" : "capacity_unavailable" }, at);
+            return { ok: true, orderStatus: order.status, paymentStatus: payment.status, confirmed: 0, manualReview: true, outboxAttemptIds: [] };
+          }
           payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.sessionId === object.id ? { ...attempt, status: "completed", completedAt: iso(at) } : attempt);
           payment.status = "paid"; payment.actualPaidAmountPence = paid; payment.paymentIntentId = typeof object.payment_intent === "string" ? object.payment_intent : object.payment_intent?.id; payment.completedAt = iso(at); payment.webhookReconciliationState = "reconciled"; order.status = "paid"; order.paidAt = iso(at);
           const outboxAttemptIds = [];

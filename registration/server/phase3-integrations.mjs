@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { capacitySummary, expireWaitingListOffers } from "./phase3-domain.mjs";
+import { capacitySummary, expireWaitingListOffers, waitingListPriorityActive } from "./phase3-domain.mjs";
 
 export const CHECKOUT_RESERVATION_MINUTES = 30;
 export const PAYMENT_CURRENCY = "gbp";
@@ -100,6 +100,7 @@ export async function beginStripeCheckout(state, registrationId, gateway, { succ
   if (payment.status === "paid") return { ok: false, code: "ALREADY_PAID" };
   if (payment.status === "checkout_pending" && new Date(payment.checkoutExpiresAt) > new Date(at)) return { ok: true, duplicate: true, checkoutUrl: payment.checkoutUrl, expiresAt: payment.checkoutExpiresAt };
   if (registration.placeStatus === "none") {
+    if (waitingListPriorityActive(state)) return { ok: false, code: "WAITING_LIST_PRIORITY" };
     if (capacitySummary(state).remaining < 1) return { ok: false, code: "CAPACITY_FULL" };
     registration.placeStatus = "payment_reserved";
   }

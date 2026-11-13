@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { EVENT, safeRegistrationState, validateRunner } from "../registration-core.mjs";
 import { authorize } from "./auth.mjs";
-import { PRIVATE_INVITATION_KINDS, issuePrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, authorizePrivateInvitation, calculateEntryPrice, managementTokenExpiry } from "./phase3-domain.mjs";
+import { PRIVATE_INVITATION_KINDS, issuePrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, managementTokenExpiry } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { buildPrivateWorkbookModel, buildTransferHistory, buildWaitingListView, transferSummaryForRegistration, waitingListSummary } from "./private-export.mjs";
 
@@ -127,7 +127,13 @@ function refreshWaiting(db, actor = null) {
 
 function status(db) {
   const accepted = db.registrations.filter((item) => item.entryStatus === "accepted" && active(item)).length;
-  return { state: db.registrationState, operationalState: db.phase3RegistrationState ?? "CLOSED", environment: db.environment, capacity: db.event.capacity, accepted, remaining: Math.max(0, db.event.capacity - accepted), waiting: db.registrations.filter((item) => item.entryStatus === "waiting_list" && active(item)).length, intendedOpeningDate: db.event.intendedOpeningDate, pricing: calculateEntryPrice(db.event) };
+  const reserved = capacitySummary(db).reserved;
+  const remaining = Math.max(0, db.event.capacity - Math.max(accepted, reserved));
+  const waiting = Math.max(db.registrations.filter((item) => item.entryStatus === "waiting_list" && active(item)).length, (db.waitingList ?? []).filter((item) => item.status === "waiting").length);
+  const waitingListPriorityActive = waiting > 0;
+  const operationalState = db.phase3RegistrationState ?? "CLOSED";
+  const acceptingPublic = db.environment === "production" ? operationalState === "OPEN" : db.registrationState === "test";
+  return { state: db.registrationState, operationalState, environment: db.environment, capacity: db.event.capacity, accepted, remaining, waiting, waitingListPriorityActive, publicRegistrationAvailable: acceptingPublic && remaining > 0 && !waitingListPriorityActive, intendedOpeningDate: db.event.intendedOpeningDate, pricing: calculateEntryPrice(db.event) };
 }
 
 function privateAccessState(db) {

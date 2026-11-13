@@ -14,6 +14,7 @@ import {
 } from "../registration/server/phase3-domain.mjs";
 import { createMemoryRepository } from "../registration/server/repositories.mjs";
 import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
+import { ProductionRegistrationService } from "../registration/server/production-service.mjs";
 import { buildWaitingListView } from "../registration/server/private-export.mjs";
 import { createProductionApi } from "../registration/server/production-api.mjs";
 
@@ -173,6 +174,48 @@ test("cancelling an active offer releases capacity, restores original eligibilit
   const audit = state.auditEvents.find((item) => item.action === "waiting_list_offer_cancelled");
   assert.equal(audit.after.returnedToWaiting, true);
   assert.equal(audit.after.reason, "Offer sent in error");
+});
+
+test("a valid active offer converts its reservation and can pay while another eligible runner remains", async () => {
+  const state = baseState({ capacity: 2 });
+  const first = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
+  joinWaitingList(state, waitingRunner(2), { at });
+  const offered = createNextWaitingListOffer(state, organiser, at);
+  const stripeCalls = [];
+  const repository = createMemoryRepository(state);
+  const service = new Phase3IntegrationService({
+    repository,
+    stripeGateway: {
+      mode: "test",
+      async createCheckoutSession(input) {
+        stripeCalls.push(input);
+        return { id: "cs_test_waiting_offer", url: "https://checkout.stripe.test/waiting-offer", expiresAt: new Date(new Date(input.at).getTime() + 30 * 60_000).toISOString() };
+      }
+    },
+    emailAdapter: { kind: "test", async send() { return { delivery: "test", externalCall: false }; } },
+    publicBaseUrl: "https://development.example"
+  });
+  const accepted = await service.acceptWaitingPlace(offered.token, { runner: { ...runner, email: first.email }, declaration }, new Date(at.getTime() + 60_000));
+  assert.equal(accepted.ok, true);
+  const checkout = await service.checkout(accepted.managementToken, new Date(at.getTime() + 120_000));
+  assert.equal(checkout.ok, true);
+  assert.equal(stripeCalls.length, 1);
+  const final = await repository.read();
+  assert.deepEqual(capacitySummary(final), { capacity: 2, confirmed: 0, paymentReserved: 1, offerReserved: 0, reserved: 1, remaining: 1, waiting: 1 });
+  assert.equal(final.waitingListOffers[0].status, "accepted");
+  assert.equal(final.payments[0].status, "checkout_pending");
+});
+
+test("public status suppresses ordinary registration while an eligible waiting list exists", async () => {
+  const state = createPhase3State({ environment: "production", registrationState: "OPEN" });
+  state.registrationState = "OPEN";
+  state.event.capacity = 2;
+  joinWaitingList(state, waitingRunner(1), { at });
+  const service = new ProductionRegistrationService({ repository: createMemoryRepository(state), emailAdapter: { kind: "disabled" } });
+  const status = await service.status();
+  assert.equal(status.remaining, 2);
+  assert.equal(status.waitingListPriorityActive, true);
+  assert.equal(status.publicRegistrationAvailable, false);
 });
 
 test("cancelling an offer supersedes a failed email retry without creating payment state", async () => {
