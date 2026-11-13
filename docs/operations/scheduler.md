@@ -16,7 +16,7 @@ Each run uses a system-assigned managed identity to:
 
 - read and transactionally update the production Table;
 - send due waiting-list reminder messages;
-- expire waiting-list offers and create/email the next offer;
+- expire waiting-list offers, release their reservations and leave the next offer under organiser control;
 - expire stale unpaid Checkout reservations;
 - send the single configured declaration reminder when due;
 - expire unpaid group Checkouts and release their reservations;
