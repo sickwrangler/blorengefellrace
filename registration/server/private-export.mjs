@@ -49,6 +49,10 @@ export function buildWaitingListView(state) {
   return waiting.map((item) => {
     const offer = latestOfferFor(offers, item.id);
     const registration = acceptedRegistrationFor(state, offer);
+    const offerCommunication = offer ? (state.communications ?? []).find((communication) => communication.idempotencyKey === `waiting-list:${offer.id}:offered`) : null;
+    const offerEmailAttempt = offer ? (state.emailOutbox ?? []).find((attempt) => attempt.waitingListOfferId === offer.id && attempt.purpose === "waiting_list_offer" && attempt.status !== "superseded") : null;
+    const offerEmailDelivery = offerCommunication?.delivery
+      ?? (offerEmailAttempt?.status === "sent" ? "sent" : ["prepared", "sending"].includes(offerEmailAttempt?.status) ? "pending" : offerEmailAttempt?.status === "failed" ? "failed" : "");
     return {
       waitingListId: item.id ?? "",
       originalSequence: sequenceValue(item.sequence),
@@ -63,6 +67,12 @@ export function buildWaitingListView(state) {
       offerReminderAt: offer?.reminderAt ?? "",
       offerExpiresAt: offer?.expiresAt ?? "",
       offerCompletedAt: offer?.completedAt ?? "",
+      offerEmailDelivery,
+      offerEmailAttemptedAt: offerCommunication?.attemptedAt ?? "",
+      offerEmailSentAt: offerCommunication?.sentAt ?? "",
+      offerEmailFailureCategory: offerCommunication?.failureCategory ?? offerEmailAttempt?.failureCategory ?? "",
+      offerEmailRetryAfterAt: offerEmailAttempt?.retryAfterAt ?? "",
+      offerEmailRetryAvailable: offer?.status === "offered" && Boolean(offerEmailAttempt?.message) && ["prepared", "failed"].includes(offerEmailAttempt?.status),
       registrationId: registration?.id ?? "",
       entryReference: registration?.testReference ?? ""
     };
@@ -87,7 +97,8 @@ export function waitingListSummary(waitingList) {
     outstandingOffers: waitingList.filter((item) => item.offerStatus === "offered").length,
     accepted: waitingList.filter((item) => item.status === "accepted").length,
     declined: waitingList.filter((item) => item.status === "declined").length,
-    expired: waitingList.filter((item) => item.status === "expired").length
+    expired: waitingList.filter((item) => item.status === "expired").length,
+    failedOfferEmails: waitingList.filter((item) => item.offerStatus === "offered" && item.offerEmailDelivery === "failed").length
   };
 }
 

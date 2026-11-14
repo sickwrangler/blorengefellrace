@@ -62,10 +62,19 @@ test("organiser dashboard separates the private workbook and marks transferred e
 test("organiser dashboard presents and exports a separate filterable waiting list", () => {
   const html = fs.readFileSync("registration/dashboard.html", "utf8");
   const source = fs.readFileSync("registration/dashboard.mjs", "utf8");
-  for (const id of ["waiting-summary-waiting", "waiting-summary-offered", "waiting-summary-accepted", "waiting-summary-declined", "waiting-summary-expired", "waiting-list-search", "waiting-list-filter", "waiting-list-rows", "export-waiting-list-csv"]) assert.match(html, new RegExp(`id="${id}"`));
-  for (const option of ["Waiting", "Offer outstanding", "Accepted", "Declined", "Expired"]) assert.match(html, new RegExp(`>${option}<`));
+  const productionClient = fs.readFileSync("registration/production-client.mjs", "utf8");
+  for (const id of ["summary-accepted", "summary-payment-reservations", "summary-offer-reservations", "summary-remaining", "waiting-summary-waiting", "waiting-summary-offered", "waiting-summary-accepted", "waiting-summary-declined", "waiting-summary-expired", "waiting-summary-email-failed", "waiting-list-search", "waiting-list-filter", "waiting-list-rows", "export-waiting-list-csv"]) assert.match(html, new RegExp(`id="${id}"`));
+  for (const option of ["Waiting", "Offer outstanding", "Accepted", "Declined", "Expired", "Withdrawn"]) assert.match(html, new RegExp(`>${option}<`));
   assert.match(source, /currentState\.waitingList/);
   assert.match(source, /prototype\.waitingListCsv\(\)/);
+  assert.match(source, /prototype\.offerWaitingPlace\(pending\.waitingListId, reason\)/);
+  assert.match(source, /prototype\.withdrawWaitingPlace\(pending\.waitingListId, reason\)/);
+  assert.match(source, /prototype\.cancelWaitingPlaceOffer\(pending\.waitingListId, reason\)/);
+  assert.match(source, /prototype\.retryWaitingPlaceOfferEmail\(item\.waitingListId\)/);
+  assert.match(source, /prototype\.organiserWithdrawEntry\(registrationId, reason\)/);
+  assert.match(html, /id="waiting-list-action-dialog"/);
+  assert.match(html, /id="withdraw-entry-dialog"/);
+  for (const method of ["offerWaitingPlace", "withdrawWaitingPlace", "cancelWaitingPlaceOffer", "retryWaitingPlaceOfferEmail", "organiserWithdrawEntry"]) assert.match(productionClient, new RegExp(`${method}\\(`));
   assert.doesNotMatch(source, /currentState\.waitingListOffers/);
   assert.match(html, /Private personal data for authorised organisers only/);
 });

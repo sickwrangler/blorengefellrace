@@ -53,6 +53,19 @@ export function createProductionApi({ service, phase3Integrations, repository, s
     if (method === "POST" && pathname === "/api/v3/waiting-list/accept") return resultResponse(await phase3Integrations.acceptWaitingPlace(headers["x-private-invitation"], body, new Date()), 201);
     if (method === "POST" && pathname === "/api/v3/waiting-list/decline") return resultResponse(await phase3Integrations.declineWaitingPlace(headers["x-private-invitation"]));
     if (method === "POST" && pathname === "/api/v3/organiser/waiting-list/offer-next") return resultResponse(await phase3Integrations.offerNextWaitingPlace(actor));
+    const waitingListAction = pathname.match(/^\/api\/v3\/organiser\/waiting-list\/([^/]+)\/(offer|cancel-offer|retry-email|withdraw)$/);
+    if (method === "POST" && waitingListAction) {
+      const waitingListId = decodeURIComponent(waitingListAction[1]);
+      const handlers = {
+        offer: () => phase3Integrations.offerWaitingPlace(actor, waitingListId, body),
+        "cancel-offer": () => phase3Integrations.cancelWaitingPlaceOffer(actor, waitingListId, body),
+        "retry-email": () => phase3Integrations.retryWaitingPlaceOfferEmail(actor, waitingListId),
+        withdraw: () => phase3Integrations.withdrawWaitingPlace(actor, waitingListId, body)
+      };
+      return resultResponse(await handlers[waitingListAction[2]]());
+    }
+    const organiserWithdrawal = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/withdraw$/);
+    if (method === "POST" && organiserWithdrawal) return resultResponse(await phase3Integrations.organiserWithdraw(actor, decodeURIComponent(organiserWithdrawal[1]), body));
     const resendManagement = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/resend-management$/);
     if (method === "POST" && resendManagement) return resultResponse(await phase3Integrations.resendManagementLink(actor, decodeURIComponent(resendManagement[1])));
     const providerProofRefund = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/provider-proof-refund-request$/);

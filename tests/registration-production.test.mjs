@@ -253,7 +253,7 @@ test("organiser can request only the exact paid CLOSED production provider-proof
 test("production scheduler is harmless while CLOSED and empty", async () => {
   const service = { async runScheduledWork(actor) {
     assert.equal(authorizeProduction(actor, "manage"), true);
-    return { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, nextOfferCreated: false };
+    return { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, availablePlaceReleased: false };
   } };
   const handler = createProductionSchedulerHandler({ service, environment: env(), clock: () => new Date("2026-10-01T12:00:00Z"), logger: { log() {}, error() {} } });
   const result = await handler(); assert.equal(result.ok, true); assert.equal(result.reminders, 0); assert.equal(result.expiredOffers, 0);
@@ -263,7 +263,7 @@ test("production scheduler is harmless while CLOSED and empty", async () => {
 test("production scheduler recovery is explicit and tightly bounded", async () => {
   const calls = [];
   const service = {
-    async runScheduledWork() { return { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, nextOfferCreated: false }; },
+    async runScheduledWork() { return { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, availablePlaceReleased: false }; },
     async runScheduledConfirmationRecovery(actor, options) { calls.push({ actor, options }); return { ok: true, status: "active", sent: 4, remaining: 35 }; }
   };
   const handler = createProductionSchedulerHandler({ service, environment: env({ REGISTRATION_EMAIL_RECOVERY_ENABLED: "true", REGISTRATION_EMAIL_RECOVERY_BATCH_SIZE: "4" }), clock: () => new Date("2026-10-01T12:00:00Z"), logger: { log() {}, error() {} } });
@@ -275,7 +275,7 @@ test("production scheduler recovery is explicit and tightly bounded", async () =
 
 test("production scheduler surfaces a paused recovery campaign as a failed invocation", async () => {
   const service = {
-    async runScheduledWork() { return { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, nextOfferCreated: false }; },
+    async runScheduledWork() { return { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, availablePlaceReleased: false }; },
     async runScheduledConfirmationRecovery() { return { ok: false, status: "paused", sent: 0, code: "EMAIL_DELIVERY_FAILED" }; }
   };
   const handler = createProductionSchedulerHandler({ service, environment: env({ REGISTRATION_EMAIL_RECOVERY_ENABLED: "true" }), clock: () => new Date("2026-10-01T12:00:00Z"), logger: { log() {}, error() {} } });

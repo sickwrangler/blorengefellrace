@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { createAzureTableRepository, createMemoryRepository } from "../registration/server/repositories.mjs";
 import { createDatabase } from "../registration/server/service.mjs";
 import { OrderRegistrationService, DEFAULT_MAX_RUNNERS_PER_ORDER, buildPublicStartList } from "../registration/server/order-service.mjs";
-import { capacitySummary, decideRefund, issueManagementToken, requestRefund } from "../registration/server/phase3-domain.mjs";
+import { capacitySummary, createNextWaitingListOffer, decideRefund, issueManagementToken, requestRefund } from "../registration/server/phase3-domain.mjs";
 import { createStripeGateway, executeApprovedStripeRefund } from "../registration/server/phase3-integrations.mjs";
 import { createApi } from "../registration/server/api.mjs";
 import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
@@ -28,6 +28,11 @@ function setup({ capacity = 120, memberPrice = 400, draftRetentionHours = null }
 
 async function createOrder(orders, purchaserEmail = "purchaser@example.com") { const created = await orders.createOrder({ purchaserEmail }, start); assert.equal(created.ok, true); return created; }
 async function add(orders, token, number, mode = "later", overrides = {}) { return orders.addRunner(token, { runner: runner(number, overrides), declarationMode: mode, declaration: mode === "now" ? declaration(number) : null }, start); }
+function addWaiting(state, number, status = "waiting") {
+  const entry = { id: `waiting-priority-${number}`, firstName: "Waiting", lastName: `Runner ${number}`, email: `waiting-priority-${number}@example.com`, sequence: state.waitingList.length + 1, status, joinedAt: start.toISOString() };
+  state.waitingList.push(entry);
+  return entry;
+}
 async function paidTwo() {
   const setupResult = setup(); const created = await createOrder(setupResult.orders); await add(setupResult.orders, created.orderToken, 1, "now"); await add(setupResult.orders, created.orderToken, 2, "later"); const checkout = await setupResult.orders.checkout(created.orderToken, start); assert.equal(checkout.ok, true);
   const event = { id: "evt_group_paid", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 1200, currency: "gbp", payment_status: "paid", payment_intent: "pi_test_group", metadata: { orderId: created.order.id } } } };
@@ -148,6 +153,90 @@ test("concurrent group Checkouts cannot oversubscribe capacity", async () => {
   const { orders, repository } = setup({ capacity: 3 }); const first = await createOrder(orders); const second = await createOrder(orders, "second@example.com");
   await add(orders, first.orderToken, 1); await add(orders, first.orderToken, 2); await add(orders, second.orderToken, 3); await add(orders, second.orderToken, 4);
   const outcomes = await Promise.all([orders.checkout(first.orderToken, start), orders.checkout(second.orderToken, start)]); assert.equal(outcomes.filter((item) => item.ok).length, 1); assert.equal(capacitySummary(await repository.read()).reserved, 2);
+});
+
+test("eligible waiting-list runners block new public orders while inactive history does not", async () => {
+  const blocked = setup({ capacity: 2 });
+  await blocked.repository.transaction((state) => ({ ok: true, waiting: addWaiting(state, 1) }));
+  const blockedOrder = await blocked.orders.createOrder({ purchaserEmail: "public-runner@example.com" }, start);
+  assert.equal(blockedOrder.code, "WAITING_LIST_PRIORITY");
+  assert.equal((await blocked.repository.read()).orders.length, 0);
+
+  const allowed = setup({ capacity: 2 });
+  await allowed.repository.transaction((state) => {
+    addWaiting(state, 1, "withdrawn");
+    return { ok: true };
+  });
+  assert.equal((await allowed.orders.createOrder({ purchaserEmail: "public-runner@example.com" }, start)).ok, true);
+});
+
+test("an existing public draft is revalidated and blocked before Checkout when a waiting list becomes eligible", async () => {
+  const current = setup({ capacity: 2 });
+  const created = await createOrder(current.orders);
+  await add(current.orders, created.orderToken, 1);
+  await current.repository.transaction((state) => ({ ok: true, waiting: addWaiting(state, 1) }));
+  const checkout = await current.orders.checkout(created.orderToken, start);
+  assert.equal(checkout.code, "WAITING_LIST_PRIORITY");
+  assert.equal(current.stripeCalls.checkout.length, 0);
+  const state = await current.repository.read();
+  assert.equal(state.registrations[0].placeStatus, "none");
+  assert.equal(state.payments.length, 0);
+  assert.equal(capacitySummary(state).remaining, 2);
+});
+
+test("an already reserved public Checkout remains reusable after somebody joins the waiting list", async () => {
+  const current = setup({ capacity: 2 });
+  const created = await createOrder(current.orders);
+  await add(current.orders, created.orderToken, 1);
+  const first = await current.orders.checkout(created.orderToken, start);
+  await current.repository.transaction((state) => ({ ok: true, waiting: addWaiting(state, 1) }));
+  const duplicate = await current.orders.checkout(created.orderToken, new Date(start.getTime() + 60_000));
+  assert.equal(duplicate.ok, true);
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(duplicate.checkoutUrl, first.checkoutUrl);
+  assert.equal(current.stripeCalls.checkout.length, 1);
+  assert.equal(capacitySummary(await current.repository.read()).paymentReserved, 1);
+});
+
+test("a delayed success for a released public Checkout cannot bypass waiting-list priority", async () => {
+  const current = setup({ capacity: 2 });
+  const created = await createOrder(current.orders);
+  await add(current.orders, created.orderToken, 1, "now");
+  await current.orders.checkout(created.orderToken, start);
+  await current.orders.runScheduledWork(new Date(start.getTime() + 31 * 60_000));
+  await current.repository.transaction((state) => ({ ok: true, waiting: addWaiting(state, 1) }));
+  const reconciled = await current.orders.webhook({ id: "evt_delayed_waiting_priority", type: "checkout.session.completed", data: { object: { id: "cs_test_order_1", amount_total: 600, currency: "gbp", payment_status: "paid", payment_intent: "pi_delayed_waiting_priority" } } }, new Date(start.getTime() + 32 * 60_000));
+  assert.equal(reconciled.ok, true);
+  assert.equal(reconciled.manualReview, true);
+  assert.equal(reconciled.confirmed, 0);
+  const state = await current.repository.read();
+  assert.equal(state.payments[0].status, "paid_capacity_conflict");
+  assert.equal(state.payments[0].webhookReconciliationState, "manual_review");
+  assert.equal(state.registrations[0].placeStatus, "none");
+  assert.equal(state.emailOutbox.length, 0);
+  assert.equal(state.auditEvents.at(-1).after.reason, "waiting_list_priority");
+});
+
+test("concurrent offer and public Checkout cannot consume places ahead of an eligible waiting list", async () => {
+  const current = setup({ capacity: 2 });
+  const created = await createOrder(current.orders);
+  await add(current.orders, created.orderToken, 1);
+  await current.repository.transaction((state) => {
+    addWaiting(state, 1);
+    addWaiting(state, 2);
+    return { ok: true };
+  });
+  const results = await Promise.all([
+    current.repository.transaction((state) => createNextWaitingListOffer(state, admin, start)),
+    current.orders.checkout(created.orderToken, start)
+  ]);
+  assert.equal(results[0].ok, true);
+  assert.equal(results[1].code, "WAITING_LIST_PRIORITY");
+  const state = await current.repository.read();
+  assert.equal(capacitySummary(state).offerReserved, 1);
+  assert.equal(capacitySummary(state).paymentReserved, 0);
+  assert.equal(capacitySummary(state).waiting, 1);
+  assert.equal(capacitySummary(state).reserved <= state.event.capacity, true);
 });
 
 test("one webhook confirms both entries exactly once while preserving declaration states", async () => {

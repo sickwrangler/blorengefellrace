@@ -111,15 +111,17 @@ test("simultaneous final-place attempts cannot both take the final place", async
   assert.deepEqual([first.registration.entryStatus, second.registration.entryStatus].sort(), ["accepted", "waiting_list"]);
 });
 
-test("waiting-list order is stable and cancellation promotes the first runner", () => {
+test("waiting-list order is stable and cancellation leaves promotion under organiser control", () => {
   const state = initialState({ capacity: 1 });
   const accepted = submitRegistration(state, runner(1)).registration;
   const waitingOne = submitRegistration(state, runner(2)).registration;
   const waitingTwo = submitRegistration(state, runner(3)).registration;
   assert.equal(waitingOne.waitingListPosition, 1); assert.equal(waitingTwo.waitingListPosition, 2);
   const result = cancelRegistration(state, accepted.id);
-  assert.equal(result.promoted.id, waitingOne.id);
-  assert.equal(waitingTwo.waitingListPosition, 1);
+  assert.equal(result.promoted, null);
+  assert.equal(waitingOne.entryStatus, "waiting_list");
+  assert.equal(waitingOne.waitingListPosition, 1);
+  assert.equal(waitingTwo.waitingListPosition, 2);
 });
 
 test("mock payment transitions include decline, abandonment, success and refund", () => {

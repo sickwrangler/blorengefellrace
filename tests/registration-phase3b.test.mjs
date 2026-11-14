@@ -183,7 +183,7 @@ test("missing ACS delivery configuration fails closed to captured-only", async (
   assert.equal(email.kind, "captured-only"); assert.equal(result.externalCall, false); assert.deepEqual(result.actualRecipients, []);
 });
 
-test("waiting-list reminders and expiry are scheduled cheaply in domain logic", async () => {
+test("waiting-list reminders run and expiry returns capacity to organiser control", async () => {
   const state = createPhase3State({ registrationState: "OPEN" });
   joinWaitingList(state, { firstName: "Alys", lastName: "Example", email: "alys@example.com" }, { at });
   joinWaitingList(state, { firstName: "Bryn", lastName: "Example", email: "bryn@example.com" }, { at });
@@ -193,8 +193,9 @@ test("waiting-list reminders and expiry are scheduled cheaply in domain logic", 
   const reminded = await processScheduledRegistrationWork(state, { email, at: reminderTime, actor: admin });
   assert.equal(reminded.reminders, 1); assert.equal(messages[0].template, "waiting_list_reminder");
   const expired = await processScheduledRegistrationWork(state, { email, at: new Date("2026-10-03T12:01:00Z"), actor: admin });
-  assert.equal(expired.expiredOffers, 1); assert.equal(expired.nextOfferCreated, true); assert.equal(state.waitingListOffers[1].status, "offered");
-  assert.deepEqual(messages.slice(-1).map((message) => message.template), ["waiting_list_offer"]);
+  assert.equal(expired.expiredOffers, 1); assert.equal(expired.availablePlaceReleased, true); assert.equal(state.waitingListOffers.length, 1);
+  assert.equal(state.waitingList.filter((item) => item.status === "waiting").length, 1);
+  assert.deepEqual(messages.map((message) => message.template), ["waiting_list_reminder"]);
   assert.equal(messages.some((message) => message.template === "waiting_list_expired"), false);
 });
 
@@ -403,7 +404,8 @@ test("development waiting-list communications cover join, offer and one reminder
   assert.equal(mail.sent.filter((message) => message.subject.includes("reminder")).length, 1);
   await phase3.runScheduledWork(admin, new Date("2026-10-03T12:01:00Z"));
   const final = await repository.read();
-  assert.equal(final.waitingListOffers[0].status, "expired"); assert.equal(final.waitingListOffers[1].status, "offered");
+  assert.equal(final.waitingListOffers[0].status, "expired"); assert.equal(final.waitingListOffers.length, 1);
+  assert.equal(final.waitingList.find((item) => item.id === second.waitingListEntry.id).status, "waiting");
   assert.equal(mail.sent.some((message) => message.subject.includes("expired")), false);
   assert.equal(final.communications.every((item) => !JSON.stringify(item).includes("#token=")), true);
 });

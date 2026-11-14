@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { acceptWaitingListOffer, authorizePrivateInvitation, capacitySummary, createNextWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, requestRefund, validateProductionRunner, withdrawRegistration } from "./phase3-domain.mjs";
+import { acceptWaitingListOffer, authorizePrivateInvitation, cancelWaitingListOffer, capacitySummary, createNextWaitingListOffer, createWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, requestRefund, validateProductionRunner, withdrawRegistration, withdrawWaitingListEntry } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken, prepareRegistrationEmailOutboxAttempt } from "./order-service.mjs";
@@ -118,6 +118,56 @@ function managementView(state, registration, at = new Date(), { paymentsAvailabl
   };
 }
 
+function prepareWithdrawal(state, registrationId, actor, at, { organiserEmail, publicBaseUrl, reason = null } = {}) {
+  const result = withdrawRegistration(state, registrationId, actor, at, { reason });
+  if (!result.ok) return result;
+  const registration = result.registration;
+  const runner = runnerFor(state, registration);
+  const totals = capacitySummary(state);
+  const data = {
+    runnerName: `${runner.firstName} ${runner.lastName}`,
+    entryReference: registration.testReference,
+    raceNumber: registration.raceNumber ?? null,
+    withdrawnAt: registration.withdrawnAt,
+    confirmedCount: totals.confirmed,
+    availableCapacity: totals.remaining,
+    waitingCount: totals.waiting,
+    organiserDashboardUrl: `${publicBaseUrl}/registration/dashboard.html`
+  };
+  const runnerAttempt = prepareRegistrationEmailOutboxAttempt(state, {
+    registrationId: registration.id,
+    purpose: "runner_withdrawal_confirmation",
+    idempotencyKey: `registration:${registration.id}:withdrawn:runner:${registration.withdrawnAt}`,
+    message: { registrationId: registration.id, template: "runner_withdrawn", intendedRecipientAddress: runner.email, data }
+  }, at);
+  const organiserAttempt = organiserEmail ? prepareRegistrationEmailOutboxAttempt(state, {
+    registrationId: registration.id,
+    purpose: "organiser_withdrawal_notification",
+    idempotencyKey: `registration:${registration.id}:withdrawn:organiser:${registration.withdrawnAt}`,
+    message: { registrationId: registration.id, template: "organiser_runner_withdrawn", intendedRecipientAddress: organiserEmail, data }
+  }, at) : null;
+  return {
+    ok: true,
+    duplicate: result.duplicate,
+    registrationId: registration.id,
+    outboxAttemptIds: [runnerAttempt.id, organiserAttempt?.id].filter(Boolean),
+    organiserNotificationConfigured: Boolean(organiserAttempt)
+  };
+}
+
+function prepareWaitingListOfferDelivery(state, result, publicBaseUrl, at) {
+  const waiting = state.waitingList.find((item) => item.id === result.offer.waitingListId);
+  const attempt = prepareRegistrationEmailOutboxAttempt(state, {
+    waitingListId: waiting.id,
+    waitingListOfferId: result.offer.id,
+    waitingListInvitationId: result.offer.invitationId,
+    purpose: "waiting_list_offer",
+    idempotencyKey: `waiting-list:${result.offer.id}:offered`,
+    message: { waitingListId: waiting.id, template: "waiting_list_offer", intendedRecipientAddress: waiting.email, data: { runnerName: `${waiting.firstName} ${waiting.lastName}`, expiresAt: result.offer.expiresAt, secureUrl: `${publicBaseUrl}/registration/?invite=${encodeURIComponent(result.token)}&offer=1` } }
+  }, at);
+  return { ok: true, offer: { id: result.offer.id, status: result.offer.status, expiresAt: result.offer.expiresAt }, outboxAttemptId: attempt.id };
+}
+
 export class Phase3IntegrationService {
   constructor({ repository, stripeGateway = null, emailAdapter, publicBaseUrl = "", organiserEmail = null, orderConfiguration = {}, environment = "development" }) {
     this.repository = repository;
@@ -211,40 +261,7 @@ export class Phase3IntegrationService {
     const prepared = await this.repository.transaction((state) => {
       const access = managementAccess(state, managementToken, at);
       if (!access.ok) return access;
-      const result = withdrawRegistration(state, access.registration.id, { actorType: "runner" }, at);
-      if (!result.ok) return result;
-      const registration = result.registration;
-      const runner = runnerFor(state, registration);
-      const totals = capacitySummary(state);
-      const data = {
-        runnerName: `${runner.firstName} ${runner.lastName}`,
-        entryReference: registration.testReference,
-        raceNumber: registration.raceNumber ?? null,
-        withdrawnAt: registration.withdrawnAt,
-        confirmedCount: totals.confirmed,
-        availableCapacity: totals.remaining,
-        waitingCount: totals.waiting,
-        organiserDashboardUrl: `${this.publicBaseUrl}/registration/dashboard.html`
-      };
-      const runnerAttempt = prepareRegistrationEmailOutboxAttempt(state, {
-        registrationId: registration.id,
-        purpose: "runner_withdrawal_confirmation",
-        idempotencyKey: `registration:${registration.id}:withdrawn:runner:${registration.withdrawnAt}`,
-        message: { registrationId: registration.id, template: "runner_withdrawn", intendedRecipientAddress: runner.email, data }
-      }, at);
-      const organiserAttempt = this.organiserEmail ? prepareRegistrationEmailOutboxAttempt(state, {
-        registrationId: registration.id,
-        purpose: "organiser_withdrawal_notification",
-        idempotencyKey: `registration:${registration.id}:withdrawn:organiser:${registration.withdrawnAt}`,
-        message: { registrationId: registration.id, template: "organiser_runner_withdrawn", intendedRecipientAddress: this.organiserEmail, data }
-      }, at) : null;
-      return {
-        ok: true,
-        duplicate: result.duplicate,
-        registrationId: registration.id,
-        outboxAttemptIds: [runnerAttempt.id, organiserAttempt?.id].filter(Boolean),
-        organiserNotificationConfigured: Boolean(organiserAttempt)
-      };
+      return prepareWithdrawal(state, access.registration.id, { actorType: "runner" }, at, { organiserEmail: this.organiserEmail, publicBaseUrl: this.publicBaseUrl });
     });
     if (!prepared.ok) return prepared;
     const notifications = [];
@@ -253,6 +270,29 @@ export class Phase3IntegrationService {
     const registration = state.registrations.find((item) => item.id === prepared.registrationId);
     return {
       ...managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }),
+      duplicate: prepared.duplicate,
+      organiserNotificationConfigured: prepared.organiserNotificationConfigured,
+      notificationDeliveryFailed: notifications.some((item) => item.ok === false)
+    };
+  }
+
+  async organiserWithdraw(actor, registrationId, { reason = null } = {}, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    if (String(reason ?? "").trim().length > 250) return { ok: false, code: "WITHDRAWAL_REASON_TOO_LONG" };
+    const prepared = await this.repository.transaction((state) => prepareWithdrawal(state, registrationId, actor, at, {
+      organiserEmail: this.organiserEmail,
+      publicBaseUrl: this.publicBaseUrl,
+      reason
+    }));
+    if (!prepared.ok) return prepared;
+    const notifications = [];
+    for (const attemptId of prepared.outboxAttemptIds) notifications.push(await this.orders.deliverPreparedOutboxAttempt(attemptId, at));
+    const state = await this.repository.read();
+    const registration = state.registrations.find((item) => item.id === prepared.registrationId);
+    return {
+      ok: true,
+      registrationId: prepared.registrationId,
+      registration: managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }).registration,
       duplicate: prepared.duplicate,
       organiserNotificationConfigured: prepared.organiserNotificationConfigured,
       notificationDeliveryFailed: notifications.some((item) => item.ok === false)
@@ -476,14 +516,65 @@ export class Phase3IntegrationService {
     });
   }
 
-  offerNextWaitingPlace(actor, at = new Date()) {
-    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
-    return this.repository.transaction(async (state) => {
+  async offerNextWaitingPlace(actor, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    const prepared = await this.repository.transaction((state) => {
       const result = createNextWaitingListOffer(state, actor, at);
       if (!result.ok) return result;
-      const waiting = state.waitingList.find((item) => item.id === result.offer.waitingListId);
-      await this.communicate(state, { waitingListId: waiting.id, template: "waiting_list_offer", intendedRecipientAddress: waiting.email, data: { runnerName: `${waiting.firstName} ${waiting.lastName}`, expiresAt: result.offer.expiresAt, secureUrl: `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(result.token)}&offer=1` } }, `waiting-list:${result.offer.id}:offered`, at);
-      return { ok: true, offer: { id: result.offer.id, status: result.offer.status, expiresAt: result.offer.expiresAt } };
+      return prepareWaitingListOfferDelivery(state, result, this.publicBaseUrl, at);
+    });
+    if (!prepared.ok) return prepared;
+    const delivery = await this.orders.deliverPreparedOutboxAttempt(prepared.outboxAttemptId, at);
+    return { ok: true, offer: prepared.offer, emailDeliveryFailed: delivery.ok === false, emailDelivery: delivery.sent === 1 ? "sent" : delivery.ok === false ? "failed" : "unchanged" };
+  }
+
+  async offerWaitingPlace(actor, waitingListId, { reason = null } = {}, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    const prepared = await this.repository.transaction((state) => {
+      const result = createWaitingListOffer(state, waitingListId, actor, { reason }, at);
+      if (!result.ok) return result;
+      return prepareWaitingListOfferDelivery(state, result, this.publicBaseUrl, at);
+    });
+    if (!prepared.ok) return prepared;
+    const delivery = await this.orders.deliverPreparedOutboxAttempt(prepared.outboxAttemptId, at);
+    return { ok: true, offer: prepared.offer, emailDeliveryFailed: delivery.ok === false, emailDelivery: delivery.sent === 1 ? "sent" : delivery.ok === false ? "failed" : "unchanged" };
+  }
+
+  cancelWaitingPlaceOffer(actor, waitingListId, { reason = null } = {}, at = new Date()) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.repository.transaction((state) => cancelWaitingListOffer(state, waitingListId, actor, { reason }, at));
+  }
+
+  async retryWaitingPlaceOfferEmail(actor, waitingListId, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    const prepared = await this.repository.transaction((state) => {
+      const offer = state.waitingListOffers.find((item) => item.waitingListId === waitingListId && item.status === "offered");
+      if (!offer) return { ok: false, code: "OFFER_NOT_ACTIVE" };
+      const attempt = state.emailOutbox?.find((item) => item.waitingListOfferId === offer.id && item.purpose === "waiting_list_offer" && item.status !== "superseded");
+      if (!attempt?.message && attempt?.status !== "sent") return { ok: false, code: "OFFER_EMAIL_RETRY_UNAVAILABLE" };
+      if (!attempt) return { ok: false, code: "OFFER_EMAIL_RETRY_UNAVAILABLE" };
+      state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType, actorId: actor.id ?? null, action: "waiting_list_offer_email_retry_requested", subjectId: offer.id, before: null, after: { waitingListId }, environment: state.environment });
+      return { ok: true, offer: { id: offer.id, expiresAt: offer.expiresAt }, outboxAttemptId: attempt.id };
+    });
+    if (!prepared.ok) return prepared;
+    const delivery = await this.orders.deliverPreparedOutboxAttempt(prepared.outboxAttemptId, at);
+    if (delivery.permanentFailure) return { ok: false, code: "OFFER_EMAIL_RETRY_UNAVAILABLE", offer: prepared.offer };
+    if (delivery.retryNotDue) return { ok: false, code: "OFFER_EMAIL_RETRY_NOT_DUE", offer: prepared.offer };
+    return { ok: true, offer: prepared.offer, duplicate: delivery.duplicate === true, inProgress: delivery.inProgress === true, emailDeliveryFailed: delivery.ok === false, emailDelivery: delivery.sent === 1 ? "sent" : delivery.ok === false ? "failed" : "unchanged" };
+  }
+
+  withdrawWaitingPlace(actor, waitingListId, { reason = null } = {}, at = new Date()) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.repository.transaction((state) => {
+      const result = withdrawWaitingListEntry(state, waitingListId, actor, { reason }, at);
+      if (!result.ok) return result;
+      return {
+        ok: true,
+        duplicate: result.duplicate,
+        activeOfferCancelled: result.activeOfferCancelled,
+        waitingListEntry: { id: result.waitingListEntry.id, status: result.waitingListEntry.status, withdrawnAt: result.waitingListEntry.withdrawnAt ?? null },
+        capacity: capacitySummary(state)
+      };
     });
   }
 
@@ -495,11 +586,7 @@ export class Phase3IntegrationService {
       const waiting = state.waitingList.find((item) => item.id === offer?.waitingListId);
       const result = declineWaitingListOffer(state, offer?.id, { actorType: "runner" }, at);
       if (!result.ok) return result;
-      if (result.nextOffer) {
-        const next = state.waitingList.find((item) => item.id === result.nextOffer.offer.waitingListId);
-        await this.communicate(state, { waitingListId: next.id, template: "waiting_list_offer", intendedRecipientAddress: next.email, data: { runnerName: `${next.firstName} ${next.lastName}`, expiresAt: result.nextOffer.offer.expiresAt, secureUrl: `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(result.nextOffer.token)}&offer=1` } }, `waiting-list:${result.nextOffer.offer.id}:offered`, at);
-      }
-      return { ok: true };
+      return { ok: true, capacity: result.capacity };
     });
   }
 
@@ -531,7 +618,7 @@ export class Phase3IntegrationService {
     if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
     return this.repository.transaction(async (state) => {
       const scheduledEmail = { send: (message) => this.communicate(state, message, `scheduled:${message.template}:${hashToken(message.intendedRecipientAddress)}:${message.data?.expiresAt ?? iso(at)}`, at) };
-      const result = await processScheduledRegistrationWork(state, { email: scheduledEmail, at, actor, offerUrl: (token) => `${this.publicBaseUrl}/registration/?invite=${encodeURIComponent(token)}&offer=1` });
+      const result = await processScheduledRegistrationWork(state, { email: scheduledEmail, at, actor });
       state.schedulerStatus = {
         ...state.schedulerStatus,
         lastSuccessfulRunAt: iso(at),
@@ -539,7 +626,7 @@ export class Phase3IntegrationService {
           reminders: result.reminders,
           expiredOffers: result.expiredOffers,
           expiredPayments: result.expiredPayments,
-          nextOfferCreated: result.nextOfferCreated
+          availablePlaceReleased: result.availablePlaceReleased
         }
       };
       return result;

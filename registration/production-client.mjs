@@ -1,7 +1,9 @@
+import { privateAccessPurposeCandidates } from "./runner-access.mjs";
+
 export const canTest = true;
 export const supportsManagedApi = true;
 const privateInvitationToken = new URLSearchParams(window.location.search).get("invite");
-const privateInvitationPurpose = new URLSearchParams(window.location.search).get("proof") === "stripe" ? "stripe_provider_proof" : new URLSearchParams(window.location.search).get("offer") === "1" ? "waiting_list_offer" : "registration";
+const privateInvitationPurposes = privateAccessPurposeCandidates({ proofHint: new URLSearchParams(window.location.search).get("proof") === "stripe", offerHint: new URLSearchParams(window.location.search).get("offer") === "1" });
 const MANAGEMENT_TOKEN_SESSION_KEY = "blorenge-management-token";
 const ORDER_TOKEN_SESSION_KEY = "blorenge-order-token";
 
@@ -39,11 +41,24 @@ async function waitingListCsv() {
 
 export const prototype = {
   hasPrivateInvitation: Boolean(privateInvitationToken),
-  inspectPrivateAccess(purpose = privateInvitationPurpose) { return privateInvitationToken ? v2(`/private-access?purpose=${encodeURIComponent(purpose)}`, { headers: { "x-private-invitation": privateInvitationToken } }) : Promise.resolve({ ok: true }); },
+  async inspectPrivateAccess(purpose = null) {
+    if (!privateInvitationToken) return { ok: true };
+    let unavailable = { ok: false, code: "LINK_UNAVAILABLE" };
+    for (const candidate of purpose ? [purpose] : privateInvitationPurposes) {
+      const result = await v2(`/private-access?purpose=${encodeURIComponent(candidate)}`, { headers: { "x-private-invitation": privateInvitationToken } });
+      if (result.ok) return result;
+      unavailable = result;
+    }
+    return unavailable;
+  },
   status() { return v2("/registration/status"); },
   joinWaitingList(input) { return v3("/waiting-list/join", { method: "POST", body: JSON.stringify(input), headers: privateInvitationToken ? { "x-private-invitation": privateInvitationToken } : {} }); },
   async acceptWaitingListOffer(input) { const result = await v3("/waiting-list/accept", { method: "POST", body: JSON.stringify(input), headers: { "x-private-invitation": privateInvitationToken } }); if (result.ok) this.rememberManagementToken(result.managementToken); return result; },
   offerNextWaitingPlace() { return v3("/organiser/waiting-list/offer-next", { method: "POST" }); },
+  offerWaitingPlace(id, reason = "") { return v3(`/organiser/waiting-list/${encodeURIComponent(id)}/offer`, { method: "POST", body: JSON.stringify({ reason }) }); },
+  withdrawWaitingPlace(id, reason = "") { return v3(`/organiser/waiting-list/${encodeURIComponent(id)}/withdraw`, { method: "POST", body: JSON.stringify({ reason }) }); },
+  cancelWaitingPlaceOffer(id, reason = "") { return v3(`/organiser/waiting-list/${encodeURIComponent(id)}/cancel-offer`, { method: "POST", body: JSON.stringify({ reason }) }); },
+  retryWaitingPlaceOfferEmail(id) { return v3(`/organiser/waiting-list/${encodeURIComponent(id)}/retry-email`, { method: "POST" }); },
   rememberManagementToken(token) { if (token) sessionStorage.setItem(MANAGEMENT_TOKEN_SESSION_KEY, token); },
   forgetManagementToken() { sessionStorage.removeItem(MANAGEMENT_TOKEN_SESSION_KEY); },
   managementToken() { return sessionStorage.getItem(MANAGEMENT_TOKEN_SESSION_KEY); },
@@ -74,6 +89,7 @@ export const prototype = {
   amendEntry(changes, token = this.managementToken()) { return v3("/management/amend", { method: "POST", body: JSON.stringify(changes), headers: { "x-management-token": token } }); },
   transferEntry(input, token = this.managementToken()) { return v3("/management/transfer", { method: "POST", body: JSON.stringify(input), headers: { "x-management-token": token } }); },
   withdrawEntry(token = this.managementToken()) { return token ? v3("/management/withdraw", { method: "POST", headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
+  organiserWithdrawEntry(id, reason = "") { return v3(`/organiser/registrations/${encodeURIComponent(id)}/withdraw`, { method: "POST", body: JSON.stringify({ reason }) }); },
   decideRefund(id, decision) { return v3(`/organiser/refunds/${encodeURIComponent(id)}/${decision}`, { method: "POST" }); },
   executeRefund(id) { return v3(`/organiser/refunds/${encodeURIComponent(id)}/execute`, { method: "POST" }); },
   resendManagementLink(id) { return v3(`/organiser/registrations/${encodeURIComponent(id)}/resend-management`, { method: "POST" }); },

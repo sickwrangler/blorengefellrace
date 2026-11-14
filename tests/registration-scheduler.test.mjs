@@ -69,16 +69,17 @@ test("failed email leaves reminder due and the next scheduler run retries safely
   assert.equal((await repository.read()).waitingListOffers[0].reminderSentAt, at.toISOString());
 });
 
-test("expiry is idempotent, revokes the old offer and progresses exactly one next runner", async () => {
+test("expiry is idempotent, revokes the old offer and leaves the next runner for organiser action", async () => {
   const { repository, service } = setup();
   await offerTwo(service);
   const at = new Date("2026-09-03T12:01:00Z");
   const handler = createSchedulerHandler({ service, environment, clock: () => at, logger: { log() {}, error() {} } });
   const first = await handler(); const second = await handler(); const state = await repository.read();
-  assert.equal(first.expiredOffers, 1); assert.equal(first.nextOfferCreated, true);
-  assert.equal(second.expiredOffers, 0); assert.equal(second.nextOfferCreated, false);
+  assert.equal(first.expiredOffers, 1); assert.equal(first.availablePlaceReleased, true);
+  assert.equal(second.expiredOffers, 0); assert.equal(second.availablePlaceReleased, false);
   assert.equal(state.waitingListOffers.filter((offer) => offer.status === "expired").length, 1);
-  assert.equal(state.waitingListOffers.filter((offer) => offer.status === "offered").length, 1);
+  assert.equal(state.waitingListOffers.filter((offer) => offer.status === "offered").length, 0);
+  assert.equal(state.waitingList.filter((item) => item.status === "waiting").length, 1);
   const expired = state.waitingListOffers.find((offer) => offer.status === "expired");
   assert.ok(state.privateInvitations.find((item) => item.id === expired.invitationId).revokedAt);
 });
@@ -87,7 +88,7 @@ test("CLOSED development state with no due work is harmless and observable", asy
   const { repository, service } = setup();
   const at = new Date("2026-09-04T12:00:00Z");
   const result = await createSchedulerHandler({ service, environment, clock: () => at, logger: { log() {}, error() {} } })();
-  assert.deepEqual(result, { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, nextOfferCreated: false, declarationReminders: 0, abandonedOrders: 0, withdrawalNotificationRetries: { ok: true, attempted: 0, sent: 0, failed: 0, remaining: 0 }, emailHealth: { failed: 0, missing: 0, backlog: 0, oldestFailedAgeMinutes: null } });
+  assert.deepEqual(result, { ok: true, reminders: 0, expiredOffers: 0, expiredPayments: 0, availablePlaceReleased: false, declarationReminders: 0, abandonedOrders: 0, withdrawalNotificationRetries: { ok: true, attempted: 0, sent: 0, failed: 0, remaining: 0 }, emailHealth: { failed: 0, missing: 0, backlog: 0, oldestFailedAgeMinutes: null } });
   assert.equal((await repository.read()).schedulerStatus.lastSuccessfulRunAt, at.toISOString());
 });
 

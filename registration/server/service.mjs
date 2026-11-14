@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { EVENT, safeRegistrationState, validateRunner } from "../registration-core.mjs";
 import { authorize } from "./auth.mjs";
-import { PRIVATE_INVITATION_KINDS, issuePrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, authorizePrivateInvitation, calculateEntryPrice, managementTokenExpiry } from "./phase3-domain.mjs";
+import { PRIVATE_INVITATION_KINDS, issuePrivateInvitation, revokePrivateInvitation, expirePrivateInvitation, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, managementTokenExpiry } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { buildPrivateWorkbookModel, buildTransferHistory, buildWaitingListView, transferSummaryForRegistration, waitingListSummary } from "./private-export.mjs";
 
@@ -42,6 +42,11 @@ export function migrateDevelopmentDatabase(input) {
     transferCutoffUtc: EVENT.transferCutoff,
     refundCutoffUtc: EVENT.refundCutoff,
     transferRefundCutoffUtc: db.event?.transferRefundCutoffUtc ?? db.event?.transferRefundCutoff ?? EVENT.transferRefundCutoff
+  };
+  db.event.declaration = {
+    identifier: db.event.declaration?.identifier ?? db.event.declarationIdentifier ?? EVENT.declarationIdentifier,
+    version: db.event.declaration?.version ?? db.event.declarationVersion ?? EVENT.declarationVersion,
+    contentStatus: db.event.declaration?.contentStatus ?? db.event.declarationContentStatus ?? EVENT.declarationContentStatus
   };
   if (!Number.isInteger(db.event.wfraMemberPricePence) || db.event.wfraMemberPricePence < 0) db.event.wfraMemberPricePence = EVENT.wfraMemberPricePence;
   for (const name of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests", "privateInvitations", "waitingList", "waitingListOffers", "refundRequests", "managementTokens", "managementRecoveryAttempts", "processedPaymentEvents", "orders", "orderTokens", "declarations", "declarationTokens", "declarationRecoveryAttempts"]) db[name] ??= [];
@@ -127,7 +132,13 @@ function refreshWaiting(db, actor = null) {
 
 function status(db) {
   const accepted = db.registrations.filter((item) => item.entryStatus === "accepted" && active(item)).length;
-  return { state: db.registrationState, operationalState: db.phase3RegistrationState ?? "CLOSED", environment: db.environment, capacity: db.event.capacity, accepted, remaining: Math.max(0, db.event.capacity - accepted), waiting: db.registrations.filter((item) => item.entryStatus === "waiting_list" && active(item)).length, intendedOpeningDate: db.event.intendedOpeningDate, pricing: calculateEntryPrice(db.event) };
+  const reserved = capacitySummary(db).reserved;
+  const remaining = Math.max(0, db.event.capacity - Math.max(accepted, reserved));
+  const waiting = Math.max(db.registrations.filter((item) => item.entryStatus === "waiting_list" && active(item)).length, (db.waitingList ?? []).filter((item) => item.status === "waiting").length);
+  const waitingListPriorityActive = waiting > 0;
+  const operationalState = db.phase3RegistrationState ?? "CLOSED";
+  const acceptingPublic = db.environment === "production" ? operationalState === "OPEN" : db.registrationState === "test";
+  return { state: db.registrationState, operationalState, environment: db.environment, capacity: db.event.capacity, accepted, remaining, waiting, waitingListPriorityActive, publicRegistrationAvailable: acceptingPublic && remaining > 0 && !waitingListPriorityActive, intendedOpeningDate: db.event.intendedOpeningDate, pricing: calculateEntryPrice(db.event) };
 }
 
 function privateAccessState(db) {
@@ -299,8 +310,7 @@ export class RegistrationService {
         const payment = entities(db, registration).payment; if (payment.status !== "paid") return { ok: false, code: "INVALID_PAYMENT_TRANSITION" }; payment.status = "refunded"; payment.updatedAt = now(); audit(db, actor, "refund_recorded", registration.id, { status: before.paymentStatus }, { status: "refunded" });
       } else if (action === "cancel") {
         const released = payload.releaseRaceNumber && registration.raceNumber ? registration.raceNumber : null; if (released) { registration.raceNumber = null; metadata.releasedRaceNumber = released; audit(db, actor, "race_number_removed", registration.id, { raceNumber: released }, { raceNumber: null }); }
-        const releasedPlace = registration.entryStatus === "accepted"; registration.entryStatus = "cancelled"; registration.waitingListPosition = null; audit(db, actor, "entry_cancelled", registration.id, { entryStatus: before.entryStatus }, { entryStatus: "cancelled" });
-        if (releasedPlace) { const promoted = db.registrations.filter((item) => item.entryStatus === "waiting_list" && active(item)).sort((a, b) => a.waitingSequence - b.waitingSequence)[0]; if (promoted) { promoted.entryStatus = "accepted"; promoted.waitingListPosition = null; audit(db, actor, "entry_promoted", promoted.id, { entryStatus: "waiting_list" }, { entryStatus: "accepted" }); } }
+        registration.entryStatus = "cancelled"; registration.waitingListPosition = null; audit(db, actor, "entry_cancelled", registration.id, { entryStatus: before.entryStatus }, { entryStatus: "cancelled" });
         refreshWaiting(db, actor);
         const runner = entities(db, registration).runner; await this.lifecycleMessage(db, { registrationId: registration.id, template: "registration_cancelled", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, `registration:${registration.id}:cancelled:v1`);
       } else if (action === "promote") {
