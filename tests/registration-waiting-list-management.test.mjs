@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -14,11 +17,12 @@ import {
   withdrawWaitingListEntry
 } from "../registration/server/phase3-domain.mjs";
 import { reconcileStripeEvent } from "../registration/server/phase3-integrations.mjs";
-import { createMemoryRepository } from "../registration/server/repositories.mjs";
+import { createJsonFileRepository, createMemoryRepository } from "../registration/server/repositories.mjs";
 import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
 import { ProductionRegistrationService } from "../registration/server/production-service.mjs";
 import { buildWaitingListView } from "../registration/server/private-export.mjs";
 import { createProductionApi } from "../registration/server/production-api.mjs";
+import { createDatabase, migrateDevelopmentDatabase } from "../registration/server/service.mjs";
 
 const at = new Date("2026-11-12T12:00:00.000Z");
 const organiser = { authenticated: true, role: "organiser", actorType: "organiser", id: "synthetic-organiser" };
@@ -243,6 +247,57 @@ test("development test-state allowance does not relax production waiting-offer a
   assert.equal(state.registrations.length, 0);
   assert.equal(state.waitingListOffers[0].status, "offered");
   assert.equal(state.privateInvitations[0].uses, 0);
+});
+
+test("persisted development state migrates declaration metadata before atomically accepting an offer", async () => {
+  const legacy = createDatabase({ environment: "development", registrationState: "test", capacity: 1 });
+  assert.equal(legacy.event.declaration, undefined);
+  legacy.registrationState = "OPEN";
+  const waiting = joinWaitingList(legacy, waitingRunner(1), { at }).waitingListEntry;
+  const offered = createWaitingListOffer(legacy, waiting.id, organiser, {}, at);
+  legacy.registrationState = "test";
+
+  const safelyRejected = acceptWaitingListOffer(
+    legacy,
+    offered.token,
+    { runner: { ...runner, email: waiting.email }, declaration },
+    new Date(at.getTime() + 30_000)
+  );
+  assert.equal(safelyRejected.code, "DECLARATION_VERSION_UNAVAILABLE");
+  assert.equal(legacy.privateInvitations[0].uses, 0);
+  assert.equal(legacy.waitingListOffers[0].status, "offered");
+  assert.equal(legacy.registrations.length, 0);
+  assert.equal(legacy.payments.length, 0);
+
+  const migrated = migrateDevelopmentDatabase(legacy);
+  assert.deepEqual(migrated.event.declaration, {
+    identifier: "WFRA_SENIOR_ENTRY",
+    version: "21/02/23",
+    contentStatus: "organiser-supplied-versioned-content"
+  });
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "blorenge-waiting-persistence-"));
+  const repository = createJsonFileRepository(path.join(directory, "state.json"), migrated);
+  const service = new Phase3IntegrationService({
+    repository,
+    stripeGateway: { mode: "test" },
+    emailAdapter: { kind: "test", async send() { return { delivery: "test", externalCall: false }; } },
+    publicBaseUrl: "https://development.example"
+  });
+
+  const accepted = await service.acceptWaitingPlace(
+    offered.token,
+    { runner: { ...runner, email: waiting.email }, declaration },
+    new Date(at.getTime() + 60_000)
+  );
+  assert.equal(accepted.ok, true);
+
+  const persisted = await createJsonFileRepository(repository.filePath, await repository.read()).read();
+  assert.deepEqual(capacitySummary(persisted), { capacity: 120, confirmed: 0, paymentReserved: 1, offerReserved: 0, reserved: 1, remaining: 119, waiting: 0 });
+  assert.equal(persisted.waitingListOffers[0].status, "accepted");
+  assert.equal(persisted.privateInvitations[0].uses, 1);
+  assert.equal(persisted.registrations.length, 1);
+  assert.equal(persisted.payments.length, 1);
+  assert.equal(persisted.declarations.length, 1);
 });
 
 test("public status suppresses ordinary registration while an eligible waiting list exists", async () => {

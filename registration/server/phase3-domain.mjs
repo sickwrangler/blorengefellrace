@@ -239,7 +239,8 @@ export function addPlaceRegistration(state, { runnerId, placeStatus = "payment_r
 }
 
 function validateDeclarationInput(state, declaration) {
-  if (!state.event.declaration.version || declaration?.declarationIdentifier !== state.event.declaration.identifier || declaration?.declarationVersion !== state.event.declaration.version) return { ok: false, code: "DECLARATION_VERSION_UNAVAILABLE" };
+  const configured = state.event?.declaration;
+  if (!configured?.version || declaration?.declarationIdentifier !== configured.identifier || declaration?.declarationVersion !== configured.version) return { ok: false, code: "DECLARATION_VERSION_UNAVAILABLE" };
   if (declaration.accepted !== true || !String(declaration.typedFullName ?? "").trim()) return { ok: false, code: "DECLARATION_NOT_ACCEPTED" };
   if (!["Competitor", "Parent / Legal Guardian"].includes(declaration.signatoryRole)) return { ok: false, code: "DECLARATION_SIGNATORY_REQUIRED" };
   return { ok: true };

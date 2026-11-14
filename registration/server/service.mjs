@@ -43,6 +43,11 @@ export function migrateDevelopmentDatabase(input) {
     refundCutoffUtc: EVENT.refundCutoff,
     transferRefundCutoffUtc: db.event?.transferRefundCutoffUtc ?? db.event?.transferRefundCutoff ?? EVENT.transferRefundCutoff
   };
+  db.event.declaration = {
+    identifier: db.event.declaration?.identifier ?? db.event.declarationIdentifier ?? EVENT.declarationIdentifier,
+    version: db.event.declaration?.version ?? db.event.declarationVersion ?? EVENT.declarationVersion,
+    contentStatus: db.event.declaration?.contentStatus ?? db.event.declarationContentStatus ?? EVENT.declarationContentStatus
+  };
   if (!Number.isInteger(db.event.wfraMemberPricePence) || db.event.wfraMemberPricePence < 0) db.event.wfraMemberPricePence = EVENT.wfraMemberPricePence;
   for (const name of ["runners", "emergencyContacts", "registrations", "payments", "consents", "communications", "auditEvents", "idempotency", "amendmentRequests", "privateInvitations", "waitingList", "waitingListOffers", "refundRequests", "managementTokens", "managementRecoveryAttempts", "processedPaymentEvents", "orders", "orderTokens", "declarations", "declarationTokens", "declarationRecoveryAttempts"]) db[name] ??= [];
   db.phase3RegistrationState ??= "CLOSED";
