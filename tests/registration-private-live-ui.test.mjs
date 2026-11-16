@@ -17,6 +17,19 @@ test("PRIVATE_LIVE exposes registration only to valid registration access or an 
   assert.equal(runnerAccessDecision({ canTest: true, status, privateAccess: unavailable("INVITATION_USED"), recovered: { ok: true, order: { status: "draft" } } }), "available");
 });
 
+test("a public waiting list in PRIVATE_LIVE shows full and keeps direct entry invitation-only", () => {
+  const status = { ...production("PRIVATE_LIVE"), remaining: 2, waiting: 3, publicRegistrationAvailable: false, publicWaitingListAvailable: true };
+  assert.equal(publicEntryState(status), "full");
+  assert.equal(runnerAccessDecision({ canTest: true, status }), "available");
+  const ordinary = runnerEntryAvailability({ status });
+  assert.equal(ordinary.entryFormAvailable, false);
+  assert.equal(ordinary.waitingListAvailable, true);
+  const privateAccess = { ok: true, purpose: "waiting_list_offer" };
+  assert.equal(runnerAccessDecision({ canTest: true, status, privateAccess, hasPrivateInvitation: true }), "available");
+  assert.equal(runnerEntryAvailability({ status, privateAccess, hasPrivateInvitation: true }).entryFormAvailable, true);
+  assert.equal(runnerAccessDecision({ canTest: true, status, privateAccess: unavailable("LINK_UNAVAILABLE"), hasPrivateInvitation: true }), "unavailable");
+});
+
 test("CLOSED stays unavailable and OPEN stays publicly available", () => {
   assert.equal(runnerAccessDecision({ canTest: true, status: production("CLOSED") }), "unavailable");
   assert.equal(runnerAccessDecision({ canTest: true, status: production("OPEN") }), "available");
