@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, managementTokenExpiry, managementTokenIsExpired, validateProductionRunner, waitingListPriorityActive } from "./phase3-domain.mjs";
+import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, checkoutNeedsReconciliation, issueManagementToken, managementTokenExpiry, managementTokenIsExpired, validateProductionRunner, waitingListPriorityActive } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { confirmationRecoveryPlan, reconcileEmailHealth, recoveryFingerprint } from "./email-health.mjs";
 
@@ -426,6 +426,7 @@ export class OrderRegistrationService {
     return this.repository.transaction((state) => {
       ensureCollections(state); const order = orderForToken(state, token);
       if (!order || !["draft", "checkout_expired"].includes(order.status)) return { ok: false, code: "ORDER_TOKEN_INVALID" };
+      if (state.environment === "production" && checkoutNeedsReconciliation(state, orderPayment(state, order))) return { ok: false, code: "PAYMENT_REVIEW_REQUIRED" };
       if (order.registrationIds.length >= this.maxRunnersPerOrder) return { ok: false, code: "ORDER_RUNNER_LIMIT" };
       const { runner: normalized, errors } = validateOrderRunner(state, input.runner ?? input);
       if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
@@ -454,6 +455,7 @@ export class OrderRegistrationService {
     return this.repository.transaction((state) => {
       ensureCollections(state); const order = orderForToken(state, token);
       if (!order || !["draft", "checkout_expired"].includes(order.status) || !order.registrationIds.includes(registrationId)) return { ok: false, code: "ORDER_NOT_EDITABLE" };
+      if (state.environment === "production" && checkoutNeedsReconciliation(state, orderPayment(state, order))) return { ok: false, code: "PAYMENT_REVIEW_REQUIRED" };
       const registration = state.registrations.find((item) => item.id === registrationId);
       registration.deletedAt = iso(at); order.registrationIds = order.registrationIds.filter((value) => value !== registrationId); order.totalPence -= registration.priceActuallyChargedPence; order.updatedAt = iso(at);
       for (const tokenRecord of state.declarationTokens.filter((item) => item.registrationId === registrationId && !item.revokedAt)) tokenRecord.revokedAt = iso(at);
@@ -466,6 +468,7 @@ export class OrderRegistrationService {
     return this.repository.transaction((state) => {
       ensureCollections(state); const order = orderForToken(state, token); const registration = state.registrations.find((item) => item.id === registrationId && !item.deletedAt);
       if (!order || !["draft", "checkout_expired"].includes(order.status) || !order.registrationIds.includes(registrationId) || !registration) return { ok: false, code: "ORDER_NOT_EDITABLE" };
+      if (state.environment === "production" && checkoutNeedsReconciliation(state, orderPayment(state, order))) return { ok: false, code: "PAYMENT_REVIEW_REQUIRED" };
       const { runner: normalized, errors } = validateOrderRunner(state, input.runner ?? input); if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
       if (order.providerProof && (!closedProviderProofAvailable(state, this.stripeGateway, this.emailAdapter) || !validProviderProofRunner(state, normalized))) return { ok: false, code: "PROVIDER_PROOF_REQUIREMENTS" };
       const duplicate = registrationsFor(state, order).some((item) => item.id !== registrationId && normalizeEmail(runnerFor(state, item)?.email) === normalized.email);
@@ -495,6 +498,9 @@ export class OrderRegistrationService {
       let payment = orderPayment(state, order);
       if (order.status === "checkout_pending" && payment?.status === "checkout_pending" && new Date(payment.checkoutExpiresAt) > new Date(at)) {
         return { ok: true, duplicate: true, checkoutUrl: payment.checkoutUrl, expiresAt: payment.checkoutExpiresAt, totalPence: payment.expectedAmountPence };
+      }
+      if (state.environment === "production" && checkoutNeedsReconciliation(state, payment)) {
+        return { ok: false, code: "PAYMENT_REVIEW_REQUIRED" };
       }
       if (order.status === "checkout_pending" && (!payment?.checkoutExpiresAt || new Date(payment.checkoutExpiresAt) <= new Date(at))) {
         recognisedExpiredCheckout = true;
@@ -540,18 +546,22 @@ export class OrderRegistrationService {
       if (!event?.id) return { ok: false, code: "UNSUPPORTED_EVENT" };
       if (state.processedPaymentEvents.some((item) => item.id === event.id)) return { ok: true, duplicate: true, outboxAttemptIds: state.emailOutbox.filter((item) => item.sourceEventId === event.id).map((item) => item.id) };
       const object = event.data?.object ?? {};
-      const payment = state.payments.find((item) => item.orderId && (item.checkoutSessionId === object.id || item.paymentIntentId === (object.payment_intent?.id ?? object.payment_intent)));
+      const paymentIntentId = object.payment_intent?.id ?? object.payment_intent;
+      const payment = state.payments.find((item) => item.orderId && (item.checkoutSessionId === object.id || (paymentIntentId && item.paymentIntentId === paymentIntentId)));
       if (!payment) return { ok: false, code: "PAYMENT_NOT_FOUND" };
       const order = state.orders.find((item) => item.id === payment.orderId); const registrations = registrationsFor(state, order).filter(active);
       if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type)) {
+        if (payment.status === "paid") return { ok: true, duplicate: true };
         const paid = object.amount_total ?? object.amount_received; const currency = String(object.currency ?? "").toLowerCase();
         if (paid !== payment.expectedAmountPence || currency !== "gbp") return { ok: false, code: "PAYMENT_MISMATCH" };
         if (event.type === "checkout.session.completed" && object.payment_status && object.payment_status !== "paid") { payment.status = "processing"; order.status = "payment_processing"; }
         else {
-          const unreserved = registrations.some((registration) => registration.placeStatus === "none");
-          const capacityUnavailable = capacitySummary(state).remaining < registrations.length;
-          const waitingListConflict = !order.providerProof && waitingListBlocksOrdinaryOrder(state);
-          if (unreserved && (capacityUnavailable || waitingListConflict)) {
+          const unreserved = registrations.filter((registration) => registration.placeStatus === "none");
+          const capacityUnavailable = capacitySummary(state, unreserved.map((registration) => registration.id)).remaining < unreserved.length;
+          const reservedInProduction = state.environment === "production" && checkoutNeedsReconciliation(state, payment);
+          const waitingListConflict = !order.providerProof && !reservedInProduction && waitingListBlocksOrdinaryOrder(state);
+          if (unreserved.length && (capacityUnavailable || waitingListConflict)) {
+            if (reservedInProduction && capacityUnavailable) return { ok: false, code: "PAID_CAPACITY_CONFLICT" };
             payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.sessionId === object.id ? { ...attempt, status: "completed", completedAt: iso(at) } : attempt);
             payment.status = "paid_capacity_conflict"; payment.actualPaidAmountPence = paid; payment.paymentIntentId = typeof object.payment_intent === "string" ? object.payment_intent : object.payment_intent?.id; payment.completedAt = iso(at); payment.webhookReconciliationState = "manual_review"; payment.updatedAt = iso(at);
             order.status = "payment_review"; order.updatedAt = iso(at);
@@ -583,7 +593,7 @@ export class OrderRegistrationService {
           return { ok: true, orderStatus: order.status, paymentStatus: payment.status, confirmed: registrations.length, outboxAttemptIds };
         }
       } else if (["checkout.session.expired", "checkout.session.async_payment_failed"].includes(event.type)) {
-        if (payment.status !== "paid") { payment.status = event.type === "checkout.session.expired" ? "expired" : "failed"; payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.sessionId === object.id ? { ...attempt, status: payment.status, expiredAt: iso(at) } : attempt); order.status = "checkout_expired"; registrations.forEach((registration) => { registration.placeStatus = "none"; registration.entryStatus = "draft"; }); audit(state, "order_checkout_released", order.id, { runnerCount: registrations.length }, at); }
+        if (payment.status !== "paid") { payment.status = event.type === "checkout.session.expired" ? "expired" : "failed"; payment.webhookReconciliationState = "reconciled"; payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.sessionId === object.id ? { ...attempt, status: payment.status, expiredAt: iso(at) } : attempt); order.status = "checkout_expired"; registrations.forEach((registration) => { registration.placeStatus = "none"; registration.entryStatus = "draft"; }); audit(state, "order_checkout_released", order.id, { runnerCount: registrations.length }, at); }
       } else if (event.type === "charge.refunded") {
         payment.webhookReconciliationState = "refund_event_observed";
       } else if (event.type === "refund.failed") {
@@ -679,7 +689,8 @@ export class OrderRegistrationService {
         registration.declarationReminderSentAt = iso(at); declarationReminders += 1;
       }
       for (const order of state.orders.filter((item) => item.status === "checkout_pending" && new Date(item.checkoutExpiresAt) <= new Date(at))) {
-        const payment = orderPayment(state, order); if (payment?.status === "paid") continue;
+        const payment = orderPayment(state, order);
+        if (payment?.status === "paid" || state.environment === "production" && checkoutNeedsReconciliation(state, payment)) continue;
         order.status = "checkout_expired"; if (payment) { payment.status = "expired"; payment.checkoutAttempts = (payment.checkoutAttempts ?? []).map((attempt) => attempt.status === "active" ? { ...attempt, status: "expired", expiredAt: iso(at) } : attempt); }
         registrationsFor(state, order).forEach((registration) => { registration.placeStatus = "none"; registration.entryStatus = "draft"; }); abandonedOrders += 1;
       }

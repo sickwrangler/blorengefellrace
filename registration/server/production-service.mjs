@@ -48,7 +48,7 @@ function registrationView(state, registration, transferHistory = buildTransferHi
 function totals(state) {
   const capacity = capacitySummary(state);
   const waitingListPriorityActive = capacity.waiting > 0;
-  return { state: state.registrationState, operationalState: state.registrationState, environment: "production", capacity: capacity.capacity, accepted: capacity.confirmed, remaining: capacity.remaining, waiting: capacity.waiting, waitingListPriorityActive, publicRegistrationAvailable: state.registrationState === "OPEN" && capacity.remaining > 0 && !waitingListPriorityActive, intendedOpeningDate: state.event.intendedOpeningDate ?? null, pricing: calculateEntryPrice(state.event) };
+  return { state: state.registrationState, operationalState: state.registrationState, environment: "production", capacity: capacity.capacity, accepted: capacity.confirmed, paymentReserved: capacity.paymentReserved, remaining: capacity.remaining, waiting: capacity.waiting, waitingListPriorityActive, publicRegistrationAvailable: state.registrationState === "OPEN" && capacity.remaining > 0 && !waitingListPriorityActive, intendedOpeningDate: state.event.intendedOpeningDate ?? null, pricing: calculateEntryPrice(state.event) };
 }
 
 function audit(state, actor, action, registrationId, before = null, after = null) {

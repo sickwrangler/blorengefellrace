@@ -531,6 +531,12 @@ export class Phase3IntegrationService {
       return { ok: false, code: "PAYMENT_MISMATCH" };
     }
     const intent = session.payment_intent;
+    const unpaidIntent = !intent || (intent.status === "canceled" && intent.amount_received === 0);
+    if (session.status === "expired" && session.payment_status === "unpaid" && unpaidIntent) {
+      return this.reconcileSinglePayment({
+        id: `stripe-checkout-expired-review:${session.id}`, type: "checkout.session.expired", data: { object: session }
+      }, at, { expectedPayment: payment, actor });
+    }
     const charge = intent?.latest_charge;
     if (session.status !== "complete" || session.payment_status !== "paid" || intent?.status !== "succeeded") {
       return { ok: false, code: "PAYMENT_NOT_CONFIRMED" };

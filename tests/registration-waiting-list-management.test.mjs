@@ -257,8 +257,10 @@ test("organiser reconciles a legacy waiting-list payment from Stripe without exc
   Object.assign(payment, { provider: "stripe", providerMode: "live", status: "checkout_pending", checkoutSessionId: "cs_live_synthetic", checkoutExpiresAt: new Date(at.getTime() + 30 * 60_000).toISOString(), expectedAmountPence: 600, currency: "gbp" });
   const checkedAt = new Date(at.getTime() + 31 * 60_000);
   expireStalePaymentReservations(state, checkedAt);
+  // Model the legacy scheduler release and the over-allocation already in storage.
+  registration.placeStatus = "none";
   for (let number = 0; number < state.event.capacity; number++) {
-    assert.equal(addPlaceRegistration(state, { runnerId: `other-${number}`, placeStatus: "confirmed" }, organiser, checkedAt).ok, true);
+    state.registrations.push({ id: `already-confirmed-${number}`, entryStatus: "accepted", placeStatus: "confirmed" });
   }
   const session = {
     id: payment.checkoutSessionId, livemode: true, mode: "payment", status: "complete", payment_status: "paid", amount_total: 600, currency: "gbp",
@@ -322,6 +324,46 @@ test("organiser reconciles a legacy waiting-list payment from Stripe without exc
   assert.equal(sent.length, 1);
   assert.equal(sent[0].template, "entry_confirmed");
   assert.match(sent[0].data.managementUrl, /^https:\/\/race\.example\/registration\/manage\.html#token=/);
+});
+
+test("both organiser offer routes protect a place while Stripe can still confirm the previous Checkout", async () => {
+  const state = createProductionBootstrap();
+  state.registrationState = state.phase3RegistrationState = "OPEN";
+  const first = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
+  const next = joinWaitingList(state, waitingRunner(2), { at }).waitingListEntry;
+  for (let number = 1; number < state.event.capacity; number++) {
+    assert.equal(addPlaceRegistration(state, { runnerId: `confirmed-${number}`, placeStatus: "confirmed" }, organiser, at).ok, true);
+  }
+  const offered = createNextWaitingListOffer(state, organiser, at);
+  const accepted = acceptWaitingListOffer(state, offered.token, { runner: { ...runner, email: first.email }, declaration }, at);
+  const [payment] = state.payments;
+  const later = new Date(at.getTime() + 31 * 60_000);
+  Object.assign(payment, { status: "checkout_pending", checkoutSessionId: "cs_live_expiry", expectedAmountPence: 600, currency: "gbp",
+    checkoutExpiresAt: new Date(at.getTime() + 30 * 60_000).toISOString(), webhookReconciliationState: "awaiting_event" });
+  assert.equal(expireStalePaymentReservations(state, later).expired, 1);
+  assert.equal(accepted.registration.placeStatus, "payment_reserved");
+  // The previous scheduler can still write this shape to production storage.
+  accepted.registration.placeStatus = "none";
+  const { repository, service, sent } = serviceFor(state);
+  service.stripeGateway = { mode: "live", async retrieveCheckoutSession() {
+    return { id: payment.checkoutSessionId, mode: "payment", livemode: true, status: "expired", payment_status: "unpaid", amount_total: 600, currency: "gbp",
+      metadata: { registrationId: accepted.registration.id, paymentId: payment.id },
+      payment_intent: { status: "canceled", amount_received: 0 } };
+  } };
+  const api = createProductionApi({ service: {}, phase3Integrations: service, repository });
+  const request = (path) => api({ method: "POST", pathname: `/api/v3/organiser/waiting-list/${path}`, headers: { "x-ms-client-principal": principal }, body: {} });
+  const rejected = await Promise.all([request("offer-next"), request(`${next.id}/offer`)]);
+  assert.deepEqual(rejected.map(({ status, body }) => [status, body.code]), [[409, "CAPACITY_FULL"], [409, "CAPACITY_FULL"]]);
+  assert.equal(capacitySummary(await repository.read()).paymentReserved, 1);
+  assert.equal(sent.length, 0);
+
+  const expired = await service.checkWaitingListPayment(organiser, accepted.registration.id, later);
+  assert.equal(expired.ok, true, expired.code);
+  assert.equal(expired.paymentStatus, "expired");
+  assert.equal(capacitySummary(await repository.read()).remaining, 1);
+  assert.equal((await request("offer-next")).status, 200);
+  assert.equal(sent.length, 1);
+  assert.equal(capacitySummary(await repository.read()).remaining, 0);
 });
 
 test("development test-state allowance does not relax production waiting-offer authorisation", () => {

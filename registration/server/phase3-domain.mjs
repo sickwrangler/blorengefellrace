@@ -245,9 +245,34 @@ export function calculateEntryPrice(event, runnerInput = {}) {
   };
 }
 
-export function capacitySummary(state) {
-  const confirmed = state.registrations.filter((item) => activeRegistration(item) && item.placeStatus === "confirmed").length;
-  const paymentReserved = state.registrations.filter((item) => activeRegistration(item) && item.placeStatus === "payment_reserved").length;
+// Older scheduler versions release the registration flag when the local clock
+// expires. Keep counting any such Checkout until Stripe resolves it.
+export function checkoutNeedsReconciliation(state, payment) {
+  if (!payment?.checkoutSessionId) return false;
+  if (["checkout_pending", "processing", "paid_capacity_conflict"].includes(payment.status)) return true;
+  if (payment.status !== "expired") return false;
+  const locallyExpired = payment.webhookReconciliationState === "locally_expired_awaiting_webhook";
+  if (!payment.orderId) return locallyExpired;
+  if (!locallyExpired && payment.webhookReconciliationState !== "awaiting_event") return false;
+  const attempt = payment.checkoutAttempts?.find((item) => item.sessionId === payment.checkoutSessionId);
+  const checkoutStarted = attempt?.createdAt ?? payment.updatedAt;
+  return !(state.auditEvents ?? []).some((event) => event.subjectId === payment.orderId
+    && event.action === "order_checkout_released" && event.after?.recognisedOnReturn !== true
+    && event.occurredAt >= checkoutStarted);
+}
+
+export function capacitySummary(state, reconcilingRegistrationIds = []) {
+  const active = state.registrations.filter(activeRegistration);
+  const confirmed = active.filter((item) => item.placeStatus === "confirmed").length;
+  const unresolvedIds = new Set();
+  for (const payment of state.environment === "production" ? state.payments ?? [] : []) {
+    if (!checkoutNeedsReconciliation(state, payment)) continue;
+    for (const id of (payment.orderId ? payment.registrationIds ?? [] : [payment.registrationId])) {
+      if (!reconcilingRegistrationIds.includes(id)) unresolvedIds.add(id);
+    }
+  }
+  const paymentReserved = active.filter((item) => item.placeStatus === "payment_reserved"
+    || (item.placeStatus === "none" && unresolvedIds.has(item.id))).length;
   const offerReserved = state.waitingListOffers.filter((item) => item.status === "offered").length;
   const reserved = confirmed + paymentReserved + offerReserved;
   return { capacity: state.event.capacity, confirmed, paymentReserved, offerReserved, reserved, remaining: Math.max(0, state.event.capacity - reserved), waiting: state.waitingList.filter((item) => item.status === "waiting").length };

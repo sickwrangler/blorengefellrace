@@ -217,6 +217,43 @@ test("a delayed success for a released public Checkout cannot bypass waiting-lis
   assert.equal(state.auditEvents.at(-1).after.reason, "waiting_list_priority");
 });
 
+test("a locally expired production group Checkout still reserves every runner until Stripe resolves it", async () => {
+  const { orders, repository } = setup({ capacity: 2 });
+  const created = await createOrder(orders);
+  await add(orders, created.orderToken, 1, "now");
+  await add(orders, created.orderToken, 2, "now");
+  assert.equal((await orders.checkout(created.orderToken, start)).ok, true);
+  const later = new Date(start.getTime() + 31 * 60_000);
+  await repository.transaction((state) => {
+    state.environment = "production";
+    state.registrationState = "OPEN";
+    addWaiting(state, 1);
+    return { ok: true };
+  });
+  assert.equal((await orders.runScheduledWork(later)).abandonedOrders, 0);
+  assert.equal((await orders.checkout(created.orderToken, later)).code, "PAYMENT_REVIEW_REQUIRED");
+  const offer = () => repository.transaction((state) => createNextWaitingListOffer(state, admin, later));
+  assert.equal((await offer()).code, "CAPACITY_FULL");
+
+  // Model a previous scheduler that released the registrations without Stripe.
+  await repository.transaction((state) => {
+    state.orders[0].status = "checkout_expired";
+    state.payments[0].status = "expired";
+    state.registrations.forEach((entry) => { entry.placeStatus = "none"; entry.entryStatus = "draft"; });
+    return { ok: true };
+  });
+  assert.equal((await offer()).code, "CAPACITY_FULL");
+  assert.equal(capacitySummary(await repository.read()).paymentReserved, 2);
+  assert.equal((await orders.checkout(created.orderToken, later)).code, "PAYMENT_REVIEW_REQUIRED");
+
+  const event = { id: "evt_late_group_confirmation", type: "checkout.session.completed", data: { object: {
+    id: "cs_test_order_1", amount_total: 1200, currency: "gbp", payment_status: "paid", payment_intent: "pi_group"
+  } } };
+  assert.equal((await orders.webhook(event, later)).confirmed, 2);
+  assert.equal(capacitySummary(await repository.read()).confirmed, 2);
+  assert.equal((await offer()).code, "CAPACITY_FULL");
+});
+
 test("concurrent offer and public Checkout cannot consume places ahead of an eligible waiting list", async () => {
   const current = setup({ capacity: 2 });
   const created = await createOrder(current.orders);
