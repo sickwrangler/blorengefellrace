@@ -253,6 +253,13 @@ export function capacitySummary(state) {
   return { capacity: state.event.capacity, confirmed, paymentReserved, offerReserved, reserved, remaining: Math.max(0, state.event.capacity - reserved), waiting: state.waitingList.filter((item) => item.status === "waiting").length };
 }
 
+export function publicWaitingListAvailable(state, capacity = capacitySummary(state)) {
+  if (state.registrationState === "OPEN") return true;
+  if (state.environment !== "production" || state.registrationState !== "PRIVATE_LIVE") return false;
+  return capacity.remaining === 0 || capacity.waiting > 0
+    || state.auditEvents.some((event) => event.action === "registration_state_changed" && event.after?.state === "OPEN");
+}
+
 export function addPlaceRegistration(state, { runnerId, placeStatus = "payment_reserved" }, actor = { actorType: "runner" }, at = new Date()) {
   if (!["payment_reserved", "confirmed"].includes(placeStatus)) return { ok: false, code: "INVALID_PLACE_STATUS" };
   if (capacitySummary(state).remaining < 1) return { ok: false, code: "CAPACITY_FULL" };

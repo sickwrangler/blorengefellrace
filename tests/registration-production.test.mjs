@@ -139,6 +139,54 @@ test("full production registration accepts minimal waiting-list joins and report
   assert.deepEqual(capacitySummary(final), { capacity: 120, confirmed: 119, paymentReserved: 1, offerReserved: 0, reserved: 120, remaining: 0, waiting: 0 });
 });
 
+test("PRIVATE_LIVE exposes only the public waiting list for a race that has filled or opened", async () => {
+  const state = createProductionBootstrap();
+  transitionRegistrationState(state, "PRIVATE_LIVE", organiser);
+  const repository = createMemoryRepository(state);
+  const integrations = new Phase3IntegrationService({ repository, emailAdapter: email, publicBaseUrl: "https://www.blorengefellrace.cymru", environment: "production" });
+  const service = new ProductionRegistrationService({ repository, emailAdapter: email });
+  const api = createProductionApi({ service, phase3Integrations: integrations, repository });
+  const request = (method, pathname, body) => api({ method, pathname, body, hostname: "www.blorengefellrace.cymru" });
+  const status = async () => (await request("GET", "/api/v2/registration/status")).body;
+  const join = () => request("POST", "/api/v3/waiting-list/join", { firstName: "Alys", lastName: "Runner", email: "alys@example.com" });
+
+  assert.equal((await status()).publicWaitingListAvailable, false);
+  assert.equal((await join()).body.code, "LINK_UNAVAILABLE");
+  assert.equal((await request("POST", "/api/v4/orders", { purchaserEmail: "new@example.com" })).body.code, "LINK_UNAVAILABLE");
+  await repository.transaction((current) => {
+    for (let number = 1; number <= current.event.capacity; number += 1) {
+      current.registrations.push({ id: `registration_${number}`, entryStatus: "accepted", placeStatus: "confirmed" });
+    }
+    return { ok: true };
+  });
+  assert.equal((await status()).publicWaitingListAvailable, true);
+  assert.equal((await join()).status, 201);
+  await repository.transaction((current) => {
+    current.registrations.pop();
+    return { ok: true };
+  });
+
+  const withVacancy = await status();
+  assert.equal(withVacancy.remaining, 1);
+  assert.equal(withVacancy.publicWaitingListAvailable, true);
+  assert.equal(withVacancy.publicRegistrationAvailable, false);
+  assert.equal((await join()).body.duplicate, true);
+  assert.equal((await request("POST", "/api/v4/orders", { purchaserEmail: "new@example.com" })).body.ok, false);
+  assert.equal((await repository.read()).orders.length, 0);
+
+  await repository.transaction((current) => {
+    current.waitingList[0].status = "withdrawn";
+    transitionRegistrationState(current, "OPEN", organiser);
+    transitionRegistrationState(current, "PAUSED", organiser);
+    return { ok: true };
+  });
+  assert.equal((await status()).publicWaitingListAvailable, false);
+  assert.equal((await join()).body.code, "REGISTRATION_NOT_ACCEPTING");
+  await repository.transaction((current) => transitionRegistrationState(current, "PRIVATE_LIVE", organiser));
+  assert.equal((await status()).publicWaitingListAvailable, true);
+  assert.equal((await status()).publicRegistrationAvailable, false);
+});
+
 test("production Entra authorization requires the literal organiser role", () => {
   const principal = (roles) => Buffer.from(JSON.stringify({ userId: "configured-at-deployment", userRoles: roles })).toString("base64");
   assert.equal(staticWebAppActor({ "x-ms-client-principal": principal(["authenticated", "organiser"]) }).role, "organiser");

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { acceptedWaitingListRegistration, acceptWaitingListOffer, authorizePrivateInvitation, cancelWaitingListOffer, capacitySummary, createNextWaitingListOffer, createWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, registrationEmergencyContact, registrationReference, requestRefund, validateProductionRunner, withdrawRegistration, withdrawWaitingListEntry } from "./phase3-domain.mjs";
+import { acceptedWaitingListRegistration, acceptWaitingListOffer, authorizePrivateInvitation, cancelWaitingListOffer, capacitySummary, createNextWaitingListOffer, createWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, publicWaitingListAvailable, registrationEmergencyContact, registrationReference, requestRefund, validateProductionRunner, withdrawRegistration, withdrawWaitingListEntry } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken, prepareRegistrationEmailOutboxAttempt } from "./order-service.mjs";
@@ -579,7 +579,9 @@ export class Phase3IntegrationService {
     return this.repository.transaction(async (state) => {
       const accepting = (["local", "development"].includes(state.environment) && (state.registrationState === "test" || ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState))) || (state.environment === "production" && ["PRIVATE_LIVE", "OPEN"].includes(state.registrationState));
       if (!accepting) return { ok: false, code: "REGISTRATION_NOT_ACCEPTING" };
-      if (state.environment === "production" && state.registrationState === "PRIVATE_LIVE") {
+      const requiresInvitation = state.environment === "production" && state.registrationState === "PRIVATE_LIVE"
+        && (Boolean(invitationToken) || !publicWaitingListAvailable(state));
+      if (requiresInvitation) {
         const access = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_join", at });
         if (!access.ok) return { ok: false, code: "LINK_UNAVAILABLE" };
       }
@@ -587,7 +589,7 @@ export class Phase3IntegrationService {
       if (!firstName || !lastName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, code: "VALIDATION_ERROR" };
       const existing = state.waitingList.find((item) => item.status === "waiting" && item.email === email);
       if (existing) return { ok: true, duplicate: true, waitingListEntry: { id: existing.id, status: existing.status } };
-      if (state.environment === "production" && state.registrationState === "PRIVATE_LIVE") {
+      if (requiresInvitation) {
         const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_join", at, consume: true });
         if (!consumed.ok) return { ok: false, code: "LINK_UNAVAILABLE" };
       }

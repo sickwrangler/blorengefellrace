@@ -9,7 +9,8 @@ export function privateAccessPurposeCandidates({ offerHint = false, proofHint = 
 
 export function publicEntryState(status) {
   if (!status || status.ok === false || status.unavailable) return "unavailable";
-  if (status.operationalState === "CLOSED" || status.operationalState === "PRIVATE_LIVE") return "pre-opening";
+  if (status.operationalState === "CLOSED") return "pre-opening";
+  if (status.operationalState === "PRIVATE_LIVE") return status.publicWaitingListAvailable === true ? "full" : "pre-opening";
   if (status.operationalState === "PAUSED") return "paused";
   if (status.operationalState === "CLOSED_FINAL") return "closed";
   if (status.operationalState !== "OPEN") return "unavailable";
@@ -39,7 +40,8 @@ export function runnerAccessDecision({ canTest, status, privateAccess = null, re
   const recovering = recoverableOrder(recovered);
   if (status.operationalState === "PRIVATE_LIVE") {
     const invited = privateAccess?.ok === true && ["registration", "waiting_list_offer"].includes(privateAccess.purpose);
-    return invited || recovering ? "available" : "unavailable";
+    const joiningPublicWaitingList = !hasPrivateInvitation && status.publicWaitingListAvailable === true;
+    return invited || recovering || joiningPublicWaitingList ? "available" : "unavailable";
   }
 
   const closedProviderProof = privateAccess?.ok === true && privateAccess.purpose === "stripe_provider_proof";
