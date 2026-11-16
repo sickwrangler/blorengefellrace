@@ -1,3 +1,5 @@
+import { registrationEmergencyContact, registrationReference } from "./phase3-domain.mjs";
+
 const TRANSFER_ACTIONS = new Set(["entry_transferred", "organiser_entry_transferred"]);
 
 const asDate = (value) => {
@@ -74,7 +76,7 @@ export function buildWaitingListView(state) {
       offerEmailRetryAfterAt: offerEmailAttempt?.retryAfterAt ?? "",
       offerEmailRetryAvailable: offer?.status === "offered" && Boolean(offerEmailAttempt?.message) && ["prepared", "failed"].includes(offerEmailAttempt?.status),
       registrationId: registration?.id ?? "",
-      entryReference: registration?.testReference ?? ""
+      entryReference: registrationReference(registration, state.environment)
     };
   }).sort((left, right) => {
     const group = (item) => item.offerStatus === "offered" ? 0 : item.status === "waiting" ? 1 : 2;
@@ -138,7 +140,7 @@ export function buildTransferHistory(state) {
       const fromRunner = runners.get(fromRunnerId);
       const toRunner = runners.get(toRunnerId);
       return {
-        entryReference: registration?.testReference ?? "",
+        entryReference: registrationReference(registration, state.environment),
         registrationId,
         raceNumber: registration?.raceNumber ?? null,
         occurredAt,
@@ -173,7 +175,7 @@ export function transferSummaryForRegistration(transferHistory, registrationId) 
 
 function currentEntry(state, registration, transferHistory) {
   const runner = (state.runners ?? []).find((item) => item.id === registration.runnerId);
-  const emergency = (state.emergencyContacts ?? []).find((item) => item.registrationId === registration.id || (!item.registrationId && item.runnerId === registration.runnerId));
+  const emergency = registrationEmergencyContact(state, registration, runner);
   const payment = (state.payments ?? []).find((item) => item.registrationId === registration.id || item.registrationIds?.includes(registration.id));
   const declaration = [...(state.declarations ?? [])].reverse().find((item) => item.registrationId === registration.id && !item.revokedAt);
   const refunded = payment?.refundedRegistrationIds?.includes(registration.id) || payment?.status === "refunded";
@@ -181,7 +183,7 @@ function currentEntry(state, registration, transferHistory) {
   const paymentStatus = refunded ? "refunded" : payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status === "expired" ? "abandoned" : payment?.status ?? "created";
   const transfer = transferSummaryForRegistration(transferHistory, registration.id);
   return {
-    entryReference: registration.testReference ?? "",
+    entryReference: registrationReference(registration, state.environment),
     registrationId: registration.id,
     raceNumber: registration.raceNumber ?? null,
     firstName: runner?.firstName ?? "",

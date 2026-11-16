@@ -93,7 +93,7 @@ export async function createPrivateRegistrationWorkbook(model) {
     ["Event", model.summary.event], ["Race date", model.summary.raceDate], ["Export generated at", model.summary.generatedAt],
     ["Registration operational state", model.summary.operationalState], ["Capacity", model.summary.capacity],
     ["Current confirmed places", model.summary.confirmedPlaces], ["Currently waiting", model.summary.waitingListCount],
-    ["Outstanding waiting-list offers", model.summary.outstandingWaitingListOffers], ["Accepted from waiting list", model.summary.acceptedFromWaitingList],
+    ["Outstanding waiting-list offers", model.summary.outstandingWaitingListOffers], ["Waiting-list offers accepted", model.summary.acceptedFromWaitingList],
     ["Declined waiting-list offers", model.summary.declinedWaitingListOffers], ["Expired waiting-list offers", model.summary.expiredWaitingListOffers],
     ["Cancelled / released registrations", model.summary.cancelledReleasedCount], ["Registrations ever transferred", model.summary.registrationsEverTransferred],
     ["Total transfer events", model.summary.totalTransferEvents], ["Pending declarations", model.summary.pendingDeclarations],

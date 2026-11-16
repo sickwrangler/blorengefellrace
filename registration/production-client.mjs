@@ -89,6 +89,7 @@ export const prototype = {
   amendEntry(changes, token = this.managementToken()) { return v3("/management/amend", { method: "POST", body: JSON.stringify(changes), headers: { "x-management-token": token } }); },
   transferEntry(input, token = this.managementToken()) { return v3("/management/transfer", { method: "POST", body: JSON.stringify(input), headers: { "x-management-token": token } }); },
   withdrawEntry(token = this.managementToken()) { return token ? v3("/management/withdraw", { method: "POST", headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
+  checkWaitingListPayment(id) { return v3(`/organiser/registrations/${encodeURIComponent(id)}/check-waiting-list-payment`, { method: "POST" }); },
   organiserWithdrawEntry(id, reason = "") { return v3(`/organiser/registrations/${encodeURIComponent(id)}/withdraw`, { method: "POST", body: JSON.stringify({ reason }) }); },
   decideRefund(id, decision) { return v3(`/organiser/refunds/${encodeURIComponent(id)}/${decision}`, { method: "POST" }); },
   executeRefund(id) { return v3(`/organiser/refunds/${encodeURIComponent(id)}/execute`, { method: "POST" }); },

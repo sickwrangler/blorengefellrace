@@ -64,6 +64,8 @@ export function createProductionApi({ service, phase3Integrations, repository, s
       };
       return resultResponse(await handlers[waitingListAction[2]]());
     }
+    const waitingListPayment = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/check-waiting-list-payment$/);
+    if (method === "POST" && waitingListPayment) return resultResponse(await phase3Integrations.checkWaitingListPayment(actor, decodeURIComponent(waitingListPayment[1])));
     const organiserWithdrawal = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/withdraw$/);
     if (method === "POST" && organiserWithdrawal) return resultResponse(await phase3Integrations.organiserWithdraw(actor, decodeURIComponent(organiserWithdrawal[1]), body));
     const resendManagement = pathname.match(/^\/api\/v3\/organiser\/registrations\/([^/]+)\/resend-management$/);

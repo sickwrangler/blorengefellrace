@@ -71,7 +71,7 @@ function waitingListStatus(item) {
     : item.offerEmailDelivery === "pending"
       ? { label: "Offer reserved · email pending", className: "status-badge--info" }
       : { label: "Offer sent", className: "status-badge--info" };
-  const labels = { waiting: "Waiting", accepted: "Accepted", declined: "Declined", expired: "Expired", withdrawn: "Withdrawn", offered: "Offer sent" };
+  const labels = { waiting: "Waiting", accepted: "Offer accepted", declined: "Declined", expired: "Expired", withdrawn: "Withdrawn", offered: "Offer sent" };
   const classNames = { waiting: "status-badge--positive", accepted: "status-badge--positive", declined: "status-badge--neutral", expired: "status-badge--neutral", withdrawn: "status-badge--neutral", offered: "status-badge--info" };
   return { label: labels[item.status] ?? String(item.status || "Unknown").replaceAll("_", " "), className: classNames[item.status] ?? "status-badge--neutral" };
 }
@@ -138,6 +138,9 @@ function renderWaitingList() {
       }, "text-button"));
     }
     if (["waiting", "offered"].includes(item.status)) actions.append(actionButton("Withdraw", () => openWaitingListAction(item, "withdraw"), "text-button danger-link"));
+    if (item.entryReference && currentState.registrations.some((entry) => entry.id === item.registrationId)) {
+      actions.append(actionButton("View entry", () => selectEntry(item.entryReference), "text-button"));
+    }
     if (!actions.childElementCount) actions.textContent = "—";
     row.append(position, name, email, status, joined, offer, actions); rows.append(row);
   }
@@ -257,6 +260,31 @@ function renderActions(item) {
   const actions = document.querySelector("#entry-actions"); actions.replaceChildren();
   const available = availableOrganiserActions(item);
   const refundRequest = currentState.refundRequests?.find((request) => request.registrationId === item.id && ["requested", "approved"].includes(request.status));
+  if (item.canCheckWaitingListPayment && currentIntegrations.paymentsAvailable && prototype.checkWaitingListPayment) {
+    actions.append(actionButton("Check Stripe payment", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const result = await prototype.checkWaitingListPayment(item.id);
+        const errors = {
+          PAID_CAPACITY_CONFLICT: "Stripe shows a successful payment, but there is no free race place. Review capacity before trying again.",
+          PAYMENT_NOT_CONFIRMED: "Stripe has yet to confirm a successful payment for this entry.",
+          PAYMENT_MISMATCH: "The Stripe session does not match this entry. Check the payment in Stripe.",
+          PAYMENT_REVIEW_REQUIRED: "Check this payment and any refunds or disputes in Stripe.",
+          PAYMENT_REVIEW_CHANGED: "The entry changed during the check. Refresh the dashboard and try again.",
+          PAYMENTS_UNAVAILABLE: "Could not verify the payment with Stripe. Check the payment directly in Stripe."
+        };
+        showNotice(result.ok
+          ? result.emailDeliveryFailed ? "Payment and place confirmed. Confirmation email delivery failed." : "Stripe payment verified and race place confirmed."
+          : errors[result.code] ?? "Could not check the payment.", !result.ok || result.emailDeliveryFailed);
+        await render();
+      } catch {
+        showNotice("Could not finish checking the payment. Refresh the dashboard to see the latest entry status.", true);
+      } finally {
+        button.disabled = false;
+      }
+    }));
+  }
   if (item.placeStatus === "confirmed" && item.declarationStatus === "pending") {
     actions.append(actionButton("Resend declaration email", async () => { const result = await prototype.resendDeclaration(item.id); showNotice(result.ok ? "Declaration email resent through the controlled development channel." : `Declaration email unavailable: ${result.code}`, !result.ok); await render(); }));
     actions.append(actionButton("Record paper declaration", async () => { if (!window.confirm("Confirm that the named runner signed the current paper declaration in person? This records an audited organiser action, not a digital signature.")) return; const result = await prototype.recordPaperDeclaration(item.id); showNotice(result.ok ? "Paper declaration recorded. Runner is cleared from the declaration perspective." : `Declaration could not be recorded: ${result.code}`, !result.ok); await render(); }));

@@ -162,5 +162,5 @@ test("workbook Waiting List sheet and Summary agree with the shared projection",
   const formulaShapedName = sheet.getCell("D6"); assert.equal(formulaShapedName.value, "=Waiting"); assert.equal(formulaShapedName.formula, undefined);
   assert.ok(sheet.autoFilter); assert.deepEqual({ state: sheet.views[0].state, ySplit: sheet.views[0].ySplit, xSplit: sheet.views[0].xSplit }, { state: "frozen", ySplit: 4, xSplit: 3 });
   const summaryValues = new Map(workbook.getWorksheet("Summary").getRows(5, 16).map((row) => [row.getCell(1).value, row.getCell(2).value]));
-  assert.deepEqual([summaryValues.get("Currently waiting"), summaryValues.get("Outstanding waiting-list offers"), summaryValues.get("Accepted from waiting list"), summaryValues.get("Declined waiting-list offers"), summaryValues.get("Expired waiting-list offers")], [1, 1, 1, 1, 1]);
+  assert.deepEqual([summaryValues.get("Currently waiting"), summaryValues.get("Outstanding waiting-list offers"), summaryValues.get("Waiting-list offers accepted"), summaryValues.get("Declined waiting-list offers"), summaryValues.get("Expired waiting-list offers")], [1, 1, 1, 1, 1]);
 });

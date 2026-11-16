@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { authorizePrivateInvitation, calculateEntryPrice, capacitySummary, expirePrivateInvitation, issuePrivateInvitation, PROVIDER_PROOF_INVITATION_HOURS, revokePrivateInvitation } from "./phase3-domain.mjs";
+import { acceptedWaitingListRegistration, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, expirePrivateInvitation, issuePrivateInvitation, PROVIDER_PROOF_INVITATION_HOURS, registrationEmergencyContact, registrationReference, revokePrivateInvitation } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { buildPrivateWorkbookModel, buildTransferHistory, buildWaitingListView, transferSummaryForRegistration, waitingListSummary } from "./private-export.mjs";
 
@@ -12,9 +12,10 @@ const quote = (value) => `"${formulaSafe(value).replaceAll('"', '""')}"`;
 const csv = (headers, rows) => [headers, ...rows].map((row) => row.map(quote).join(",")).join("\n");
 
 function entities(state, registration) {
+  const runner = state.runners.find((item) => item.id === registration.runnerId);
   return {
-    runner: state.runners.find((item) => item.id === registration.runnerId),
-    emergency: state.emergencyContacts.find((item) => item.registrationId === registration.id),
+    runner,
+    emergency: registrationEmergencyContact(state, registration, runner),
     payment: state.payments.find((item) => item.registrationId === registration.id || item.registrationIds?.includes(registration.id)),
     consent: [...state.consents].reverse().find((item) => item.registrationId === registration.id)
   };
@@ -28,6 +29,10 @@ function registrationView(state, registration, transferHistory = buildTransferHi
   const refunded = payment?.refundedRegistrationIds?.includes(registration.id);
   return {
     ...registration,
+    testReference: registrationReference(registration, state.environment),
+    canCheckWaitingListPayment: active(registration) && !payment?.orderId && Boolean(payment?.checkoutSessionId)
+      && ["checkout_pending", "processing", "expired", "failed"].includes(payment.status)
+      && acceptedWaitingListRegistration(state, registration.id),
     paymentStatus: refunded ? "refunded" : payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status === "expired" ? "abandoned" : payment?.status ?? "created",
     pricing: registration.pricing ?? (payment ? { standardPricePence: state.event.entryFeePence, wfraMemberPricePence: state.event.wfraMemberPricePence, priceActuallyChargedPence: registration.priceActuallyChargedPence, adjustmentReason: registration.pricing?.adjustmentReason, wfraDiscountApplied: registration.pricing?.wfraDiscountApplied } : null),
     payment: payment ? { expectedAmountPence: registration.priceActuallyChargedPence ?? payment.expectedAmountPence, actualPaidAmountPence: payment.status === "paid" ? registration.priceActuallyChargedPence ?? payment.actualPaidAmountPence : payment.actualPaidAmountPence, currency: payment.currency, refundState: refunded ? "refunded" : payment.refundState, webhookReconciliationState: payment.webhookReconciliationState } : undefined,
@@ -111,7 +116,7 @@ export class ProductionRegistrationService {
   revokePrivateInvitation(actor, id) { if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); return this.repository.transaction((state) => revokePrivateInvitation(state, id, actor)); }
   expirePrivateInvitation(actor, id) { if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); return this.repository.transaction((state) => expirePrivateInvitation(state, id, actor)); }
   async auditHistory(actor, id) { if (!authorize(actor, "audit")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); return { ok: true, events: state.auditEvents.filter((item) => item.subjectId === id).map((item) => ({ ...item, timestamp: item.occurredAt })) }; }
-  async exportPublic(actor) { if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); const rows = state.registrations.filter((item) => !item.deletedAt).map((item) => { const entry = registrationView(state, item); return [entry.testReference, entry.raceNumber, entry.runner.firstName, entry.runner.lastName, entry.runner.club, entry.runner.genderCategory, entry.entryStatus, entry.paymentStatus]; }); return { ok: true, filename: "registration-race-management.csv", csv: csv(["entry_reference", "race_number", "first_name", "last_name", "club", "category", "entry_status", "payment_status"], rows) }; }
+  async exportPublic(actor) { if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); const rows = state.registrations.filter((item) => !item.deletedAt).map((item) => { const entry = registrationView(state, item); return [entry.testReference, entry.raceNumber, entry.runner.firstName, entry.runner.lastName, entry.runner.club, entry.runner.raceCategory ?? entry.runner.genderCategory, entry.entryStatus, entry.paymentStatus]; }); return { ok: true, filename: "registration-race-management.csv", csv: csv(["entry_reference", "race_number", "first_name", "last_name", "club", "category", "entry_status", "payment_status"], rows) }; }
   async exportPrivate(actor) { if (!authorize(actor, "export_private")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); const rows = state.registrations.filter((item) => !item.deletedAt).map((item) => { const entry = registrationView(state, item); return [entry.id, entry.runner.firstName, entry.runner.lastName, entry.runner.email, entry.runner.phone, entry.entryStatus, entry.paymentStatus]; }); return { ok: true, warning: "PRIVATE OPERATIONAL EXPORT — store outside the public website", filename: `private-registration-${new Date().toISOString().slice(0, 10)}.csv`, csv: csv(["registration_id", "first_name", "last_name", "email", "phone", "entry_status", "payment_status"], rows) }; }
   async exportWaitingList(actor, generatedAt = new Date()) {
     if (!authorize(actor, "export_private")) return { ok: false, code: "FORBIDDEN" };
@@ -120,5 +125,5 @@ export class ProductionRegistrationService {
     return { ok: true, filename: `blorenge-waiting-list-${new Date(generatedAt).toISOString().slice(0, 10)}.csv`, csv: csv(["waiting_list_id", "original_sequence", "current_position", "first_name", "last_name", "email", "status", "joined_at", "offer_status", "offer_created_at", "offer_reminder_at", "offer_expires_at", "offer_completed_at", "registration_id", "entry_reference"], rows) };
   }
   async exportPrivateWorkbook(actor, generatedAt = new Date()) { if (!authorize(actor, "export_private")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); return { ok: true, filename: `blorenge-registration-private-${new Date(generatedAt).toISOString().slice(0, 10)}.xlsx`, workbook: buildPrivateWorkbookModel(state, generatedAt) }; }
-  erase(actor, id, mode = "anonymise") { if (!authorize(actor, "erase")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); if (mode !== "anonymise") return Promise.resolve({ ok: false, code: "ANONYMISE_ONLY" }); return this.repository.transaction((state) => { const registration = state.registrations.find((item) => item.id === id && !item.deletedAt); if (!registration) return { ok: false, code: "NOT_FOUND" }; const runner = entities(state, registration).runner; Object.assign(runner, { firstName: "Anonymised", lastName: "Runner", email: `${registration.id}@deleted.invalid`, phone: "deleted", addressLine1: null, addressLine2: null, city: null, postcode: null, dateOfBirth: null, wfraMembershipNumber: null, anonymisedAt: now() }); state.emergencyContacts = state.emergencyContacts.filter((item) => item.registrationId !== id); audit(state, actor, "record_anonymised", id); return { ok: true }; }); }
+  erase(actor, id, mode = "anonymise") { if (!authorize(actor, "erase")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); if (mode !== "anonymise") return Promise.resolve({ ok: false, code: "ANONYMISE_ONLY" }); return this.repository.transaction((state) => { const registration = state.registrations.find((item) => item.id === id && !item.deletedAt); if (!registration) return { ok: false, code: "NOT_FOUND" }; const runner = entities(state, registration).runner; Object.assign(runner, { firstName: "Anonymised", lastName: "Runner", email: `${registration.id}@deleted.invalid`, phone: "deleted", addressLine1: null, addressLine2: null, city: null, postcode: null, dateOfBirth: null, wfraMembershipNumber: null, emergencyContactName: null, emergencyContactPhone: null, anonymisedAt: now() }); state.emergencyContacts = state.emergencyContacts.filter((item) => item.registrationId !== id); audit(state, actor, "record_anonymised", id); return { ok: true }; }); }
 }
