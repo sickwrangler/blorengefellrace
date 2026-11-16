@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { privateAccessPurposeCandidates, runnerAccessDecision, runnerEntryAvailability } from "../registration/runner-access.mjs";
+import { privateAccessPurposeCandidates, publicEntryState, runnerAccessDecision, runnerEntryAvailability } from "../registration/runner-access.mjs";
 
 const production = (operationalState) => ({ environment: "production", operationalState });
 const unavailable = (code) => ({ ok: false, code });
@@ -21,6 +21,19 @@ test("CLOSED stays unavailable and OPEN stays publicly available", () => {
   assert.equal(runnerAccessDecision({ canTest: true, status: production("CLOSED") }), "unavailable");
   assert.equal(runnerAccessDecision({ canTest: true, status: production("OPEN") }), "available");
   assert.equal(runnerAccessDecision({ canTest: true, status: { ...production("OPEN"), unavailable: true } }), "unavailable");
+});
+
+test("public entry status gives the queue priority over places freed by withdrawals", () => {
+  const open = { ...production("OPEN"), remaining: 2, waiting: 0, publicRegistrationAvailable: true };
+  assert.equal(publicEntryState(production("CLOSED")), "pre-opening");
+  assert.equal(publicEntryState(production("PRIVATE_LIVE")), "pre-opening");
+  assert.equal(publicEntryState(open), "open");
+  assert.equal(publicEntryState({ ...open, remaining: 0, publicRegistrationAvailable: false }), "full");
+  assert.equal(publicEntryState({ ...open, waiting: 4, waitingListPriorityActive: true, publicRegistrationAvailable: false }), "full");
+  assert.equal(publicEntryState({ ...open, waiting: 4, publicRegistrationAvailable: false }), "full");
+  assert.equal(publicEntryState({ ...open, operationalState: "PAUSED", waiting: 4 }), "paused");
+  assert.equal(publicEntryState(production("CLOSED_FINAL")), "closed");
+  assert.equal(publicEntryState({ ...production("CLOSED"), unavailable: true }), "unavailable");
 });
 
 test("waiting-list invitation purpose is resolved authoritatively even without the offer URL hint", () => {

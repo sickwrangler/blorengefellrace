@@ -7,6 +7,16 @@ export function privateAccessPurposeCandidates({ offerHint = false, proofHint = 
   return ["registration", "waiting_list_offer"];
 }
 
+export function publicEntryState(status) {
+  if (!status || status.ok === false || status.unavailable) return "unavailable";
+  if (status.operationalState === "CLOSED" || status.operationalState === "PRIVATE_LIVE") return "pre-opening";
+  if (status.operationalState === "PAUSED") return "paused";
+  if (status.operationalState === "CLOSED_FINAL") return "closed";
+  if (status.operationalState !== "OPEN") return "unavailable";
+  if (status.waitingListPriorityActive || status.waiting > 0 || status.remaining === 0) return "full";
+  return status.publicRegistrationAvailable ? "open" : "unavailable";
+}
+
 export function runnerEntryAvailability({ status, privateAccess = null, hasPrivateInvitation = false }) {
   const publicRegistrationAvailable = status?.publicRegistrationAvailable ?? (status?.remaining > 0 && !(status?.waiting > 0));
   const waitingListOffer = privateAccess?.ok === true && privateAccess.purpose === "waiting_list_offer";
