@@ -17,15 +17,15 @@ Each run uses a system-assigned managed identity to:
 - read and transactionally update the production Table;
 - send due waiting-list reminder messages;
 - expire waiting-list offers, release their reservations and leave the next offer under organiser control;
-- expire stale unpaid Checkout reservations;
+- flag stale single-runner Checkouts for review;
 - send the single configured declaration reminder when due;
-- expire unpaid group Checkouts and release their reservations;
+- retain group Checkout reservations while Stripe confirmation is pending;
 - abandon old drafts only if draft retention is explicitly configured;
 - persist last-success/result metadata.
 
 The scheduler can also run a finite confirmation-email recovery campaign when `REGISTRATION_EMAIL_RECOVERY_ENABLED` is explicitly `true`. The campaign claims no more than one batch per UTC hour, sends at most four confirmations per batch, and remains subject to the shared rolling limit of eight external email attempts per hour (including ordinary transactional email). It uses the durable email outbox and provider idempotency keys, permanently completes when the recovery queue reaches zero, and pauses for operator review on failed, in-progress or ambiguous delivery. Only aggregate campaign status is stored or logged.
 
-Checkout creation, payment webhook reconciliation, refund execution, runner submission and organiser edits are synchronous API work. They do not wait for the scheduler.
+Checkout creation, payment webhook reconciliation, refund execution, runner submission and organiser edits are synchronous API work. They do not wait for the scheduler. Production capacity includes unresolved Checkout sessions, including records that an older scheduler marked expired locally. Stripe’s expiry or payment failure event releases an unpaid reservation. Organisers can also verify an expired unpaid direct waiting-list session through **Check Stripe payment**.
 
 ## Health check
 

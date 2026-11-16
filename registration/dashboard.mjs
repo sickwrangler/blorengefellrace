@@ -23,7 +23,7 @@ async function render() {
   const [snapshot, integrations] = await Promise.all([prototype.all(), prototype.integrationStatus()]); currentState = snapshot.state; currentIntegrations = integrations;
   const active = currentState.registrations.filter((item) => !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus));
   const accepted = active.filter((item) => item.placeStatus === "confirmed").length;
-  const reserved = active.filter((item) => item.placeStatus === "payment_reserved").length;
+  const reserved = snapshot.totals?.paymentReserved ?? active.filter((item) => item.placeStatus === "payment_reserved").length;
   const waiting = active.filter((item) => item.entryStatus === "waiting_list").length;
   const attention = active.filter((item) => ["created", "not_configured", "declined", "abandoned", "failed", "expired"].includes(item.paymentStatus)).length;
   const declarations = active.filter((item) => item.placeStatus === "confirmed" && item.declarationStatus === "pending").length;
@@ -39,7 +39,8 @@ async function render() {
   document.querySelector("#summary-remaining").textContent = remainingPlaces;
   const offerButton = document.querySelector("#offer-next-waiting-place");
   offerButton.disabled = waitingCount < 1 || remainingPlaces < 1;
-  document.querySelector("#waiting-list-operations-note").textContent = waitingCount < 1 ? "Nobody is currently waiting." : remainingPlaces < 1 ? `${waitingCount} ${waitingCount === 1 ? "person is" : "people are"} waiting; an offer can be sent after a place is released.` : `${waitingCount} ${waitingCount === 1 ? "person is" : "people are"} waiting and ${remainingPlaces} ${remainingPlaces === 1 ? "place is" : "places are"} available.`;
+  const noPlaces = reserved > 0 ? "Outstanding offers and payments awaiting confirmation count towards the race limit." : "You can send another offer after a place is released.";
+  document.querySelector("#waiting-list-operations-note").textContent = waitingCount < 1 ? "Nobody is currently waiting." : remainingPlaces < 1 ? `${waitingCount} ${waitingCount === 1 ? "person is" : "people are"} waiting. ${noPlaces}` : `${waitingCount} ${waitingCount === 1 ? "person is" : "people are"} waiting and ${remainingPlaces} ${remainingPlaces === 1 ? "place is" : "places are"} available.`;
   const environment = currentState.environment === "production" ? "Production" : "Development";
   const currentOperationalState = currentState.phase3RegistrationState ?? "CLOSED";
   const stateLabel = currentOperationalState === "PRIVATE_LIVE" ? "Private" : currentOperationalState === "CLOSED_FINAL" ? "Closed" : `${currentOperationalState[0]}${currentOperationalState.slice(1).toLowerCase()}`;
@@ -275,7 +276,8 @@ function renderActions(item) {
           PAYMENTS_UNAVAILABLE: "Could not verify the payment with Stripe. Check the payment directly in Stripe."
         };
         showNotice(result.ok
-          ? result.emailDeliveryFailed ? "Payment and place confirmed. Confirmation email delivery failed." : "Stripe payment verified and race place confirmed."
+          ? result.paymentStatus === "expired" ? "Stripe confirmed the Checkout expired without payment. The reservation was released."
+            : result.emailDeliveryFailed ? "Payment and place confirmed. Confirmation email delivery failed." : "Stripe payment verified and race place confirmed."
           : errors[result.code] ?? "Could not check the payment.", !result.ok || result.emailDeliveryFailed);
         await render();
       } catch {
@@ -389,7 +391,7 @@ for (const selector of ["#waiting-list-search", "#waiting-list-filter"]) documen
 document.querySelector("#offer-next-waiting-place")?.addEventListener("click", async () => {
   if (!window.confirm("Offer the available place to the next person on the waiting list? The place will be reserved for 48 hours and the runner will be emailed.")) return;
   const result = await prototype.offerNextWaitingPlace();
-  const message = result.ok ? result.emailDeliveryFailed ? "The 48-hour offer was created, but email delivery failed. The place remains reserved until the existing expiry; retry or cancel it from the waiting-list row." : "The next waiting-list runner has been emailed a 48-hour place offer." : `A place offer could not be created: ${result.code}`;
+  const message = result.ok ? result.emailDeliveryFailed ? "The 48-hour offer was created, but email delivery failed. The place remains reserved until the existing expiry; retry or cancel it from the waiting-list row." : "The next waiting-list runner has been emailed a 48-hour place offer." : result.code === "CAPACITY_FULL" ? "No place is available for a new offer. Outstanding offers and unresolved payments count towards capacity." : `A place offer could not be created: ${result.code}`;
   showNotice(message, !result.ok || result.emailDeliveryFailed === true);
   await render();
 });
@@ -416,11 +418,11 @@ document.querySelector("#waiting-list-action-form")?.addEventListener("submit", 
       ? "The 48-hour offer was created, but email delivery failed. The reservation is active; review email health before taking further action."
       : "The selected runner has been emailed a 48-hour place offer."
     : pending.action === "cancel"
-      ? "The offer was cancelled, its link was revoked, the reserved place was released and the runner returned to their original queue order."
+      ? "The offer was cancelled and the runner returned to their original queue position."
       : result.activeOfferCancelled
-      ? "The runner was withdrawn from the waiting list and their active offer was cancelled. The released place remains available for an organiser to offer."
+      ? "The runner was withdrawn from the waiting list and their active offer was cancelled."
       : "The runner was withdrawn from the waiting list and active queue positions were updated.";
-  showNotice(result.ok ? success : `Waiting-list action unavailable: ${result.code}`, !result.ok || result.emailDeliveryFailed === true);
+  showNotice(result.ok ? success : result.code === "CAPACITY_FULL" ? "No place is available for a new offer. Outstanding offers and unresolved payments count towards capacity." : `Waiting-list action unavailable: ${result.code}`, !result.ok || result.emailDeliveryFailed === true);
   await render();
 });
 document.querySelector("#close-withdraw-entry")?.addEventListener("click", () => {

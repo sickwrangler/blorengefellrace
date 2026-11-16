@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { acceptedWaitingListRegistration, capacitySummary, expireWaitingListOffers, waitingListPriorityActive } from "./phase3-domain.mjs";
+import { acceptedWaitingListRegistration, capacitySummary, checkoutNeedsReconciliation, expireWaitingListOffers, waitingListPriorityActive } from "./phase3-domain.mjs";
 
 export const CHECKOUT_RESERVATION_MINUTES = 30;
 export const PAYMENT_CURRENCY = "gbp";
@@ -106,6 +106,7 @@ export async function beginStripeCheckout(state, registrationId, gateway, { succ
     return { ok: false, code: "PAYMENT_REVIEW_REQUIRED" };
   }
   if (payment.status === "checkout_pending" && new Date(payment.checkoutExpiresAt) > new Date(at)) return { ok: true, duplicate: true, checkoutUrl: payment.checkoutUrl, expiresAt: payment.checkoutExpiresAt };
+  if (state.environment === "production" && checkoutNeedsReconciliation(state, payment)) return { ok: false, code: "PAYMENT_REVIEW_REQUIRED" };
   if (registration.placeStatus === "none") {
     if (waitingListPriorityActive(state)) return { ok: false, code: "WAITING_LIST_PRIORITY" };
     if (capacitySummary(state).remaining < 1) return { ok: false, code: "CAPACITY_FULL" };
@@ -156,7 +157,7 @@ export function reconcileStripeEvent(state, event, { at = new Date() } = {}) {
       audit(state, "stripe_payment_processing", registration.id, {}, at);
       return { ok: true, paymentStatus: payment.status, placeStatus: registration.placeStatus };
     }
-    if (registration.placeStatus !== "payment_reserved" && registration.placeStatus !== "confirmed" && capacitySummary(state).remaining < 1) {
+    if (registration.placeStatus !== "payment_reserved" && registration.placeStatus !== "confirmed" && capacitySummary(state, [registration.id]).remaining < 1) {
       return { ok: false, code: "PAID_CAPACITY_CONFLICT" };
     }
     if (acceptedWaitingListRegistration(state, registration.id)) registration.entryStatus = "accepted";
@@ -201,10 +202,13 @@ export function runnerPaymentState(state, registrationId, at = new Date()) {
 
 export function expireStalePaymentReservations(state, at = new Date()) {
   let expired = 0;
-  for (const payment of state.payments.filter((item) => item.status === "checkout_pending" && new Date(item.checkoutExpiresAt) <= new Date(at))) {
+  for (const payment of state.payments.filter((item) => !item.orderId && item.status === "checkout_pending" && new Date(item.checkoutExpiresAt) <= new Date(at))) {
     const registration = state.registrations.find((item) => item.id === payment.registrationId);
     payment.status = "expired"; payment.webhookReconciliationState = "locally_expired_awaiting_webhook"; payment.updatedAt = iso(at);
-    if (registration && registration.placeStatus !== "confirmed") { registration.placeStatus = "none"; registration.updatedAt = iso(at); }
+    if (registration && registration.placeStatus !== "confirmed") {
+      if (state.environment !== "production") registration.placeStatus = "none";
+      registration.updatedAt = iso(at);
+    }
     audit(state, "payment_reservation_expired", payment.registrationId, {}, at); expired += 1;
   }
   return { ok: true, expired };
