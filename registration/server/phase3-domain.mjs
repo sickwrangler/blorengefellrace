@@ -43,6 +43,30 @@ const transitions = Object.freeze({
   CLOSED_FINAL: []
 });
 const shortId = (prefix) => `${prefix}_${crypto.randomUUID()}`;
+
+export function registrationReference(registration, environment) {
+  if (registration?.testReference) return registration.testReference;
+  // Direct registrations originally had only the internal UUID.
+  const directId = /^reg_([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.exec(registration?.id ?? "")?.[1];
+  if (!directId) return "";
+  const prefix = environment === "production" ? "BFR" : "TEST";
+  return `${prefix}-${directId.replaceAll("-", "").toUpperCase()}`;
+}
+
+export function registrationEmergencyContact(state, registration, runner) {
+  const stored = (state.emergencyContacts ?? []).find((contact) => contact.registrationId === registration.id)
+    ?? (state.emergencyContacts ?? []).find((contact) => !contact.registrationId && contact.runnerId === registration.runnerId);
+  if (runner?.anonymisedAt) return undefined;
+  if (stored || !runner) return stored;
+  // Earlier direct registrations kept the submitted contact on the runner.
+  if (runner.emergencyContactName || runner.emergencyContactPhone) {
+    return { name: runner.emergencyContactName, phone: runner.emergencyContactPhone };
+  }
+}
+
+export function acceptedWaitingListRegistration(state, registrationId) {
+  return (state.auditEvents ?? []).some((event) => event.action === "waiting_list_offer_accepted" && event.after?.registrationId === registrationId);
+}
 const hashToken = (token) => crypto.createHash("sha256").update(String(token)).digest("hex");
 const opaqueToken = () => crypto.randomBytes(32).toString("base64url");
 const iso = (value = new Date()) => new Date(value).toISOString();
@@ -80,7 +104,7 @@ export function createPhase3State({ environment = "development", registrationSta
       under18EntriesEnabled: under18EntriesEnabled === true,
       declaration: { ...PHASE3_EVENT.declaration, version: declarationVersion }
     },
-    runners: [], registrations: [], payments: [], declarations: [], managementTokens: [],
+    runners: [], registrations: [], emergencyContacts: [], payments: [], declarations: [], managementTokens: [],
     privateInvitations: [], waitingList: [], waitingListOffers: [], refundRequests: [], auditEvents: []
   };
 }
@@ -425,14 +449,24 @@ export function acceptWaitingListOffer(state, invitationToken, input, at = new D
   if (!under18Check.ok) return under18Check;
   const consumed = authorizePrivateInvitation(state, invitationToken, { kind: "waiting_list_offer", at, consume: true, allowDevelopmentTest: true });
   if (!consumed.ok) return consumed;
-  const runner = storeRunner(state, input.runner);
+  const { emergencyContactName, emergencyContactPhone, ...runnerInput } = input.runner;
+  const runner = storeRunner(state, runnerInput);
   // The active offer already reserves this place, so convert that reservation atomically.
   offer.status = "accepted"; offer.completedAt = iso(at);
   waiting.status = "accepted";
-  const registration = { id: shortId("reg"), runnerId: runner.id, entryStatus: "active", placeStatus: "payment_reserved", raceNumber: null, createdAt: iso(at), updatedAt: iso(at), deletedAt: null };
-  state.registrations.push(registration);
-  const pricing = calculateEntryPrice(state.event, input.runner);
+  const pricing = calculateEntryPrice(state.event, runnerInput);
   runner.wfraDiscountApplied = pricing.wfraDiscountApplied;
+  const registration = {
+    id: shortId("reg"), eventId: state.event.id, environment: state.environment, runnerId: runner.id,
+    entryStatus: "active", placeStatus: "payment_reserved", raceNumber: null,
+    declarationStatus: "complete", declarationCompletionMethod: "digital_during_entry",
+    priceActuallyChargedPence: pricing.priceActuallyChargedPence, pricing,
+    createdAt: iso(at), updatedAt: iso(at), deletedAt: null
+  };
+  registration.testReference = registrationReference(registration, state.environment);
+  state.registrations.push(registration);
+  state.emergencyContacts ??= [];
+  state.emergencyContacts.push({ id: shortId("emergency"), registrationId: registration.id, name: String(emergencyContactName).trim(), phone: String(emergencyContactPhone).trim(), deleteAfterEvent: true });
   state.payments.push({ id: shortId("payment"), registrationId: registration.id, status: "not_configured", provider: null, externalCall: false, ...pricing, createdAt: iso(at) });
   recordAudit(state, { actorType: "runner" }, "waiting_list_offer_accepted", offer.id, null, { registrationId: registration.id }, at);
   recordAudit(state, { actorType: "runner" }, "registration_created", registration.id, null, { placeStatus: registration.placeStatus }, at);
@@ -465,7 +499,7 @@ export function issueManagementToken(state, registrationId, actor = { actorType:
   const token = { id: shortId("management"), registrationId, tokenHash: hashToken(value), issuedAt: iso(at), expiresAt: managementTokenExpiry(at), invalidatedAt: null };
   state.managementTokens.push(token);
   recordAudit(state, actor, "management_token_issued", registrationId, null, { replacedPriorToken: replaceExisting && existingTokens.length > 0, preservedPriorToken: !replaceExisting && existingTokens.length > 0 }, at);
-  return { ok: true, token: value, expiresAt: token.expiresAt };
+  return { ok: true, token: value, tokenId: token.id, expiresAt: token.expiresAt };
 }
 
 export function amendRunner(state, managementToken, changes, { actor = { actorType: "runner" }, at = new Date(), organiserOverride = false } = {}) {

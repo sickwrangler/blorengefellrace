@@ -16,11 +16,12 @@ import {
   joinWaitingList,
   withdrawWaitingListEntry
 } from "../registration/server/phase3-domain.mjs";
-import { reconcileStripeEvent } from "../registration/server/phase3-integrations.mjs";
+import { expireStalePaymentReservations, reconcileStripeEvent } from "../registration/server/phase3-integrations.mjs";
 import { createJsonFileRepository, createMemoryRepository } from "../registration/server/repositories.mjs";
 import { Phase3IntegrationService } from "../registration/server/phase3-service.mjs";
 import { ProductionRegistrationService } from "../registration/server/production-service.mjs";
-import { buildWaitingListView } from "../registration/server/private-export.mjs";
+import { buildPrivateWorkbookModel, buildWaitingListView } from "../registration/server/private-export.mjs";
+import { createProductionBootstrap } from "../registration/server/production-bootstrap.mjs";
 import { createProductionApi } from "../registration/server/production-api.mjs";
 import { createDatabase, migrateDevelopmentDatabase } from "../registration/server/service.mjs";
 
@@ -226,7 +227,101 @@ test("119 confirmed plus one valid offer converts the existing reservation throu
   assert.deepEqual(capacitySummary(final), { capacity: 120, confirmed: 120, paymentReserved: 0, offerReserved: 0, reserved: 120, remaining: 0, waiting: 1 });
   assert.equal(final.waitingListOffers[0].status, "accepted");
   assert.equal(final.payments.find((item) => item.registrationId === accepted.registrationId).status, "paid");
+  const entry = final.registrations.find((item) => item.id === accepted.registrationId);
+  const contact = final.emergencyContacts.find((item) => item.registrationId === entry.id);
+  const workbook = buildPrivateWorkbookModel(final);
+  const row = workbook.currentEntries.find((item) => item.registrationId === entry.id);
+  assert.match(entry.testReference, /^TEST-[A-F0-9]{32}$/);
+  assert.equal(entry.entryStatus, "accepted");
+  assert.deepEqual([contact.name, contact.phone], [runner.emergencyContactName, runner.emergencyContactPhone]);
+  assert.equal(final.runners.find((item) => item.id === entry.runnerId).emergencyContactName, undefined);
+  assert.deepEqual([row.entryReference, row.emergencyContactName, row.paymentStatus, row.clearedToStart], [entry.testReference, runner.emergencyContactName, "successful", "Yes"]);
+  assert.equal(workbook.waitingList.find((item) => item.waitingListId === first.id).entryReference, entry.testReference);
+  assert.equal(workbook.waitingList.find((item) => item.status === "waiting").entryReference, null);
   assert.equal(final.waitingListOffers.length, 1);
+});
+
+test("organiser reconciles a legacy waiting-list payment from Stripe without exceeding capacity or requiring a second payment", async () => {
+  const state = createProductionBootstrap();
+  state.registrationState = state.phase3RegistrationState = "OPEN";
+  const waiting = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;
+  state.registrationState = state.phase3RegistrationState = "PRIVATE_LIVE";
+  const offered = createNextWaitingListOffer(state, organiser, at);
+  const accepted = acceptWaitingListOffer(state, offered.token, { runner: { ...runner, email: waiting.email }, declaration }, at);
+  const registration = accepted.registration;
+  const storedRunner = state.runners.find((item) => item.id === registration.runnerId);
+  Object.assign(storedRunner, { emergencyContactName: runner.emergencyContactName, emergencyContactPhone: runner.emergencyContactPhone });
+  state.emergencyContacts = [];
+  delete registration.testReference;
+  const payment = state.payments[0];
+  Object.assign(payment, { provider: "stripe", providerMode: "live", status: "checkout_pending", checkoutSessionId: "cs_live_synthetic", checkoutExpiresAt: new Date(at.getTime() + 30 * 60_000).toISOString(), expectedAmountPence: 600, currency: "gbp" });
+  const checkedAt = new Date(at.getTime() + 31 * 60_000);
+  expireStalePaymentReservations(state, checkedAt);
+  for (let number = 0; number < state.event.capacity; number++) {
+    assert.equal(addPlaceRegistration(state, { runnerId: `other-${number}`, placeStatus: "confirmed" }, organiser, checkedAt).ok, true);
+  }
+  const session = {
+    id: payment.checkoutSessionId, livemode: true, mode: "payment", status: "complete", payment_status: "paid", amount_total: 600, currency: "gbp",
+    metadata: { registrationId: registration.id, paymentId: payment.id },
+    payment_intent: {
+      id: "pi_synthetic", status: "succeeded", amount_received: 600, currency: "gbp",
+      latest_charge: { id: "ch_synthetic", status: "succeeded", amount_captured: 600, currency: "gbp", captured: true, disputed: false, amount_refunded: 0 }
+    }
+  };
+  const sent = [];
+  const repository = createMemoryRepository(state);
+  const emailAdapter = { async send(message) {
+    sent.push(message);
+    assert.equal((await repository.read()).payments[0].status, "paid");
+    return { delivery: "sent", externalCall: false };
+  } };
+  const service = new Phase3IntegrationService({
+    repository, environment: "production", emailAdapter, publicBaseUrl: "https://race.example",
+    stripeGateway: { mode: "live", async retrieveCheckoutSession(id) {
+      assert.equal(id, session.id);
+      return structuredClone(session);
+    } }
+  });
+  const organiserService = new ProductionRegistrationService({ repository, emailAdapter });
+  const api = createProductionApi({ service: organiserService, repository, phase3Integrations: service });
+  const pathname = `/api/v3/organiser/registrations/${registration.id}/check-waiting-list-payment`;
+  assert.equal((await api({ method: "POST", pathname })).status, 403);
+  assert.equal((await service.paymentStatus(accepted.managementToken, checkedAt)).state, "payment_review");
+  assert.equal((await service.checkout(accepted.managementToken, checkedAt)).code, "PAYMENT_REVIEW_REQUIRED");
+
+  const before = (await organiserService.entry(organiser, registration.id)).registration;
+  const workbookBefore = buildPrivateWorkbookModel(await repository.read());
+  const legacyRow = workbookBefore.currentEntries.find((item) => item.registrationId === registration.id);
+  assert.match(before.testReference, /^BFR-[A-F0-9]{32}$/);
+  assert.equal(before.canCheckWaitingListPayment, true);
+  assert.deepEqual([legacyRow.entryReference, legacyRow.emergencyContactName, legacyRow.emergencyContactPhone, legacyRow.paymentStatus, legacyRow.placeStatus, legacyRow.clearedToStart],
+    [before.testReference, runner.emergencyContactName, runner.emergencyContactPhone, "abandoned", "none", "No"]);
+  assert.equal(workbookBefore.waitingList[0].entryReference, before.testReference);
+  const review = () => api({ method: "POST", pathname, headers: { "x-ms-client-principal": principal } });
+
+  session.metadata.paymentId = "wrong-payment";
+  assert.equal((await review()).body.code, "PAYMENT_MISMATCH");
+  session.metadata.paymentId = payment.id;
+  session.payment_intent.latest_charge.amount_refunded = 100;
+  assert.equal((await review()).body.code, "PAYMENT_REVIEW_REQUIRED");
+  session.payment_intent.latest_charge.amount_refunded = 0;
+  assert.equal((await review()).body.code, "PAID_CAPACITY_CONFLICT");
+  assert.equal(sent.length, 0);
+
+  await repository.transaction((current) => { current.registrations.at(-1).placeStatus = "none"; });
+  const results = await Promise.all([review(), review()]);
+  assert.deepEqual(results.map((result) => result.status), [200, 200]);
+  const final = await repository.read();
+  const after = (await organiserService.entry(organiser, registration.id)).registration;
+  const finalRow = buildPrivateWorkbookModel(final).currentEntries.find((item) => item.registrationId === registration.id);
+  assert.equal(capacitySummary(final).confirmed, state.event.capacity);
+  assert.deepEqual([after.testReference, finalRow.paymentStatus, finalRow.placeStatus, finalRow.clearedToStart], [before.testReference, "successful", "confirmed", "Yes"]);
+  assert.equal(after.canCheckWaitingListPayment, false);
+  assert.equal((await service.orders.publicStartList()).confirmedCount, 1);
+  assert.equal(final.auditEvents.filter((event) => event.action === "stripe_payment_checked_by_organiser").length, 1);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].template, "entry_confirmed");
+  assert.match(sent[0].data.managementUrl, /^https:\/\/race\.example\/registration\/manage\.html#token=/);
 });
 
 test("development test-state allowance does not relax production waiting-offer authorisation", () => {

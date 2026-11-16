@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { acceptWaitingListOffer, authorizePrivateInvitation, cancelWaitingListOffer, capacitySummary, createNextWaitingListOffer, createWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, requestRefund, validateProductionRunner, withdrawRegistration, withdrawWaitingListEntry } from "./phase3-domain.mjs";
+import { acceptedWaitingListRegistration, acceptWaitingListOffer, authorizePrivateInvitation, cancelWaitingListOffer, capacitySummary, createNextWaitingListOffer, createWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, registrationEmergencyContact, registrationReference, requestRefund, validateProductionRunner, withdrawRegistration, withdrawWaitingListEntry } from "./phase3-domain.mjs";
 import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken, prepareRegistrationEmailOutboxAttempt } from "./order-service.mjs";
@@ -14,7 +14,6 @@ const activeRegistration = (item) => item && !item.deletedAt && !["cancelled", "
 const runnerFor = (state, registration) => state.runners.find((item) => item.id === registration?.runnerId);
 const paymentFor = (state, registration) => state.payments.find((item) => item.registrationId === registration?.id || item.registrationIds?.includes(registration?.id));
 const refundFor = (state, registration) => [...state.refundRequests].reverse().find((item) => item.registrationId === registration?.id);
-const emergencyFor = (state, registration) => state.emergencyContacts?.find((item) => item.registrationId === registration?.id);
 const WITHDRAWAL_NOTIFICATION_PURPOSES = new Set(["runner_withdrawal_confirmation", "organiser_withdrawal_notification"]);
 
 function managementAccess(state, token, at = new Date()) {
@@ -50,6 +49,7 @@ export function managementActionEligibility(state, registration, { at = new Date
   else if (!acceptingPayments) continuePayment = unavailable("REGISTRATION_NOT_ACCEPTING");
   else if (payment?.status === "paid") continuePayment = unavailable("PAYMENT_ALREADY_COMPLETE");
   else if (payment?.status === "processing") continuePayment = unavailable("PAYMENT_PROCESSING");
+  else if (runnerPaymentState(state, registration.id, at).state === "payment_review") continuePayment = unavailable("PAYMENT_REVIEW_REQUIRED");
   else if (payment?.status === "refunded" || refund?.status === "refunded") continuePayment = unavailable("PAYMENT_REFUNDED");
   else if (!paymentCanContinue) continuePayment = unavailable("PAYMENT_NOT_AVAILABLE");
 
@@ -84,15 +84,15 @@ function managementView(state, registration, at = new Date(), { paymentsAvailabl
   const runner = runnerFor(state, registration);
   const payment = paymentFor(state, registration);
   const refund = refundFor(state, registration);
-  const paymentState = runnerPaymentState(state, registration.id);
-  const emergency = emergencyFor(state, registration);
+  const paymentState = runnerPaymentState(state, registration.id, at);
+  const emergency = registrationEmergencyContact(state, registration, runner);
   const stateName = refund?.status === "requested" ? "refund_requested" : refund?.status === "approved" ? "refund_approved" : refund?.status === "rejected" ? "refund_rejected" : refund?.status === "refunded" ? "refunded" : paymentState.state;
   const labels = { refund_requested: "Refund requested", refund_approved: "Refund approved", refund_rejected: "Refund request not approved", refunded: "Refund completed" };
   const actions = managementActionEligibility(state, registration, { at, paymentsAvailable });
   return {
     ok: true,
     registration: {
-      reference: registration.testReference,
+      reference: registrationReference(registration, state.environment),
       runner: {
         firstName: runner.firstName, lastName: runner.lastName, email: runner.email, phone: runner.phone,
         addressLine1: runner.addressLine1, addressLine2: runner.addressLine2, city: runner.city, postcode: runner.postcode,
@@ -126,7 +126,7 @@ function prepareWithdrawal(state, registrationId, actor, at, { organiserEmail, p
   const totals = capacitySummary(state);
   const data = {
     runnerName: `${runner.firstName} ${runner.lastName}`,
-    entryReference: registration.testReference,
+    entryReference: registrationReference(registration, state.environment),
     raceNumber: registration.raceNumber ?? null,
     withdrawnAt: registration.withdrawnAt,
     confirmedCount: totals.confirmed,
@@ -201,8 +201,8 @@ export class Phase3IntegrationService {
   async paymentStatus(managementToken, at = new Date()) {
     const state = await this.repository.read(); const access = managementAccess(state, managementToken, at);
     if (!access.ok) return access;
-    const view = managementView(state, access.registration, new Date(), { paymentsAvailable: Boolean(this.stripeGateway) });
-    return { ...runnerPaymentState(state, access.registration.id), state: view.registration.payment.state, label: view.registration.payment.label };
+    const view = managementView(state, access.registration, at, { paymentsAvailable: Boolean(this.stripeGateway) });
+    return { ...runnerPaymentState(state, access.registration.id, at), state: view.registration.payment.state, label: view.registration.payment.label };
   }
 
   async managementEntry(managementToken, at = new Date()) {
@@ -247,9 +247,19 @@ export class Phase3IntegrationService {
       if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
       const allowed = ["phone", "addressLine1", "addressLine2", "city", "postcode", "raceCategory", "genderCategory", "club", "wfraMember", "wfraMembershipNumber"];
       for (const field of allowed) if (changes[field] !== undefined && changes[field] !== runner[field]) { runner[field] = typeof changes[field] === "string" ? changes[field].trim() : changes[field]; changedFields.push(field); }
-      const emergency = emergencyFor(state, registration);
-      if (emergency && emergencyName !== undefined && emergency.name !== emergencyName) { emergency.name = emergencyName; changedFields.push("emergencyContactName"); }
-      if (emergency && emergencyPhone !== undefined && emergency.phone !== emergencyPhone) { emergency.phone = emergencyPhone; changedFields.push("emergencyContactPhone"); }
+      if (emergencyName !== undefined || emergencyPhone !== undefined) {
+        const existing = registrationEmergencyContact(state, registration, runner);
+        const name = emergencyName ?? existing?.name ?? "";
+        const phone = emergencyPhone ?? existing?.phone ?? "";
+        if (name !== (existing?.name ?? "")) changedFields.push("emergencyContactName");
+        if (phone !== (existing?.phone ?? "")) changedFields.push("emergencyContactPhone");
+        if (changedFields.includes("emergencyContactName") || changedFields.includes("emergencyContactPhone")) {
+          state.emergencyContacts ??= [];
+          const stored = state.emergencyContacts.find((item) => item.registrationId === registration.id);
+          if (stored) Object.assign(stored, { name, phone });
+          else state.emergencyContacts.push({ id: `emergency_${crypto.randomUUID()}`, registrationId: registration.id, name, phone, deleteAfterEvent: true });
+        }
+      }
       if (runner.wfraMember !== true) runner.wfraMembershipNumber = null;
       registration.updatedAt = iso(at);
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: "runner", actorId: null, action: "runner_details_amended", subjectId: registration.id, before: null, after: { fields: changedFields }, environment: state.environment });
@@ -442,16 +452,97 @@ export class Phase3IntegrationService {
       const snapshot = await this.repository.read();
       if (snapshot.payments.some((item) => item.orderId && item.paymentIntentId === providerPaymentIntent)) return this.orders.webhook(event, at);
     }
-    return this.repository.transaction(async (state) => {
+    return this.reconcileSinglePayment(event, at);
+  }
+
+  async reconcileSinglePayment(event, at, { expectedPayment = null, actor = null } = {}) {
+    const prepared = await this.repository.transaction((state) => {
+      if (expectedPayment) {
+        const registration = state.registrations.find((item) => item.id === expectedPayment.registrationId && activeRegistration(item));
+        const current = registration && paymentFor(state, registration);
+        if (!registration || !current || current.id !== expectedPayment.id || current.checkoutSessionId !== expectedPayment.checkoutSessionId || current.expectedAmountPence !== expectedPayment.expectedAmountPence || current.currency !== expectedPayment.currency || current.status === "refunded") {
+          return { ok: false, code: "PAYMENT_REVIEW_CHANGED" };
+        }
+      }
       const result = reconcileStripeEvent(state, event, { at });
-      if (!result.ok || result.duplicate) return result;
-      const object = event?.data?.object ?? {};
+      if (!result.ok) return result;
+      if (result.duplicate) {
+        const attempt = state.emailOutbox?.find((item) => item.sourceEventId === event.id && ["prepared", "failed"].includes(item.status));
+        return attempt ? { ...result, attemptId: attempt.id } : result;
+      }
+      const object = event.data.object;
       const payment = state.payments.find((item) => item.checkoutSessionId === object.id || (object.payment_intent && item.paymentIntentId === (object.payment_intent.id ?? object.payment_intent)));
-      const registration = state.registrations.find((item) => item.id === payment?.registrationId); const runner = runnerFor(state, registration);
+      const registration = state.registrations.find((item) => item.id === payment?.registrationId);
+      const runner = runnerFor(state, registration);
       const template = result.paymentStatus === "paid" ? "entry_confirmed" : result.paymentStatus === "failed" ? "payment_unsuccessful" : result.paymentStatus === "refunded" ? "refund_completed" : null;
-      if (template && runner) await this.communicate(state, { registrationId: registration.id, template, intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, `stripe-event:${event.id}:${template}`, at);
-      return result;
+      if (!template || !runner) return result;
+
+      const data = { runnerName: `${runner.firstName} ${runner.lastName}` };
+      let managementTokenId = null;
+      if (template === "entry_confirmed") {
+        const previousConfirmation = state.communications?.some((receipt) => receipt.registrationId === registration.id && receipt.template === template && receipt.delivery === "sent");
+        if (previousConfirmation) return result;
+        const management = issueManagementToken(state, registration.id, { actorType: "system" }, at, { replaceExisting: false });
+        managementTokenId = management.tokenId;
+        Object.assign(data, {
+          entryReference: registrationReference(registration, state.environment),
+          raceDate: state.event.raceDate,
+          managementUrl: this.managementUrl(management.token),
+          managementExpiresAt: management.expiresAt,
+          managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`,
+          raceInfoUrl: `${this.publicBaseUrl}/info.html`
+        });
+      }
+      if (expectedPayment) state.auditEvents.push({
+        id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), action: "stripe_payment_checked_by_organiser",
+        subjectId: registration.id, actorType: actor.actorType, actorId: actor.id ?? null,
+        environment: state.environment, before: null, after: { paymentStatus: result.paymentStatus }
+      });
+      const attempt = prepareRegistrationEmailOutboxAttempt(state, {
+        registrationId: registration.id, sourceEventId: event.id, managementTokenId,
+        purpose: template === "entry_confirmed" ? "initial_confirmation" : template,
+        idempotencyKey: template === "entry_confirmed" ? `registration:${registration.id}:paid-confirmation` : `stripe-event:${event.id}:${template}`,
+        message: { registrationId: registration.id, template, intendedRecipientAddress: runner.email, data }
+      }, at);
+      return { ...result, attemptId: attempt.id };
     });
+    if (!prepared.attemptId) return prepared;
+    const delivery = await this.orders.deliverPreparedOutboxAttempt(prepared.attemptId, at);
+    const { attemptId, ...result } = prepared;
+    return { ...result, emailDeliveryFailed: !delivery.ok };
+  }
+
+  async checkWaitingListPayment(actor, registrationId, at = new Date()) {
+    if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
+    if (!this.stripeGateway?.retrieveCheckoutSession) return { ok: false, code: "PAYMENTS_UNAVAILABLE" };
+    const state = await this.repository.read();
+    const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
+    const payment = registration && paymentFor(state, registration);
+    if (!payment?.checkoutSessionId || payment.orderId || !acceptedWaitingListRegistration(state, registrationId)) return { ok: false, code: "PAYMENT_REVIEW_UNAVAILABLE" };
+    if (payment.status === "paid" && registration.placeStatus === "confirmed") return { ok: true, duplicate: true, paymentStatus: "paid", placeStatus: "confirmed" };
+    if (!["checkout_pending", "processing", "expired", "failed"].includes(payment.status)) return { ok: false, code: "PAYMENT_REVIEW_UNAVAILABLE" };
+
+    let session;
+    try { session = await this.stripeGateway.retrieveCheckoutSession(payment.checkoutSessionId); }
+    catch { return { ok: false, code: "PAYMENTS_UNAVAILABLE" }; }
+    if (session?.id !== payment.checkoutSessionId || session.mode !== "payment" || session.livemode !== (state.environment === "production") ||
+        session.metadata?.registrationId !== registration.id || session.metadata?.paymentId !== payment.id ||
+        session.amount_total !== payment.expectedAmountPence || session.currency !== payment.currency) {
+      return { ok: false, code: "PAYMENT_MISMATCH" };
+    }
+    const intent = session.payment_intent;
+    const charge = intent?.latest_charge;
+    if (session.status !== "complete" || session.payment_status !== "paid" || intent?.status !== "succeeded") {
+      return { ok: false, code: "PAYMENT_NOT_CONFIRMED" };
+    }
+    if (!intent.id || !charge?.id || charge.refunded || charge.status !== "succeeded" || !charge.captured || charge.disputed || charge.amount_refunded !== 0 ||
+        charge.amount_captured !== session.amount_total || charge.currency !== session.currency ||
+        intent.amount_received !== session.amount_total || intent.currency !== session.currency) {
+      return { ok: false, code: "PAYMENT_REVIEW_REQUIRED" };
+    }
+    return this.reconcileSinglePayment({
+      id: `stripe-checkout-review:${session.id}`, type: "checkout.session.completed", data: { object: session }
+    }, at, { expectedPayment: payment, actor });
   }
 
   async refund(actor, refundRequestId, at = new Date()) {

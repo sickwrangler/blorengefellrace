@@ -42,9 +42,10 @@ The transfer/refund cutoff is 28 October 2026 at 23:59 Europe/London. An excepti
 3. Confirm whether Stripe says paid, processing, failed, expired or refunded and verify the amount/currency.
 4. Inspect Stripe webhook delivery for the relevant supported event and its HTTP response.
 5. Inspect Application Insights requests/traces and the entry audit/payment reconciliation state.
-6. Retry webhook delivery from Stripe only if the application endpoint is healthy and the original event is understood; idempotency makes a genuine duplicate safe.
-7. Do **not** manually mark paid or ask the runner to pay again while Stripe shows success/processing.
-8. If no supported repair exists, remain paused and implement/review a controlled reconciliation tool.
+6. For a direct waiting-list offer, open the accepted offer's linked entry in the organiser portal and choose **Check Stripe payment**. The app reads the registered live Checkout Session, checks the successful charge and confirms the place if capacity permits. A confirmation email is queued with the payment update. The Stripe API key needs read access to Checkout Sessions, PaymentIntents and Charges.
+7. If the portal reports a capacity conflict, resolve the capacity issue before retrying. For other entries, retry webhook delivery from Stripe only if the endpoint is healthy and the original event is understood.
+8. Do **not** manually mark paid or ask the runner to pay again while Stripe shows success/processing.
+9. If no supported repair exists, remain paused and implement/review a controlled reconciliation tool.
 
 ## “Refund says it failed”
 

@@ -42,6 +42,7 @@ export function runnerMessageForCode(code) {
     MANAGEMENT_ENTRY_UNAVAILABLE: "This entry is no longer available through runner self-service. Contact the organiser if you need help.",
     ENTRY_INACTIVE: "This entry is no longer active, so it cannot be changed through runner self-service.",
     CAPACITY_FULL: "There are currently no entry places available.",
+    PAYMENT_REVIEW_REQUIRED: "Contact the race organiser to check your payment before trying again.",
     REFUND_NOT_READY: "A refund can only be requested after payment is confirmed.",
     REFUND_ALREADY_IN_PROGRESS: "A refund request is already being reviewed or processed.",
     REFUND_CUTOFF_PASSED: "The refund-request deadline has passed. Please contact the organiser if you need help.",
