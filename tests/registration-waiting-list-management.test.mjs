@@ -256,7 +256,11 @@ test("organiser reconciles a legacy waiting-list payment from Stripe without exc
   const payment = state.payments[0];
   Object.assign(payment, { provider: "stripe", providerMode: "live", status: "checkout_pending", checkoutSessionId: "cs_live_synthetic", checkoutExpiresAt: new Date(at.getTime() + 30 * 60_000).toISOString(), expectedAmountPence: 600, currency: "gbp" });
   const checkedAt = new Date(at.getTime() + 31 * 60_000);
-  expireStalePaymentReservations(state, checkedAt);
+  // Historical state released by the old scheduler, retained to test recovery
+  // and capacity conflicts without requiring the corrected scheduler to repeat it.
+  payment.status = "expired";
+  payment.webhookReconciliationState = "locally_expired_awaiting_webhook";
+  registration.placeStatus = "none";
   for (let number = 0; number < state.event.capacity; number++) {
     assert.equal(addPlaceRegistration(state, { runnerId: `other-${number}`, placeStatus: "confirmed" }, organiser, checkedAt).ok, true);
   }

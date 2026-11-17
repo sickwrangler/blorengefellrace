@@ -1,0 +1,147 @@
+--- a/registration/server/phase3-integrations.mjs
++++ b/registration/server/phase3-integrations.mjs
+@@ -125,8 +125,23 @@
+ }
+ 
+ function stripeObject(event) { return event?.data?.object ?? {}; }
+-function findPaymentForStripeEvent(state, object) {
+-  return state.payments.find((item) => item.checkoutSessionId === object.id || (object.payment_intent && item.paymentIntentId === object.payment_intent) || (object.payment_intent && item.paymentIntentId === object.payment_intent?.id));
++export function findPaymentForStripeEvent(state, object) {
++  const intentId = typeof object.payment_intent === "string" ? object.payment_intent : object.payment_intent?.id;
++  const present = (value) => typeof value === "string" && value.length > 0;
++  const matches = state.payments.filter((item) =>
++    (present(object.id) && item.checkoutSessionId === object.id) ||
++    (present(intentId) && item.paymentIntentId === intentId));
++  if (!matches.length) return { ok: false, code: "PAYMENT_NOT_FOUND" };
++  if (matches.length !== 1) return { ok: false, code: "PAYMENT_MATCH_AMBIGUOUS" };
++  const payment = matches[0];
++  const metadata = object.metadata ?? {};
++  if ((metadata.paymentId && metadata.paymentId !== payment.id) ||
++      (metadata.registrationId && metadata.registrationId !== payment.registrationId) ||
++      (metadata.orderId && metadata.orderId !== payment.orderId) ||
++      (present(intentId) && present(payment.paymentIntentId) && intentId !== payment.paymentIntentId)) {
++    return { ok: false, code: "PAYMENT_MISMATCH" };
++  }
++  return { ok: true, payment };
+ }
+ 
+ export function reconcileStripeEvent(state, event, { at = new Date() } = {}) {
+@@ -134,13 +149,18 @@
+   state.processedPaymentEvents ??= [];
+   if (state.processedPaymentEvents.some((item) => item.id === event.id)) return { ok: true, duplicate: true };
+   const object = stripeObject(event);
+-  const payment = findPaymentForStripeEvent(state, object);
+-  if (!payment) return { ok: false, code: "PAYMENT_NOT_FOUND" };
++  const match = findPaymentForStripeEvent(state, object);
++  if (!match.ok) return match;
++  const { payment } = match;
+   const registration = state.registrations.find((item) => item.id === payment.registrationId);
+   if (!registration) return { ok: false, code: "NOT_FOUND" };
+   const success = ["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type);
+   if (success) {
+-    if (payment.status === "paid" || payment.status === "refunded") return { ok: true, duplicate: true };
++    if (payment.status === "paid" || payment.status === "refunded") {
++      if ((object.amount_total ?? object.amount_received) !== payment.expectedAmountPence || String(object.currency ?? "").toLowerCase() !== payment.currency) return { ok: false, code: "PAYMENT_MISMATCH" };
++      state.processedPaymentEvents.push({ id: event.id, type: event.type, processedAt: iso(at) });
++      return { ok: true, duplicate: true };
++    }
+     if (!activeRegistration(registration)) return { ok: false, code: "ENTRY_INACTIVE" };
+     const paid = object.amount_total ?? object.amount_received;
+     const currency = String(object.currency ?? "").toLowerCase();
+--- a/registration/server/phase3-service.mjs
++++ b/registration/server/phase3-service.mjs
+@@ -1,7 +1,7 @@
+ import crypto from "node:crypto";
+ import { authorize } from "./auth.mjs";
+ import { acceptedWaitingListRegistration, acceptWaitingListOffer, authorizePrivateInvitation, cancelWaitingListOffer, capacitySummary, createNextWaitingListOffer, createWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, publicWaitingListAvailable, registrationEmergencyContact, registrationReference, requestRefund, validateProductionRunner, withdrawRegistration, withdrawWaitingListEntry } from "./phase3-domain.mjs";
+-import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
++import { findPaymentForStripeEvent, beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
+ import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
+ import { OrderRegistrationService, issueDeclarationToken, prepareRegistrationEmailOutboxAttempt } from "./order-service.mjs";
+ import { reconcileEmailHealth } from "./email-health.mjs";
+@@ -481,7 +481,7 @@
+         return attempt ? { ...result, attemptId: attempt.id } : result;
+       }
+       const object = event.data.object;
+-      const payment = state.payments.find((item) => item.checkoutSessionId === object.id || (object.payment_intent && item.paymentIntentId === (object.payment_intent.id ?? object.payment_intent)));
++      const { payment } = findPaymentForStripeEvent(state, object);
+       const registration = state.registrations.find((item) => item.id === payment?.registrationId);
+       const runner = runnerFor(state, registration);
+       const template = result.paymentStatus === "paid" ? "entry_confirmed" : result.paymentStatus === "failed" ? "payment_unsuccessful" : result.paymentStatus === "refunded" ? "refund_completed" : null;
+--- a/registration/server/order-service.mjs
++++ b/registration/server/order-service.mjs
+@@ -1,3 +1,4 @@
++import { findPaymentForStripeEvent } from "./phase3-integrations.mjs";
+ import crypto from "node:crypto";
+ import { authorize } from "./auth.mjs";
+ import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, managementTokenExpiry, managementTokenIsExpired, validateProductionRunner, waitingListPriorityActive } from "./phase3-domain.mjs";
+@@ -540,9 +541,13 @@
+       if (!event?.id) return { ok: false, code: "UNSUPPORTED_EVENT" };
+       if (state.processedPaymentEvents.some((item) => item.id === event.id)) return { ok: true, duplicate: true, outboxAttemptIds: state.emailOutbox.filter((item) => item.sourceEventId === event.id).map((item) => item.id) };
+       const object = event.data?.object ?? {};
+-      const payment = state.payments.find((item) => item.orderId && (item.checkoutSessionId === object.id || item.paymentIntentId === (object.payment_intent?.id ?? object.payment_intent)));
+-      if (!payment) return { ok: false, code: "PAYMENT_NOT_FOUND" };
+-      const order = state.orders.find((item) => item.id === payment.orderId); const registrations = registrationsFor(state, order).filter(active);
++      const match = findPaymentForStripeEvent(state, object);
++      if (!match.ok) return match;
++      const { payment } = match;
++      if (!payment.orderId) return { ok: false, code: "PAYMENT_MISMATCH" };
++      const order = state.orders.find((item) => item.id === payment.orderId);
++      if (!order) return { ok: false, code: "ORDER_NOT_FOUND" };
++      const registrations = registrationsFor(state, order).filter(active);
+       if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type)) {
+         const paid = object.amount_total ?? object.amount_received; const currency = String(object.currency ?? "").toLowerCase();
+         if (paid !== payment.expectedAmountPence || currency !== "gbp") return { ok: false, code: "PAYMENT_MISMATCH" };
+--- /dev/null
++++ b/tests/stripe-webhook-matching.test.mjs
+@@ -0,0 +1,50 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { createPhase3State, capacitySummary } from '../registration/server/phase3-domain.mjs';
++import { reconcileStripeEvent, findPaymentForStripeEvent } from '../registration/server/phase3-integrations.mjs';
++import { createMemoryRepository } from '../registration/server/repositories.mjs';
++import { Phase3IntegrationService } from '../registration/server/phase3-service.mjs';
++const at = new Date('2026-11-17T12:00:00Z');
++function fixture() {
++ const state=createPhase3State({environment:'development',registrationState:'OPEN'});
++ state.registrations=[{id:'reg',runnerId:'runner',entryStatus:'accepted',placeStatus:'payment_reserved'}];
++ state.runners=[{id:'runner',firstName:'Synthetic',lastName:'Runner',email:'runner@example.com'}];
++ state.payments=[{id:'old',orderId:'old-order',status:'expired'},{id:'payment',registrationId:'reg',checkoutSessionId:'cs',status:'checkout_pending',expectedAmountPence:400,currency:'gbp'}];
++ state.processedPaymentEvents=[];state.emailOutbox=[];state.communications=[];
++ const event={id:'evt_original',type:'checkout.session.completed',data:{object:{id:'cs',payment_intent:'pi',amount_total:400,currency:'gbp',payment_status:'paid',metadata:{paymentId:'payment',registrationId:'reg'}}}};
++ return {state,event};
++}
++test('string and expanded intents ignore earlier order payment with absent intent',()=>{
++ for(const intent of ['pi',{id:'pi'}]){const {state,event}=fixture();event.data.object.payment_intent=intent;assert.equal(reconcileStripeEvent(state,event,{at}).ok,true);assert.equal(state.payments[0].status,'expired');assert.equal(state.payments[1].status,'paid');assert.equal(capacitySummary(state).confirmed,1);}
++});
++test('ambiguous provider references and conflicting metadata fail without mutation',()=>{
++ for(const kind of ['duplicate','metadata','intent']){const {state,event}=fixture();if(kind==='duplicate')state.payments.push({...state.payments[1],id:'duplicate'});if(kind==='metadata')event.data.object.metadata.paymentId='other';if(kind==='intent')state.payments[1].paymentIntentId='pi_other';const before=structuredClone(state);assert.equal(reconcileStripeEvent(state,event,{at}).ok,false);assert.deepEqual(state,before);}
++});
++test('missing registration is a genuine failure; missing identifiers never match undefined',()=>{
++ const {state,event}=fixture();state.registrations=[];assert.equal(reconcileStripeEvent(state,event,{at}).code,'NOT_FOUND');assert.equal(findPaymentForStripeEvent(state,{}).code,'PAYMENT_NOT_FOUND');
++});
++test('manual expanded reconciliation followed by original string event and duplicate keeps one confirmation',async()=>{
++ const {state,event}=fixture(); const repository=createMemoryRepository(state);let sent=0;
++ const service=new Phase3IntegrationService({repository,emailAdapter:{async send(){sent++;return {delivery:'sent',externalCall:false};}},stripeGateway:{verifyWebhook(raw,sig){if(sig!=='valid')throw Error();return JSON.parse(raw);}},publicBaseUrl:'https://example.com'});
++ assert.equal((await service.webhook(JSON.stringify(event),'bad',at)).code,'INVALID_WEBHOOK_SIGNATURE');
++ const manual=structuredClone(event);manual.id='stripe-checkout-review:cs';manual.data.object.payment_intent={id:'pi'};
++ assert.equal((await service.reconcileSinglePayment(manual,at)).ok,true);
++ assert.equal((await service.webhook(JSON.stringify(event),'valid',at)).duplicate,true);
++ assert.equal((await service.webhook(JSON.stringify(event),'valid',at)).duplicate,true);
++ const final=await repository.read();assert.equal(sent,1);assert.equal(final.processedPaymentEvents.length,2);assert.equal(final.registrations.length,1);assert.equal(capacitySummary(final).confirmed,1);
++});
++test('concurrent synthetic and original reconciliation serialize to one email and place',async()=>{
++ const {state,event}=fixture();const repository=createMemoryRepository(state);let sent=0;
++ const service=new Phase3IntegrationService({repository,emailAdapter:{async send(){sent++;return {delivery:'sent',externalCall:false};}},stripeGateway:{},publicBaseUrl:'https://example.com'});
++ const manual=structuredClone(event);manual.id='stripe-checkout-review:cs';manual.data.object.payment_intent={id:'pi'};
++ const results=await Promise.all([service.reconcileSinglePayment(manual,at),service.reconcileSinglePayment(event,at)]);assert.ok(results.every(r=>r.ok));assert.equal(sent,1);assert.equal(capacitySummary(await repository.read()).confirmed,1);
++});
++test('expired checkout may succeed with capacity; late expiry cannot release paid place',()=>{
++ const {state,event}=fixture();state.payments[1].status='expired';state.registrations[0].placeStatus='none';assert.equal(reconcileStripeEvent(state,event,{at}).ok,true);event.id='evt_expired';event.type='checkout.session.expired';assert.equal(reconcileStripeEvent(state,event,{at}).ok,true);assert.equal(state.payments[1].status,'paid');assert.equal(state.registrations[0].placeStatus,'confirmed');
++});
++test('late paid event cannot consume capacity reserved by other entries or offers',()=>{
++ const {state,event}=fixture();state.event.capacity=1;state.registrations[0].placeStatus='none';state.registrations.push({id:'other',entryStatus:'accepted',placeStatus:'confirmed'});const before=structuredClone(state);assert.equal(reconcileStripeEvent(state,event,{at}).code,'PAID_CAPACITY_CONFLICT');assert.deepEqual(state,before);
++});
++test('order matcher with no PaymentIntent uses the session and rejects duplicate session references',()=>{
++ const {state}=fixture();state.payments[0].checkoutSessionId='cs_order';assert.equal(findPaymentForStripeEvent(state,{id:'cs_order',metadata:{orderId:'old-order',paymentId:'old'}}).payment.id,'old');state.payments.push({...state.payments[0],id:'other-order-payment'});assert.equal(findPaymentForStripeEvent(state,{id:'cs_order'}).code,'PAYMENT_MATCH_AMBIGUOUS');
++});

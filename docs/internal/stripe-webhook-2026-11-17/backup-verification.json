@@ -1,0 +1,32 @@
+{
+  "verified": true,
+  "createdAt": "2026-11-17T20:54:06.737Z",
+  "sourceTimestamp": "2026-11-17T20:30:03.643927+00:00",
+  "sourceEtag": "W/\"datetime'2026-11-17T20%3A30%3A03.6439275Z'\"",
+  "stateChecksum": "4e83ad7df6cd74304735aa2f86d1795696223d1c1895e860acb1ce7ca9350696",
+  "entityChecksum": "c8ca63544af1dbc7a75bbeef12d73d970e07e13d7f8189526127901ed6d7abee",
+  "capacity": {
+    "capacity": 120,
+    "confirmed": 118,
+    "paymentReserved": 0,
+    "offerReserved": 2,
+    "reserved": 120,
+    "remaining": 0,
+    "waiting": 39
+  },
+  "counts": {
+    "registrations": 132,
+    "payments": 119,
+    "orders": 118,
+    "waitingList": 51,
+    "waitingListOffers": 9,
+    "auditEvents": 1074,
+    "processedPaymentEvents": 119,
+    "emailOutbox": 106,
+    "communications": 298
+  },
+  "encryptedBackupSha256": "25899f56c30182baa5c5eaf6d1e80769528d3a145a48c646f78f058adabcfcc1",
+  "backupPath": "/Users/paddyjarvis/Documents/Blorenge fell race website/blorengefellrace/.registration-private-backups/2026-11-17-pre-remediation.aes256gcm.json",
+  "keyPath": "/Users/paddyjarvis/.codex/visualizations/2026/11/17/01a1eb17-2568-7b31-b041-188fd375dae4/blorenge-production-backup-recovery.key",
+  "verification": "Authenticated decryption, entity checksum, state validation and isolated memory restore; no production restore attempted"
+}

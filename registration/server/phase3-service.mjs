@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
 import { acceptedWaitingListRegistration, acceptWaitingListOffer, authorizePrivateInvitation, cancelWaitingListOffer, capacitySummary, createNextWaitingListOffer, createWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, publicWaitingListAvailable, registrationEmergencyContact, registrationReference, requestRefund, validateProductionRunner, withdrawRegistration, withdrawWaitingListEntry } from "./phase3-domain.mjs";
-import { beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
+import { findPaymentForStripeEvent, beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken, prepareRegistrationEmailOutboxAttempt } from "./order-service.mjs";
 import { reconcileEmailHealth } from "./email-health.mjs";
@@ -481,7 +481,7 @@ export class Phase3IntegrationService {
         return attempt ? { ...result, attemptId: attempt.id } : result;
       }
       const object = event.data.object;
-      const payment = state.payments.find((item) => item.checkoutSessionId === object.id || (object.payment_intent && item.paymentIntentId === (object.payment_intent.id ?? object.payment_intent)));
+      const { payment } = findPaymentForStripeEvent(state, object);
       const registration = state.registrations.find((item) => item.id === payment?.registrationId);
       const runner = runnerFor(state, registration);
       const template = result.paymentStatus === "paid" ? "entry_confirmed" : result.paymentStatus === "failed" ? "payment_unsuccessful" : result.paymentStatus === "refunded" ? "refund_completed" : null;
@@ -527,14 +527,33 @@ export class Phase3IntegrationService {
     if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
     const state = await this.repository.read();
     const registration = state.registrations.find((item) => item.id === registrationId);
-    return this.#verifyWaitingListPayment(state, registration, actor, at);
+    const result = await this.#verifyWaitingListPayment(state, registration, actor, at);
+    await this.recordWaitingListReviewCheck(registrationId, result, actor, at);
+    return result;
+  }
+
+  async recordWaitingListReviewCheck(registrationId, result, actor, at) {
+    return this.repository.transaction((state) => {
+      const payment = state.payments.find((item) => item.registrationId === registrationId);
+      if (!payment?.reservationReview) return { ok: true };
+      const code = result.ok ? "PAYMENT_CONFIRMED" : result.code;
+      Object.assign(payment.reservationReview, { lastCheckedAt: iso(at), lastCheckCode: code });
+      state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at),
+        action: "waiting_list_payment_review_checked", subjectId: registrationId,
+        actorType: actor.actorType, actorId: actor.id ?? null, environment: state.environment,
+        before: null, after: { code } });
+      return { ok: true };
+    });
   }
 
   async checkOwnWaitingListPayment(managementToken, at = new Date()) {
     const state = await this.repository.read();
     const access = managementAccess(state, managementToken, at);
     if (!access.ok) return access;
-    return this.#verifyWaitingListPayment(state, access.registration, { actorType: "runner" }, at);
+    const actor = { actorType: "runner" };
+    const result = await this.#verifyWaitingListPayment(state, access.registration, actor, at);
+    await this.recordWaitingListReviewCheck(access.registration.id, result, actor, at);
+    return result;
   }
 
   async #verifyWaitingListPayment(state, registration, actor, at) {
@@ -741,6 +760,7 @@ export class Phase3IntegrationService {
           reminders: result.reminders,
           expiredOffers: result.expiredOffers,
           expiredPayments: result.expiredPayments,
+          ...(result.paymentReviews ? { paymentReviews: result.paymentReviews } : {}),
           availablePlaceReleased: result.availablePlaceReleased
         }
       };

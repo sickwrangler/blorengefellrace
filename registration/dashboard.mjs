@@ -21,11 +21,20 @@ function showNotice(message, error = false) {
 }
 async function render() {
   const [snapshot, integrations] = await Promise.all([prototype.all(), prototype.integrationStatus()]); currentState = snapshot.state; currentIntegrations = integrations;
+  const reviews = currentState.paymentReviews ?? [];
+  let reviewNotice = document.querySelector("#payment-review-notice");
+  if (!reviewNotice) {
+    reviewNotice = document.createElement("p"); reviewNotice.id = "payment-review-notice";
+    reviewNotice.className = "form-alert"; reviewNotice.setAttribute("role", "status");
+    document.querySelector("#organiser-alert").insertAdjacentElement("afterend", reviewNotice);
+  }
+  reviewNotice.hidden = reviews.length === 0;
+  reviewNotice.textContent = `${reviews.length} payment reservation${reviews.length === 1 ? "" : "s"} need organiser review; ${reviews.filter((review) => review.overdue).length} overdue. Places remain held. Open each entry and use Check Stripe payment; review unresolved results within two hours.`;
   const active = currentState.registrations.filter((item) => !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus));
   const accepted = active.filter((item) => item.placeStatus === "confirmed").length;
   const reserved = active.filter((item) => item.placeStatus === "payment_reserved").length;
   const waiting = active.filter((item) => item.entryStatus === "waiting_list").length;
-  const attention = active.filter((item) => ["created", "not_configured", "declined", "abandoned", "failed", "expired"].includes(item.paymentStatus)).length;
+  const attention = active.filter((item) => (["created", "not_configured", "declined", "abandoned", "failed", "expired"].includes(item.paymentStatus) || item.payment?.reservationReview?.status === "open")).length;
   const declarations = active.filter((item) => item.placeStatus === "confirmed" && item.declarationStatus === "pending").length;
   document.querySelector("#summary-accepted").textContent = accepted;
   document.querySelector("#summary-payment-reservations").textContent = reserved;
@@ -227,6 +236,12 @@ function renderDetail(item) {
   document.querySelector("#detail-reference").textContent = item.testReference;
   const money = (value, currency = "gbp") => value == null ? "Not recorded" : `${new Intl.NumberFormat("en-GB", { style: "currency", currency: String(currency).toUpperCase() }).format(value / 100)} ${String(currency).toUpperCase()}`;
   const fields = { "Email address": item.runner.email, "Phone number": item.runner.phone, "Club": item.runner.club, "Race category": item.runner.genderCategory, "WFRA member?": item.runner.wfraMember ? "Yes (self-declared, not verified)" : "No", "WFRA membership number": item.runner.wfraMembershipNumber ?? "Not supplied", "Entry status": item.entryStatus.replace("_", " "), "Place status": item.placeStatus.replaceAll("_", " "), "Payment status": item.paymentStatus.replaceAll("_", " "), "Declaration": item.declarationStatus === "complete" ? `Complete · ${String(item.declarationCompletionMethod ?? "digital").replaceAll("_", " ")}` : "Required before the runner can start", "Cleared to start": item.clearedToStart ? "Yes" : "No", "Expected charge": money(item.pricing?.priceActuallyChargedPence ?? item.payment?.expectedAmountPence, item.payment?.currency), "Actual charge": money(item.payment?.actualPaidAmountPence, item.payment?.currency), "Waiting-list position": item.waitingListPosition ?? "Not applicable", "Race number": item.raceNumber ?? "Not assigned", "Emergency contact name": item.runner.emergencyName, "Emergency contact phone number": item.runner.emergencyPhone, "Price calculated by server": item.pricing?.priceActuallyChargedPence == null ? "Not recorded" : `£${(item.pricing.priceActuallyChargedPence / 100).toFixed(2)} · ${item.pricing.adjustmentReason}` };
+  if (item.payment?.reservationReview) {
+    const review = item.payment.reservationReview;
+    Object.assign(fields, { "Payment review": review.status === "open" ? "Organiser action required; place remains reserved" : "Resolved",
+      "Review due": new Date(review.dueAt).toLocaleString(),
+      "Last payment check": review.lastCheckedAt ? `${new Date(review.lastCheckedAt).toLocaleString()} · ${review.lastCheckCode}` : "Not yet checked" });
+  }
   if (item.transfer?.transferred) Object.assign(fields, { "Transfer count": item.transfer.count, "Original runner": item.transfer.originalRunnerName || "Historical runner record unavailable", "Previous runner": item.transfer.previousRunnerName || "Historical runner record unavailable", "Latest transfer": item.transfer.latestAt ? new Date(item.transfer.latestAt).toLocaleString() : "Time unavailable" });
   document.querySelector("#entry-details").replaceChildren(...Object.entries(fields).flatMap(([label, value]) => { const dt = document.createElement("dt"); dt.textContent = label; const dd = document.createElement("dd"); dd.textContent = value; return [dt, dd]; }));
   renderActions(item); renderMessages(item);

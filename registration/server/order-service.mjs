@@ -1,3 +1,4 @@
+import { findPaymentForStripeEvent } from "./phase3-integrations.mjs";
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
 import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, managementTokenExpiry, managementTokenIsExpired, validateProductionRunner, waitingListPriorityActive } from "./phase3-domain.mjs";
@@ -540,12 +541,20 @@ export class OrderRegistrationService {
       if (!event?.id) return { ok: false, code: "UNSUPPORTED_EVENT" };
       if (state.processedPaymentEvents.some((item) => item.id === event.id)) return { ok: true, duplicate: true, outboxAttemptIds: state.emailOutbox.filter((item) => item.sourceEventId === event.id).map((item) => item.id) };
       const object = event.data?.object ?? {};
-      const payment = state.payments.find((item) => item.orderId && (item.checkoutSessionId === object.id || item.paymentIntentId === (object.payment_intent?.id ?? object.payment_intent)));
-      if (!payment) return { ok: false, code: "PAYMENT_NOT_FOUND" };
-      const order = state.orders.find((item) => item.id === payment.orderId); const registrations = registrationsFor(state, order).filter(active);
+      const match = findPaymentForStripeEvent(state, object);
+      if (!match.ok) return match;
+      const { payment } = match;
+      if (!payment.orderId) return { ok: false, code: "PAYMENT_MISMATCH" };
+      const order = state.orders.find((item) => item.id === payment.orderId);
+      if (!order) return { ok: false, code: "ORDER_NOT_FOUND" };
+      const registrations = registrationsFor(state, order).filter(active);
       if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type)) {
         const paid = object.amount_total ?? object.amount_received; const currency = String(object.currency ?? "").toLowerCase();
         if (paid !== payment.expectedAmountPence || currency !== "gbp") return { ok: false, code: "PAYMENT_MISMATCH" };
+        if (["paid", "refunded"].includes(payment.status)) {
+          state.processedPaymentEvents.push({ id: event.id, type: event.type, processedAt: iso(at) });
+          return { ok: true, duplicate: true, outboxAttemptIds: [] };
+        }
         if (event.type === "checkout.session.completed" && object.payment_status && object.payment_status !== "paid") { payment.status = "processing"; order.status = "payment_processing"; }
         else {
           const unreserved = registrations.some((registration) => registration.placeStatus === "none");
