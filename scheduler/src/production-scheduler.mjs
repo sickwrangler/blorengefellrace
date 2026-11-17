@@ -27,6 +27,7 @@ export function createProductionSchedulerHandler({ service, environment = proces
     try {
       const result = await service.runScheduledWork(schedulerActor, scheduledAt);
       if (!result?.ok) throw new Error("Production scheduled registration work was rejected.");
+      if (result.paymentReviews?.open > 0) logger.error("stripe_payment_reconciliation_failed", { environment: "production", reason: "reservation_review_required", ...result.paymentReviews });
       if (result.emailHealth?.missing > 0) logger.error("registration_confirmation_missing", { environment: "production", count: result.emailHealth.missing });
       if (result.emailHealth?.backlog > 0) logger.error("registration_email_failed_backlog", { environment: "production", count: result.emailHealth.backlog, oldestAgeMinutes: result.emailHealth.oldestFailedAgeMinutes });
       const emailRecovery = recovery.enabled ? await service.runScheduledConfirmationRecovery(schedulerActor, { maxMessages: recovery.maxMessages }, scheduledAt) : { ok: true, status: "disabled", sent: 0 };

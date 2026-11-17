@@ -1,0 +1,178 @@
+
+['scripts/validate-site.mjs']
+Validated 18 HTML files, JavaScript syntax, local links/assets, IDs, and basic accessibility.
+
+['scripts/validate-registration.mjs']
+Validated registration state guards, synthetic fixtures, HTML/mobile source, JavaScript syntax and external-service boundaries.
+
+['scripts/validate-route.mjs']
+Validated confirmed GPX geometry, metadata boundary, official route facts, map bounds and failure states.
+
+['scripts/validate-photos.mjs']
+Validated 18 image records, source/output paths, assignments, roles, focal points, permissions, public size and stripped display metadata.
+Managed image usage:
+home-hero
+  → index.html
+home-descent
+  → index.html
+home-community-start
+  → index.html
+home-community-runner-dog
+  → index.html
+home-wildfire-response
+  → index.html
+home-wildfire-smoke
+  → index.html
+info-finishers
+  → info.html
+info-winner-bethan
+  → info.html
+info-winner-tom
+  → info.html
+route-ascent
+  → route.html
+  → recce.html
+route-start
+  → route.html
+route-tunnel
+  → route.html
+route-tramroad
+  → route.html
+route-steep-climb
+  → route.html
+route-trig
+  → route.html
+route-finish
+  → route.html
+route-muddy-descent
+  → route.html
+kit-swap-2024
+  → kit-swap.html
+Zero usages: none
+Multiple usages: route-ascent
+
+['scripts/validate-public-results.mjs']
+Validated 102 public result rows, allowlisted fields, positions, times, podiums, and summary totals.
+
+['scripts/simulate-registration-production.mjs']
+{"ok":true,"operationalState":"CLOSED","capacity":120,"counts":{"registrations":0,"orders":0,"payments":0,"waitingList":0},"stripe":"disabled","email":"disabled","under18Entries":"disabled","appFiles":71,"apiFiles":23,"schedulerFiles":20}
+
+['scripts/stage-deployment-artifacts.mjs', 'production-registration']
+production-registration artifact (94 files):
+api/package-lock.json
+api/package.json
+api/src/functions/registration-production.mjs
+api/src/private-workbook.mjs
+api/src/production-config.mjs
+api/src/production-providers.mjs
+api/src/production-storage.mjs
+api/src/shared/declarations.mjs
+api/src/shared/server/acs-email-delivery.mjs
+api/src/shared/server/auth.mjs
+api/src/shared/server/communications.mjs
+api/src/shared/server/email-health.mjs
+api/src/shared/server/email-templates.mjs
+api/src/shared/server/order-service.mjs
+api/src/shared/server/phase3-domain.mjs
+api/src/shared/server/phase3-integrations.mjs
+api/src/shared/server/phase3-service.mjs
+api/src/shared/server/private-export.mjs
+api/src/shared/server/production-api.mjs
+api/src/shared/server/production-bootstrap.mjs
+api/src/shared/server/production-service.mjs
+api/src/shared/server/production-storage-codec.mjs
+api/src/shared/server/repositories.mjs
+app/404.html
+app/components/footer/footer.css
+app/components/footer/footer.html
+app/components/navbar/navbar.css
+app/components/navbar/navbar.html
+app/data/photos/manifest.json
+app/data/public/results/2025.json
+app/data/public/results/2025.schema.json
+app/downloads/blorenge-fell-race-2026.gpx
+app/enter.html
+app/images/OS Map blorenge.png
+app/images/WFRAbanner.png
+app/images/blorenge_contour_lines.png
+app/images/blorenge_fellrace_logo.svg
+app/images/blorenge_fellrace_logo_white.svg
+app/images/generated/photos/home-community-runner-dog.jpg
+app/images/generated/photos/home-community-start.jpg
+app/images/generated/photos/home-descent.jpg
+app/images/generated/photos/home-hero.jpg
+app/images/generated/photos/home-wildfire-response.jpg
+app/images/generated/photos/home-wildfire-smoke.jpg
+app/images/generated/photos/info-finishers.jpg
+app/images/generated/photos/info-winner-bethan.jpg
+app/images/generated/photos/info-winner-tom.jpg
+app/images/generated/photos/kit-swap-2024.jpg
+app/images/generated/photos/route-ascent.jpg
+app/images/generated/photos/route-finish.jpg
+app/images/generated/photos/route-muddy-descent.jpg
+app/images/generated/photos/route-start.jpg
+app/images/generated/photos/route-steep-climb.jpg
+app/images/generated/photos/route-tramroad.jpg
+app/images/generated/photos/route-trig.jpg
+app/images/generated/photos/route-tunnel.jpg
+app/index.html
+app/info.html
+app/kit-swap.html
+app/photo-manager.js
+app/privacy.html
+app/recce.html
+app/registration/dashboard.html
+app/registration/dashboard.mjs
+app/registration/declaration.html
+app/registration/declaration.mjs
+app/registration/declarations.mjs
+app/registration/index.html
+app/registration/manage.html
+app/registration/manage.mjs
+app/registration/organiser-view.mjs
+app/registration/payment-return.html
+app/registration/payment-return.mjs
+app/registration/payment-state.mjs
+app/registration/production-client.mjs
+app/registration/production-query.mjs
+app/registration/production-validation.mjs
+app/registration/prototype.css
+app/registration/runner-access.mjs
+app/registration/runner-errors.mjs
+app/registration/runner-flow.mjs
+app/registration/runner.mjs
+app/registration/start-list.html
+app/registration/start-list.mjs
+app/result.html
+app/route-map.js
+app/route.html
+app/script.js
+app/staticwebapp.config.json
+app/style.css
+app/style_info.css
+app/style_results.css
+app/style_route.css
+app/style_winners.css
+
+['scripts/stage-registration-production-scheduler.mjs']
+production scheduler artifact (20 files):
+host.json
+package-lock.json
+package.json
+src/functions/registration-production-scheduler.mjs
+src/production-email.mjs
+src/production-scheduler.mjs
+src/production-storage.mjs
+src/shared/declarations.mjs
+src/shared/server/acs-email-delivery.mjs
+src/shared/server/auth.mjs
+src/shared/server/communications.mjs
+src/shared/server/email-health.mjs
+src/shared/server/email-templates.mjs
+src/shared/server/order-service.mjs
+src/shared/server/phase3-domain.mjs
+src/shared/server/phase3-integrations.mjs
+src/shared/server/phase3-service.mjs
+src/shared/server/production-bootstrap.mjs
+src/shared/server/production-storage-codec.mjs
+src/shared/server/repositories.mjs

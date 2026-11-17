@@ -1,0 +1,27 @@
+{
+  "verified": true,
+  "sourceDeployment": {
+    "id": "2260a9ac-e444-415a-ad43-adbb52eed86a",
+    "status": 4,
+    "active": true,
+    "complete": true,
+    "start_time": "2026-11-14T09:35:20.497125Z",
+    "end_time": "2026-11-14T09:36:32.9646776Z",
+    "deployer": "az_cli"
+  },
+  "container": "scheduler-app-package",
+  "blobName": "2260a9ac-e444-415a-ad43-adbb52eed86a.zip",
+  "packagePath": "/Users/paddyjarvis/Documents/Blorenge fell race website/blorengefellrace/.registration-private-backups/scheduler-before-remediation-2260a9ac.zip",
+  "packageSha256": "3c8e52bae55141a775457555a067faf8388df8e5af84fdd5881e78a3c2f8967d",
+  "bytes": 11915683,
+  "zipIntegrity": "passed",
+  "privateSettingsFiles": false,
+  "fileCount": 8399,
+  "sharedModuleHashes": {
+    "src/production-scheduler.mjs": "d648e620180092f69c798a4b737a773a0943cb152715612a409ff1b072286299",
+    "src/functions/registration-production-scheduler.mjs": "a69d2190bb9c2c44a76d373d951debf8adf73fd4e2e27fc73780b5d0da9589f6",
+    "src/shared/server/phase3-integrations.mjs": "6a01be526b3ee82f88f05a8e172a123515b578142c24415903f615ecdb065959",
+    "src/shared/server/phase3-domain.mjs": "11c3aae5b7463c33c69e8c07cc47836e075bf895e9a2e57655aa32bfafe55805",
+    "src/shared/server/phase3-service.mjs": "e7388572b96cf861bc9cdf91cfd686bd19a9257993d515376296e81d3ba6c6dd"
+  }
+}

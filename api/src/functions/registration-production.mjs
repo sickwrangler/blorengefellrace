@@ -44,6 +44,7 @@ const handler = async (request, context) => {
       else { try { body = rawBody ? JSON.parse(rawBody) : {}; } catch { return { status: 400, jsonBody: { ok: false, code: "INVALID_JSON" } }; } }
     }
     const result = await handle({ method: request.method, pathname: url.pathname, headers, body, hostname: url.hostname, query: Object.fromEntries(url.searchParams) });
+    if (pathname === "/api/v3/stripe/webhook" && result.status >= 400) context.warn("stripe_payment_reconciliation_failed", { environment: "production", status: result.status, code: result.body?.code ?? "UNKNOWN" });
     return { status: result.status, headers: result.headers, body: Buffer.isBuffer(result.body) || result.body instanceof Uint8Array ? result.body : JSON.stringify(result.body) };
   } catch (error) {
     if (request.method === "POST" && pathname === "/api/v4/orders") context.error("registration_order_creation_5xx", { environment: "production" });

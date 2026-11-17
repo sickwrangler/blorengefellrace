@@ -1,0 +1,71 @@
+--- a/src/shared/server/phase3-integrations.mjs
++++ b/src/shared/server/phase3-integrations.mjs
+@@ -183,10 +183,36 @@
+   return { ok: true, state: payment.status, label: labels[payment.status] ?? "Payment processing", canRetry: ["failed", "expired"].includes(payment.status) };
+ }
+ 
++function acceptedWaitingListRegistration(state, registrationId) {
++  return (state.auditEvents ?? []).some((event) => event.action === "waiting_list_offer_accepted" && event.after?.registrationId === registrationId);
++}
++// Review holds remain capacity reservations until provider evidence resolves them.
++// The organiser owns the queue; crossing the review deadline escalates, never releases.
++export const PAYMENT_RESERVATION_REVIEW_HOURS = 2;
++export function waitingListPaymentReviews(state, at = new Date()) {
++  return state.payments.filter((payment) => payment.reservationReview?.status === "open")
++    .map((payment) => ({ paymentId: payment.id, registrationId: payment.registrationId,
++      ...payment.reservationReview, overdue: new Date(payment.reservationReview.dueAt) <= new Date(at) }));
++}
+ export function expireStalePaymentReservations(state, at = new Date()) {
+   let expired = 0;
+-  for (const payment of state.payments.filter((item) => item.status === "checkout_pending" && new Date(item.checkoutExpiresAt) <= new Date(at))) {
++  for (const payment of state.payments.filter((item) => ["checkout_pending", "processing"].includes(item.status) && new Date(item.checkoutExpiresAt) <= new Date(at))) {
+     const registration = state.registrations.find((item) => item.id === payment.registrationId);
++    // A local deadline is not evidence that Stripe failed to collect payment.
++    // Keep an existing direct-offer reservation counted until provider evidence
++    // resolves it. Never reacquire a reservation already released historically.
++    if (registration?.placeStatus === "payment_reserved" && payment.checkoutSessionId && acceptedWaitingListRegistration(state, registration.id)) {
++      if (payment.reservationReview?.status === "open") continue;
++      payment.status = "processing";
++      payment.webhookReconciliationState = "reservation_review_required";
++      payment.reservationReview = { status: "open", ownerRole: "organiser", openedAt: iso(at),
++        dueAt: new Date(new Date(at).getTime() + PAYMENT_RESERVATION_REVIEW_HOURS * 3_600_000).toISOString(),
++        reason: "checkout_confirmation_missing" };
++      payment.updatedAt = iso(at);
++      audit(state, "payment_reservation_review_required", registration.id, {}, at);
++      continue;
++    }
++    if (payment.status !== "checkout_pending") continue;
+     payment.status = "expired"; payment.webhookReconciliationState = "locally_expired_awaiting_webhook"; payment.updatedAt = iso(at);
+     if (registration && registration.placeStatus !== "confirmed") { registration.placeStatus = "none"; registration.updatedAt = iso(at); }
+     audit(state, "payment_reservation_expired", payment.registrationId, {}, at); expired += 1;
+@@ -262,5 +288,8 @@
+   }
+   const offers = expireWaitingListOffers(state, actor, at);
+   const payments = expireStalePaymentReservations(state, at);
+-  return { ok: true, reminders: reminders.length, expiredOffers: offers.expired, expiredPayments: payments.expired, availablePlaceReleased: offers.expired > 0 && offers.capacity.remaining > 0 };
+-}
++  const reviews = waitingListPaymentReviews(state, at);
++  return { ok: true, reminders: reminders.length, expiredOffers: offers.expired, expiredPayments: payments.expired,
++    ...(reviews.length ? { paymentReviews: { open: reviews.length, overdue: reviews.filter((item) => item.overdue).length } } : {}),
++    availablePlaceReleased: offers.expired > 0 && offers.capacity.remaining > 0 };
++}
+--- a/src/shared/server/phase3-service.mjs
++++ b/src/shared/server/phase3-service.mjs
+@@ -626,6 +626,7 @@
+           reminders: result.reminders,
+           expiredOffers: result.expiredOffers,
+           expiredPayments: result.expiredPayments,
++          ...(result.paymentReviews ? { paymentReviews: result.paymentReviews } : {}),
+           availablePlaceReleased: result.availablePlaceReleased
+         }
+       };
+--- a/src/production-scheduler.mjs
++++ b/src/production-scheduler.mjs
+@@ -27,6 +27,7 @@
+     try {
+       const result = await service.runScheduledWork(schedulerActor, scheduledAt);
+       if (!result?.ok) throw new Error("Production scheduled registration work was rejected.");
++      if (result.paymentReviews?.open > 0) logger.error("stripe_payment_reconciliation_failed", { environment: "production", reason: "reservation_review_required", ...result.paymentReviews });
+       if (result.emailHealth?.missing > 0) logger.error("registration_confirmation_missing", { environment: "production", count: result.emailHealth.missing });
+       if (result.emailHealth?.backlog > 0) logger.error("registration_email_failed_backlog", { environment: "production", count: result.emailHealth.backlog, oldestAgeMinutes: result.emailHealth.oldestFailedAgeMinutes });
+       const emailRecovery = recovery.enabled ? await service.runScheduledConfirmationRecovery(schedulerActor, { maxMessages: recovery.maxMessages }, scheduledAt) : { ok: true, status: "disabled", sent: 0 };

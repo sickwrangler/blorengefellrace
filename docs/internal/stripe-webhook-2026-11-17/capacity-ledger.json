@@ -1,0 +1,313 @@
+{
+  "method": "Forward reconstruction from 118 confirmed / zero offers or checkout reservations before 14 November; opening counts inferred by reversing audited changes from current state. Paid claims established by Stripe timestamps before each expiry. No seat IDs exist.",
+  "rows": [
+    {
+      "at": "2026-11-14T09:08:39.632Z",
+      "action": "entry_withdrawn",
+      "subjectId": "registration_8b4da5cb-391a-4345-ab29-fb56a7f88c72",
+      "confirmed": 117,
+      "paymentReserved": 0,
+      "offerReserved": 0,
+      "localCommitted": 117,
+      "paidClaimsMissingFromLocalCapacity": 0,
+      "committedIncludingThosePaidClaims": 117
+    },
+    {
+      "at": "2026-11-14T09:10:06.588Z",
+      "action": "entry_withdrawn",
+      "subjectId": "registration_5b3046b9-b83d-48d1-9f08-475f8bab5efc",
+      "confirmed": 116,
+      "paymentReserved": 0,
+      "offerReserved": 0,
+      "localCommitted": 116,
+      "paidClaimsMissingFromLocalCapacity": 0,
+      "committedIncludingThosePaidClaims": 116
+    },
+    {
+      "at": "2026-11-14T09:10:42.538Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_fb8192d8-0770-4283-9f47-3199dec8947f",
+      "confirmed": 116,
+      "paymentReserved": 0,
+      "offerReserved": 1,
+      "localCommitted": 117,
+      "paidClaimsMissingFromLocalCapacity": 0,
+      "committedIncludingThosePaidClaims": 117
+    },
+    {
+      "at": "2026-11-14T09:11:23.870Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_5de32034-61ac-4fea-a53c-4c7be750be28",
+      "confirmed": 116,
+      "paymentReserved": 0,
+      "offerReserved": 2,
+      "localCommitted": 118,
+      "paidClaimsMissingFromLocalCapacity": 0,
+      "committedIncludingThosePaidClaims": 118
+    },
+    {
+      "at": "2026-11-14T09:12:46.284Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_84971bf5-7ab6-4ebd-babc-059d5cfefb00",
+      "confirmed": 116,
+      "paymentReserved": 0,
+      "offerReserved": 3,
+      "localCommitted": 119,
+      "paidClaimsMissingFromLocalCapacity": 0,
+      "committedIncludingThosePaidClaims": 119
+    },
+    {
+      "at": "2026-11-14T09:13:21.598Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_ddb189f6-9140-426b-8b03-7c06816c4050",
+      "confirmed": 116,
+      "paymentReserved": 0,
+      "offerReserved": 4,
+      "localCommitted": 120,
+      "paidClaimsMissingFromLocalCapacity": 0,
+      "committedIncludingThosePaidClaims": 120
+    },
+    {
+      "at": "2026-11-14T15:18:50.393Z",
+      "action": "entry_withdrawn",
+      "subjectId": "registration_589bee7c-6bf0-4fd4-b284-bf89aa543877",
+      "confirmed": 115,
+      "paymentReserved": 0,
+      "offerReserved": 4,
+      "localCommitted": 119,
+      "paidClaimsMissingFromLocalCapacity": 0,
+      "committedIncludingThosePaidClaims": 119
+    },
+    {
+      "at": "2026-11-14T17:18:42.247Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_fb8192d8-0770-4283-9f47-3199dec8947f",
+      "confirmed": 115,
+      "paymentReserved": 1,
+      "offerReserved": 3,
+      "localCommitted": 119,
+      "paidClaimsMissingFromLocalCapacity": 0,
+      "committedIncludingThosePaidClaims": 119
+    },
+    {
+      "at": "2026-11-14T17:24:35.551Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_ddb189f6-9140-426b-8b03-7c06816c4050",
+      "confirmed": 115,
+      "paymentReserved": 2,
+      "offerReserved": 2,
+      "localCommitted": 119,
+      "paidClaimsMissingFromLocalCapacity": 0,
+      "committedIncludingThosePaidClaims": 119
+    },
+    {
+      "at": "2026-11-14T18:00:00.302Z",
+      "action": "payment_reservation_expired",
+      "subjectId": "reg_5ac67df2-c777-4b82-969f-ad7b888202b5",
+      "confirmed": 115,
+      "paymentReserved": 1,
+      "offerReserved": 2,
+      "localCommitted": 118,
+      "paidClaimsMissingFromLocalCapacity": 1,
+      "committedIncludingThosePaidClaims": 119
+    },
+    {
+      "at": "2026-11-14T18:00:00.302Z",
+      "action": "payment_reservation_expired",
+      "subjectId": "reg_1e2ff733-1010-4718-97d8-67c82c8710c7",
+      "confirmed": 115,
+      "paymentReserved": 0,
+      "offerReserved": 2,
+      "localCommitted": 117,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 119
+    },
+    {
+      "at": "2026-11-15T17:14:30.662Z",
+      "action": "entry_withdrawn",
+      "subjectId": "registration_b987846e-8be0-4712-a2d6-de2ff162829f",
+      "confirmed": 114,
+      "paymentReserved": 0,
+      "offerReserved": 2,
+      "localCommitted": 116,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 118
+    },
+    {
+      "at": "2026-11-16T09:30:00.094Z",
+      "action": "waiting_list_offer_expired",
+      "subjectId": "offer_5de32034-61ac-4fea-a53c-4c7be750be28",
+      "confirmed": 114,
+      "paymentReserved": 0,
+      "offerReserved": 1,
+      "localCommitted": 115,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 117
+    },
+    {
+      "at": "2026-11-16T09:30:00.094Z",
+      "action": "waiting_list_offer_expired",
+      "subjectId": "offer_84971bf5-7ab6-4ebd-babc-059d5cfefb00",
+      "confirmed": 114,
+      "paymentReserved": 0,
+      "offerReserved": 0,
+      "localCommitted": 114,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 116
+    },
+    {
+      "at": "2026-11-16T10:18:40.883Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_f2051f41-f8fe-4875-9223-b24ff6d12f67",
+      "confirmed": 114,
+      "paymentReserved": 0,
+      "offerReserved": 1,
+      "localCommitted": 115,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 117
+    },
+    {
+      "at": "2026-11-16T10:19:01.593Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_845d0fb3-b3be-425f-8f7f-0c8251b8ffca",
+      "confirmed": 114,
+      "paymentReserved": 0,
+      "offerReserved": 2,
+      "localCommitted": 116,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 118
+    },
+    {
+      "at": "2026-11-16T10:19:26.362Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_f3c576ca-ecf2-452f-be66-1df2c58a7d79",
+      "confirmed": 114,
+      "paymentReserved": 0,
+      "offerReserved": 3,
+      "localCommitted": 117,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 119
+    },
+    {
+      "at": "2026-11-16T10:19:38.030Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_0e48cac6-5c29-40b7-9c04-05ee6adbde68",
+      "confirmed": 114,
+      "paymentReserved": 0,
+      "offerReserved": 4,
+      "localCommitted": 118,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 120
+    },
+    {
+      "at": "2026-11-16T10:19:57.868Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_e0917962-306d-4a57-98a1-e74650a56a14",
+      "confirmed": 114,
+      "paymentReserved": 0,
+      "offerReserved": 5,
+      "localCommitted": 119,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 121
+    },
+    {
+      "at": "2026-11-16T10:31:58.264Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_e0917962-306d-4a57-98a1-e74650a56a14",
+      "confirmed": 114,
+      "paymentReserved": 1,
+      "offerReserved": 4,
+      "localCommitted": 119,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 121
+    },
+    {
+      "at": "2026-11-16T11:30:00.007Z",
+      "action": "payment_reservation_expired",
+      "subjectId": "reg_98ada368-d3cc-4dbb-8d82-877cf86a526d",
+      "confirmed": 114,
+      "paymentReserved": 0,
+      "offerReserved": 4,
+      "localCommitted": 118,
+      "paidClaimsMissingFromLocalCapacity": 3,
+      "committedIncludingThosePaidClaims": 121
+    },
+    {
+      "at": "2026-11-16T11:53:36.158Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_845d0fb3-b3be-425f-8f7f-0c8251b8ffca",
+      "confirmed": 114,
+      "paymentReserved": 1,
+      "offerReserved": 3,
+      "localCommitted": 118,
+      "paidClaimsMissingFromLocalCapacity": 3,
+      "committedIncludingThosePaidClaims": 121
+    },
+    {
+      "at": "2026-11-16T12:30:00.063Z",
+      "action": "payment_reservation_expired",
+      "subjectId": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3",
+      "confirmed": 114,
+      "paymentReserved": 0,
+      "offerReserved": 3,
+      "localCommitted": 117,
+      "paidClaimsMissingFromLocalCapacity": 4,
+      "committedIncludingThosePaidClaims": 121
+    },
+    {
+      "at": "2026-11-16T16:35:00.400Z",
+      "action": "stripe_payment_confirmed",
+      "subjectId": "reg_5ac67df2-c777-4b82-969f-ad7b888202b5",
+      "confirmed": 115,
+      "paymentReserved": 0,
+      "offerReserved": 3,
+      "localCommitted": 118,
+      "paidClaimsMissingFromLocalCapacity": 3,
+      "committedIncludingThosePaidClaims": 121
+    },
+    {
+      "at": "2026-11-16T16:35:23.243Z",
+      "action": "stripe_payment_confirmed",
+      "subjectId": "reg_1e2ff733-1010-4718-97d8-67c82c8710c7",
+      "confirmed": 116,
+      "paymentReserved": 0,
+      "offerReserved": 3,
+      "localCommitted": 119,
+      "paidClaimsMissingFromLocalCapacity": 2,
+      "committedIncludingThosePaidClaims": 121
+    },
+    {
+      "at": "2026-11-16T16:35:48.490Z",
+      "action": "stripe_payment_confirmed",
+      "subjectId": "reg_98ada368-d3cc-4dbb-8d82-877cf86a526d",
+      "confirmed": 117,
+      "paymentReserved": 0,
+      "offerReserved": 3,
+      "localCommitted": 120,
+      "paidClaimsMissingFromLocalCapacity": 1,
+      "committedIncludingThosePaidClaims": 121
+    },
+    {
+      "at": "2026-11-17T10:37:00.578Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_f3c576ca-ecf2-452f-be66-1df2c58a7d79",
+      "confirmed": 117,
+      "paymentReserved": 1,
+      "offerReserved": 2,
+      "localCommitted": 120,
+      "paidClaimsMissingFromLocalCapacity": 1,
+      "committedIncludingThosePaidClaims": 121
+    },
+    {
+      "at": "2026-11-17T11:01:03.526Z",
+      "action": "stripe_payment_confirmed",
+      "subjectId": "reg_dda9e5db-a9da-4e27-8605-1c4a91f44a4f",
+      "confirmed": 118,
+      "paymentReserved": 0,
+      "offerReserved": 2,
+      "localCommitted": 120,
+      "paidClaimsMissingFromLocalCapacity": 1,
+      "committedIncludingThosePaidClaims": 121
+    }
+  ]
+}

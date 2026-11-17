@@ -1,0 +1,38 @@
+{
+  "fullSuite": [
+    {
+      "runtime": "20.20.2",
+      "command": "node --test tests/*.test.mjs",
+      "tests": 352,
+      "passed": 352,
+      "failed": 0,
+      "fullLogSha256": "6ac4d1717641ac5db4654e8d6104fcc2a9fb1860938ed87228b8bcc4ee85507a",
+      "localFullLog": "/private/tmp/blorenge-remediation-node20-tests.txt"
+    },
+    {
+      "runtime": "22.23.5",
+      "command": "node --test tests/*.test.mjs",
+      "tests": 352,
+      "passed": 352,
+      "failed": 0,
+      "fullLogSha256": "ee127b956cbd932e0261cd39bd96177d26a429d8216732be0d21b83008f8dc33",
+      "localFullLog": "/private/tmp/blorenge-remediation-node22-tests.txt"
+    }
+  ],
+  "validators": [
+    "validate-site",
+    "validate-registration",
+    "validate-route",
+    "validate-photos",
+    "validate-public-results",
+    "simulate-registration-production",
+    "stage-deployment-artifacts production-registration",
+    "stage-registration-production-scheduler"
+  ],
+  "validatorResult": "all passed",
+  "hostedStagingDeployed": false,
+  "localStagedSmoke": "passed on Node 20 and 22",
+  "overOfferingGuard": "byte-identical to current main",
+  "schedulerReleasePackage": "Only three changed source files; every other deployed ZIP file byte-identical",
+  "crossVersionSmoke": "Corrected API manually resolves and idempotently acknowledges holds created by patched deployed scheduler"
+}

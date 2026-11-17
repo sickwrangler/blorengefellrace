@@ -1,0 +1,493 @@
+{
+  "snapshotAt": "2026-11-17T20:00:02.603089+00:00",
+  "targetRegistration": {
+    "id": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3",
+    "entryStatus": "active",
+    "placeStatus": "none",
+    "createdAt": "2026-11-16T11:53:36.158Z",
+    "updatedAt": "2026-11-16T12:30:00.063Z"
+  },
+  "targetPayment": {
+    "id": "payment_0eefc2ed-7155-4a9c-b863-eabc0b588fe7",
+    "registrationId": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3",
+    "status": "expired",
+    "createdAt": "2026-11-16T11:53:36.158Z",
+    "checkoutExpiresAt": "2026-11-16T12:23:36.000Z",
+    "webhookReconciliationState": "locally_expired_awaiting_webhook",
+    "updatedAt": "2026-11-16T12:30:00.063Z"
+  },
+  "offers": [
+    {
+      "id": "offer_f2051f41-f8fe-4875-9223-b24ff6d12f67",
+      "waitingListId": "waiting_7a050146-3d14-428c-b96d-6086c9cbe93f",
+      "status": "offered",
+      "createdAt": "2026-11-16T10:18:40.883Z",
+      "expiresAt": "2026-11-18T10:18:40.883Z"
+    },
+    {
+      "id": "offer_845d0fb3-b3be-425f-8f7f-0c8251b8ffca",
+      "waitingListId": "waiting_ed028974-3deb-426d-8988-f31c664cae96",
+      "status": "accepted",
+      "createdAt": "2026-11-16T10:19:01.593Z",
+      "expiresAt": "2026-11-18T10:19:01.593Z",
+      "completedAt": "2026-11-16T11:53:36.158Z"
+    },
+    {
+      "id": "offer_0e48cac6-5c29-40b7-9c04-05ee6adbde68",
+      "waitingListId": "waiting_7f093f56-d3ad-40dd-ab75-a5cf804e2601",
+      "status": "offered",
+      "createdAt": "2026-11-16T10:19:38.030Z",
+      "expiresAt": "2026-11-18T10:19:38.030Z"
+    }
+  ],
+  "targetAndOfferAudit": [
+    {
+      "at": "2026-11-16T10:18:40.883Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_f2051f41-f8fe-4875-9223-b24ff6d12f67",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_7a050146-3d14-428c-b96d-6086c9cbe93f",
+        "expiresAt": "2026-11-18T10:18:40.883Z",
+        "selection": "specific",
+        "bypassedFifo": false
+      }
+    },
+    {
+      "at": "2026-11-16T10:19:01.593Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_845d0fb3-b3be-425f-8f7f-0c8251b8ffca",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_ed028974-3deb-426d-8988-f31c664cae96",
+        "expiresAt": "2026-11-18T10:19:01.593Z",
+        "selection": "specific",
+        "bypassedFifo": false
+      }
+    },
+    {
+      "at": "2026-11-16T10:19:38.030Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_0e48cac6-5c29-40b7-9c04-05ee6adbde68",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_7f093f56-d3ad-40dd-ab75-a5cf804e2601",
+        "expiresAt": "2026-11-18T10:19:38.030Z",
+        "selection": "specific",
+        "bypassedFifo": false
+      }
+    },
+    {
+      "at": "2026-11-16T11:53:36.158Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_845d0fb3-b3be-425f-8f7f-0c8251b8ffca",
+      "actorType": "runner",
+      "before": {},
+      "after": {
+        "registrationId": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3"
+      }
+    },
+    {
+      "at": "2026-11-16T11:53:36.158Z",
+      "action": "registration_created",
+      "subjectId": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3",
+      "actorType": "runner",
+      "before": {},
+      "after": {
+        "placeStatus": "payment_reserved"
+      }
+    },
+    {
+      "at": "2026-11-16T11:53:36.158Z",
+      "action": "declaration_accepted",
+      "subjectId": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3",
+      "actorType": "runner",
+      "before": {},
+      "after": {}
+    },
+    {
+      "at": "2026-11-16T11:53:36.158Z",
+      "action": "management_token_issued",
+      "subjectId": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3",
+      "actorType": "system",
+      "before": {},
+      "after": {}
+    },
+    {
+      "at": "2026-11-16T11:53:36.419Z",
+      "action": "stripe_checkout_created",
+      "subjectId": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3",
+      "actorType": "system",
+      "before": {},
+      "after": {
+        "expiresAt": "2026-11-16T12:23:36.000Z",
+        "expectedAmountPence": 600,
+        "currency": "gbp"
+      }
+    },
+    {
+      "at": "2026-11-16T12:30:00.063Z",
+      "action": "payment_reservation_expired",
+      "subjectId": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3",
+      "actorType": "system",
+      "before": {},
+      "after": {}
+    },
+    {
+      "at": "2026-11-17T10:30:00.007Z",
+      "action": "waiting_list_reminder_sent",
+      "subjectId": "offer_f2051f41-f8fe-4875-9223-b24ff6d12f67",
+      "actorType": "system",
+      "before": {},
+      "after": {}
+    },
+    {
+      "at": "2026-11-17T10:30:00.007Z",
+      "action": "waiting_list_reminder_sent",
+      "subjectId": "offer_0e48cac6-5c29-40b7-9c04-05ee6adbde68",
+      "actorType": "system",
+      "before": {},
+      "after": {}
+    }
+  ],
+  "capacityRelevantAudit": [
+    {
+      "at": "2026-11-14T09:08:39.632Z",
+      "action": "entry_withdrawn",
+      "subjectId": "registration_8b4da5cb-391a-4345-ab29-fb56a7f88c72",
+      "actorType": "entra_organiser",
+      "before": {
+        "entryStatus": "accepted",
+        "placeStatus": "confirmed"
+      },
+      "after": {
+        "entryStatus": "withdrawn",
+        "placeStatus": "none"
+      }
+    },
+    {
+      "at": "2026-11-14T09:10:06.588Z",
+      "action": "entry_withdrawn",
+      "subjectId": "registration_5b3046b9-b83d-48d1-9f08-475f8bab5efc",
+      "actorType": "entra_organiser",
+      "before": {
+        "entryStatus": "accepted",
+        "placeStatus": "confirmed"
+      },
+      "after": {
+        "entryStatus": "withdrawn",
+        "placeStatus": "none"
+      }
+    },
+    {
+      "at": "2026-11-14T09:10:42.538Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_fb8192d8-0770-4283-9f47-3199dec8947f",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_f4a6908d-940f-4739-a591-a7bd943c4e09",
+        "expiresAt": "2026-11-16T09:10:42.538Z",
+        "selection": "specific",
+        "bypassedFifo": true
+      }
+    },
+    {
+      "at": "2026-11-14T09:11:23.870Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_5de32034-61ac-4fea-a53c-4c7be750be28",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_63c46756-4e56-4507-8102-13cd2538c308",
+        "expiresAt": "2026-11-16T09:11:23.870Z",
+        "selection": "specific",
+        "bypassedFifo": true
+      }
+    },
+    {
+      "at": "2026-11-14T09:12:46.284Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_84971bf5-7ab6-4ebd-babc-059d5cfefb00",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_cd5e5d1c-7cd8-42bb-8f79-2bde871547f9",
+        "expiresAt": "2026-11-16T09:12:46.284Z",
+        "selection": "specific",
+        "bypassedFifo": false
+      }
+    },
+    {
+      "at": "2026-11-14T09:13:21.598Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_ddb189f6-9140-426b-8b03-7c06816c4050",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_48426f37-d058-4120-b7f0-2b0601952c34",
+        "expiresAt": "2026-11-16T09:13:21.598Z",
+        "selection": "specific",
+        "bypassedFifo": false
+      }
+    },
+    {
+      "at": "2026-11-14T15:18:50.393Z",
+      "action": "entry_withdrawn",
+      "subjectId": "registration_589bee7c-6bf0-4fd4-b284-bf89aa543877",
+      "actorType": "runner",
+      "before": {
+        "entryStatus": "accepted",
+        "placeStatus": "confirmed"
+      },
+      "after": {
+        "entryStatus": "withdrawn",
+        "placeStatus": "none"
+      }
+    },
+    {
+      "at": "2026-11-14T17:18:42.247Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_fb8192d8-0770-4283-9f47-3199dec8947f",
+      "actorType": "runner",
+      "before": {},
+      "after": {
+        "registrationId": "reg_5ac67df2-c777-4b82-969f-ad7b888202b5"
+      }
+    },
+    {
+      "at": "2026-11-14T17:24:35.551Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_ddb189f6-9140-426b-8b03-7c06816c4050",
+      "actorType": "runner",
+      "before": {},
+      "after": {
+        "registrationId": "reg_1e2ff733-1010-4718-97d8-67c82c8710c7"
+      }
+    },
+    {
+      "at": "2026-11-14T18:00:00.302Z",
+      "action": "payment_reservation_expired",
+      "subjectId": "reg_5ac67df2-c777-4b82-969f-ad7b888202b5",
+      "actorType": "system",
+      "before": {},
+      "after": {}
+    },
+    {
+      "at": "2026-11-14T18:00:00.302Z",
+      "action": "payment_reservation_expired",
+      "subjectId": "reg_1e2ff733-1010-4718-97d8-67c82c8710c7",
+      "actorType": "system",
+      "before": {},
+      "after": {}
+    },
+    {
+      "at": "2026-11-15T17:14:30.662Z",
+      "action": "entry_withdrawn",
+      "subjectId": "registration_b987846e-8be0-4712-a2d6-de2ff162829f",
+      "actorType": "runner",
+      "before": {
+        "entryStatus": "accepted",
+        "placeStatus": "confirmed"
+      },
+      "after": {
+        "entryStatus": "withdrawn",
+        "placeStatus": "none"
+      }
+    },
+    {
+      "at": "2026-11-16T09:30:00.094Z",
+      "action": "waiting_list_offer_expired",
+      "subjectId": "offer_5de32034-61ac-4fea-a53c-4c7be750be28",
+      "actorType": "scheduler",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_63c46756-4e56-4507-8102-13cd2538c308"
+      }
+    },
+    {
+      "at": "2026-11-16T09:30:00.094Z",
+      "action": "waiting_list_offer_expired",
+      "subjectId": "offer_84971bf5-7ab6-4ebd-babc-059d5cfefb00",
+      "actorType": "scheduler",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_cd5e5d1c-7cd8-42bb-8f79-2bde871547f9"
+      }
+    },
+    {
+      "at": "2026-11-16T10:18:40.883Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_f2051f41-f8fe-4875-9223-b24ff6d12f67",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_7a050146-3d14-428c-b96d-6086c9cbe93f",
+        "expiresAt": "2026-11-18T10:18:40.883Z",
+        "selection": "specific",
+        "bypassedFifo": false
+      }
+    },
+    {
+      "at": "2026-11-16T10:19:01.593Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_845d0fb3-b3be-425f-8f7f-0c8251b8ffca",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_ed028974-3deb-426d-8988-f31c664cae96",
+        "expiresAt": "2026-11-18T10:19:01.593Z",
+        "selection": "specific",
+        "bypassedFifo": false
+      }
+    },
+    {
+      "at": "2026-11-16T10:19:26.362Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_f3c576ca-ecf2-452f-be66-1df2c58a7d79",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_9eb3ccf0-20cd-449e-8eeb-4edddcf43ff0",
+        "expiresAt": "2026-11-18T10:19:26.362Z",
+        "selection": "specific",
+        "bypassedFifo": false
+      }
+    },
+    {
+      "at": "2026-11-16T10:19:38.030Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_0e48cac6-5c29-40b7-9c04-05ee6adbde68",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_7f093f56-d3ad-40dd-ab75-a5cf804e2601",
+        "expiresAt": "2026-11-18T10:19:38.030Z",
+        "selection": "specific",
+        "bypassedFifo": false
+      }
+    },
+    {
+      "at": "2026-11-16T10:19:57.868Z",
+      "action": "waiting_list_offer_created",
+      "subjectId": "offer_e0917962-306d-4a57-98a1-e74650a56a14",
+      "actorType": "entra_organiser",
+      "before": {},
+      "after": {
+        "waitingListId": "waiting_a4adb8c1-ae03-42f4-9b77-3928d924811b",
+        "expiresAt": "2026-11-18T10:19:57.868Z",
+        "selection": "specific",
+        "bypassedFifo": false
+      }
+    },
+    {
+      "at": "2026-11-16T10:31:58.264Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_e0917962-306d-4a57-98a1-e74650a56a14",
+      "actorType": "runner",
+      "before": {},
+      "after": {
+        "registrationId": "reg_98ada368-d3cc-4dbb-8d82-877cf86a526d"
+      }
+    },
+    {
+      "at": "2026-11-16T11:30:00.007Z",
+      "action": "payment_reservation_expired",
+      "subjectId": "reg_98ada368-d3cc-4dbb-8d82-877cf86a526d",
+      "actorType": "system",
+      "before": {},
+      "after": {}
+    },
+    {
+      "at": "2026-11-16T11:53:36.158Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_845d0fb3-b3be-425f-8f7f-0c8251b8ffca",
+      "actorType": "runner",
+      "before": {},
+      "after": {
+        "registrationId": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3"
+      }
+    },
+    {
+      "at": "2026-11-16T12:30:00.063Z",
+      "action": "payment_reservation_expired",
+      "subjectId": "reg_e384535e-57bc-470e-a17e-47ef270b5ad3",
+      "actorType": "system",
+      "before": {},
+      "after": {}
+    },
+    {
+      "at": "2026-11-16T16:35:00.400Z",
+      "action": "stripe_payment_confirmed",
+      "subjectId": "reg_5ac67df2-c777-4b82-969f-ad7b888202b5",
+      "actorType": "system",
+      "before": {},
+      "after": {
+        "actualPaidAmountPence": 600,
+        "currency": "gbp"
+      }
+    },
+    {
+      "at": "2026-11-16T16:35:23.243Z",
+      "action": "stripe_payment_confirmed",
+      "subjectId": "reg_1e2ff733-1010-4718-97d8-67c82c8710c7",
+      "actorType": "system",
+      "before": {},
+      "after": {
+        "actualPaidAmountPence": 400,
+        "currency": "gbp"
+      }
+    },
+    {
+      "at": "2026-11-16T16:35:48.490Z",
+      "action": "stripe_payment_confirmed",
+      "subjectId": "reg_98ada368-d3cc-4dbb-8d82-877cf86a526d",
+      "actorType": "system",
+      "before": {},
+      "after": {
+        "actualPaidAmountPence": 400,
+        "currency": "gbp"
+      }
+    },
+    {
+      "at": "2026-11-17T10:37:00.578Z",
+      "action": "waiting_list_offer_accepted",
+      "subjectId": "offer_f3c576ca-ecf2-452f-be66-1df2c58a7d79",
+      "actorType": "runner",
+      "before": {},
+      "after": {
+        "registrationId": "reg_dda9e5db-a9da-4e27-8605-1c4a91f44a4f"
+      }
+    },
+    {
+      "at": "2026-11-17T11:01:03.526Z",
+      "action": "stripe_payment_confirmed",
+      "subjectId": "reg_dda9e5db-a9da-4e27-8605-1c4a91f44a4f",
+      "actorType": "system",
+      "before": {},
+      "after": {
+        "actualPaidAmountPence": 400,
+        "currency": "gbp"
+      }
+    }
+  ],
+  "schedulerStatus": {
+    "lastSuccessfulRunAt": "2026-11-17T20:00:00.014Z",
+    "lastResult": {
+      "reminders": 0,
+      "expiredOffers": 0,
+      "expiredPayments": 0,
+      "availablePlaceReleased": false
+    },
+    "confirmationRecovery": {
+      "status": "completed",
+      "lastFinishedAt": "2026-09-29T19:00:00.077Z",
+      "lastBatchSent": 4,
+      "lastKnownRemaining": 0,
+      "pauseCode": null
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "baseSha256": "3c8e52bae55141a775457555a067faf8388df8e5af84fdd5881e78a3c2f8967d",
+  "schedulerZipSha256": "184f9e95d3b54db7f55b672b61ac84d27ebc4852375fe2e8cddfc4999a92a547",
+  "schedulerZipBytes": 11917134,
+  "fileCount": 8399,
+  "changedFiles": [
+    "src/production-scheduler.mjs",
+    "src/shared/server/phase3-integrations.mjs",
+    "src/shared/server/phase3-service.mjs"
+  ],
+  "domainAndOverOfferingGuardUnchangedFromDeployed": true,
+  "allOtherFilesByteIdentical": true
+}

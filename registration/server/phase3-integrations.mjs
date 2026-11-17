@@ -125,8 +125,23 @@ export async function beginStripeCheckout(state, registrationId, gateway, { succ
 }
 
 function stripeObject(event) { return event?.data?.object ?? {}; }
-function findPaymentForStripeEvent(state, object) {
-  return state.payments.find((item) => item.checkoutSessionId === object.id || (object.payment_intent && item.paymentIntentId === object.payment_intent) || (object.payment_intent && item.paymentIntentId === object.payment_intent?.id));
+export function findPaymentForStripeEvent(state, object) {
+  const intentId = typeof object.payment_intent === "string" ? object.payment_intent : object.payment_intent?.id;
+  const present = (value) => typeof value === "string" && value.length > 0;
+  const matches = state.payments.filter((item) =>
+    (present(object.id) && item.checkoutSessionId === object.id) ||
+    (present(intentId) && item.paymentIntentId === intentId));
+  if (!matches.length) return { ok: false, code: "PAYMENT_NOT_FOUND" };
+  if (matches.length !== 1) return { ok: false, code: "PAYMENT_MATCH_AMBIGUOUS" };
+  const payment = matches[0];
+  const metadata = object.metadata ?? {};
+  if ((metadata.paymentId && metadata.paymentId !== payment.id) ||
+      (metadata.registrationId && metadata.registrationId !== payment.registrationId && !payment.registrationIds?.includes(metadata.registrationId)) ||
+      (metadata.orderId && metadata.orderId !== payment.orderId) ||
+      (present(intentId) && present(payment.paymentIntentId) && intentId !== payment.paymentIntentId)) {
+    return { ok: false, code: "PAYMENT_MISMATCH" };
+  }
+  return { ok: true, payment };
 }
 
 export function reconcileStripeEvent(state, event, { at = new Date() } = {}) {
@@ -134,13 +149,19 @@ export function reconcileStripeEvent(state, event, { at = new Date() } = {}) {
   state.processedPaymentEvents ??= [];
   if (state.processedPaymentEvents.some((item) => item.id === event.id)) return { ok: true, duplicate: true };
   const object = stripeObject(event);
-  const payment = findPaymentForStripeEvent(state, object);
-  if (!payment) return { ok: false, code: "PAYMENT_NOT_FOUND" };
+  const match = findPaymentForStripeEvent(state, object);
+  if (!match.ok) return match;
+  const { payment } = match;
   const registration = state.registrations.find((item) => item.id === payment.registrationId);
   if (!registration) return { ok: false, code: "NOT_FOUND" };
   const success = ["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type);
   if (success) {
-    if (payment.status === "paid" || payment.status === "refunded") return { ok: true, duplicate: true };
+    if (payment.status === "paid" || payment.status === "refunded") {
+      if ((object.amount_total ?? object.amount_received) !== payment.expectedAmountPence || String(object.currency ?? "").toLowerCase() !== payment.currency) return { ok: false, code: "PAYMENT_MISMATCH" };
+      resolveReservationReview(state, payment, "payment_confirmed", at);
+      state.processedPaymentEvents.push({ id: event.id, type: event.type, processedAt: iso(at) });
+      return { ok: true, duplicate: true };
+    }
     if (!activeRegistration(registration)) return { ok: false, code: "ENTRY_INACTIVE" };
     const paid = object.amount_total ?? object.amount_received;
     const currency = String(object.currency ?? "").toLowerCase();
@@ -163,11 +184,13 @@ export function reconcileStripeEvent(state, event, { at = new Date() } = {}) {
     registration.placeStatus = "confirmed";
     payment.status = "paid"; payment.actualPaidAmountPence = paid; payment.paymentIntentId = typeof object.payment_intent === "string" ? object.payment_intent : object.payment_intent?.id ?? payment.paymentIntentId;
     payment.completedAt = iso(at); payment.webhookReconciliationState = "reconciled";
+    resolveReservationReview(state, payment, "payment_confirmed", at);
     audit(state, "stripe_payment_confirmed", registration.id, { actualPaidAmountPence: paid, currency }, at);
   } else if (event.type === "checkout.session.expired" || event.type === "checkout.session.async_payment_failed") {
     if (["paid", "refunded"].includes(payment.status)) return { ok: true, duplicate: true };
     payment.status = event.type === "checkout.session.expired" ? "expired" : "failed";
     payment.webhookReconciliationState = "reconciled"; registration.placeStatus = "none";
+    resolveReservationReview(state, payment, "provider_nonpayment_confirmed", at);
     audit(state, event.type === "checkout.session.expired" ? "stripe_checkout_expired" : "stripe_payment_failed", registration.id, {}, at);
   } else if (event.type === "charge.refunded") {
     payment.status = "refunded"; payment.refundState = "refunded"; payment.refundedAt = iso(at);
@@ -185,7 +208,7 @@ export function reconcileStripeEvent(state, event, { at = new Date() } = {}) {
 
 function waitingListCheckoutNeedsReview(payment, at) {
   return Boolean(payment.checkoutSessionId && (
-    payment.webhookReconciliationState === "locally_expired_awaiting_webhook"
+    ["locally_expired_awaiting_webhook", "reservation_review_required"].includes(payment.webhookReconciliationState)
     || (payment.status === "checkout_pending" && new Date(payment.checkoutExpiresAt) <= new Date(at))
   ));
 }
@@ -199,10 +222,39 @@ export function runnerPaymentState(state, registrationId, at = new Date()) {
   return { ok: true, state: status, label: labels[status] ?? "Payment processing", canRetry: ["failed", "expired"].includes(status) };
 }
 
+// Review holds remain capacity reservations until provider evidence resolves them.
+// The organiser owns the queue; crossing the review deadline escalates, never releases.
+export const PAYMENT_RESERVATION_REVIEW_HOURS = 2;
+export function waitingListPaymentReviews(state, at = new Date()) {
+  return state.payments.filter((payment) => payment.reservationReview?.status === "open")
+    .map((payment) => ({ paymentId: payment.id, registrationId: payment.registrationId,
+      ...payment.reservationReview, overdue: new Date(payment.reservationReview.dueAt) <= new Date(at) }));
+}
+function resolveReservationReview(state, payment, outcome, at) {
+  if (payment.reservationReview?.status !== "open") return;
+  Object.assign(payment.reservationReview, { status: "resolved", outcome, resolvedAt: iso(at) });
+  audit(state, "payment_reservation_review_resolved", payment.registrationId, { outcome }, at);
+}
+
 export function expireStalePaymentReservations(state, at = new Date()) {
   let expired = 0;
-  for (const payment of state.payments.filter((item) => item.status === "checkout_pending" && new Date(item.checkoutExpiresAt) <= new Date(at))) {
+  for (const payment of state.payments.filter((item) => ["checkout_pending", "processing"].includes(item.status) && new Date(item.checkoutExpiresAt) <= new Date(at))) {
     const registration = state.registrations.find((item) => item.id === payment.registrationId);
+    // A local deadline is not evidence that Stripe failed to collect payment.
+    // Keep an existing direct-offer reservation counted until provider evidence
+    // resolves it. Never reacquire a reservation already released historically.
+    if (registration?.placeStatus === "payment_reserved" && payment.checkoutSessionId && acceptedWaitingListRegistration(state, registration.id)) {
+      if (payment.reservationReview?.status === "open") continue;
+      payment.status = "processing";
+      payment.webhookReconciliationState = "reservation_review_required";
+      payment.reservationReview = { status: "open", ownerRole: "organiser", openedAt: iso(at),
+        dueAt: new Date(new Date(at).getTime() + PAYMENT_RESERVATION_REVIEW_HOURS * 3_600_000).toISOString(),
+        reason: "checkout_confirmation_missing" };
+      payment.updatedAt = iso(at);
+      audit(state, "payment_reservation_review_required", registration.id, {}, at);
+      continue;
+    }
+    if (payment.status !== "checkout_pending") continue;
     payment.status = "expired"; payment.webhookReconciliationState = "locally_expired_awaiting_webhook"; payment.updatedAt = iso(at);
     if (registration && registration.placeStatus !== "confirmed") { registration.placeStatus = "none"; registration.updatedAt = iso(at); }
     audit(state, "payment_reservation_expired", payment.registrationId, {}, at); expired += 1;
@@ -278,5 +330,8 @@ export async function processScheduledRegistrationWork(state, { email, at = new 
   }
   const offers = expireWaitingListOffers(state, actor, at);
   const payments = expireStalePaymentReservations(state, at);
-  return { ok: true, reminders: reminders.length, expiredOffers: offers.expired, expiredPayments: payments.expired, availablePlaceReleased: offers.expired > 0 && offers.capacity.remaining > 0 };
+  const reviews = waitingListPaymentReviews(state, at);
+  return { ok: true, reminders: reminders.length, expiredOffers: offers.expired, expiredPayments: payments.expired,
+    ...(reviews.length ? { paymentReviews: { open: reviews.length, overdue: reviews.filter((item) => item.overdue).length } } : {}),
+    availablePlaceReleased: offers.expired > 0 && offers.capacity.remaining > 0 };
 }
