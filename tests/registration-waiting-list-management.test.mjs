@@ -324,6 +324,75 @@ test("organiser reconciles a legacy waiting-list payment from Stripe without exc
   assert.match(sent[0].data.managementUrl, /^https:\/\/race\.example\/registration\/manage\.html#token=/);
 });
 
+test("runner payment check confirms the original waiting-list checkout without its webhook", async () => {
+  const now = new Date();
+  const state = createProductionBootstrap();
+  state.registrationState = state.phase3RegistrationState = "OPEN";
+  const first = joinWaitingList(state, waitingRunner(1), { at: now }).waitingListEntry;
+  const next = joinWaitingList(state, waitingRunner(2), { at: now }).waitingListEntry;
+  state.registrationState = state.phase3RegistrationState = "PRIVATE_LIVE";
+  const acceptOffer = (waiting) => {
+    const offer = createNextWaitingListOffer(state, organiser, now);
+    return acceptWaitingListOffer(state, offer.token, { runner: { ...runner, email: waiting.email }, declaration }, now);
+  };
+  const accepted = acceptOffer(first);
+  const unrelated = acceptOffer(next);
+  assert.equal(accepted.ok, true);
+  assert.equal(unrelated.ok, true);
+  const payment = state.payments.find((item) => item.registrationId === accepted.registration.id);
+  const expiresAt = new Date(now.getTime() + 30 * 60_000).toISOString();
+  Object.assign(payment, { provider: "stripe", providerMode: "live", status: "checkout_pending", checkoutSessionId: "cs_live_original", checkoutExpiresAt: expiresAt, expectedAmountPence: 600, currency: "gbp" });
+  const session = {
+    id: payment.checkoutSessionId, livemode: true, mode: "payment", status: "open", payment_status: "unpaid", amount_total: 600, currency: "gbp",
+    metadata: { registrationId: accepted.registration.id, paymentId: payment.id },
+    payment_intent: {
+      id: "pi_original", status: "succeeded", amount_received: 600, currency: "gbp",
+      latest_charge: { id: "ch_original", status: "succeeded", amount_captured: 600, currency: "gbp", captured: true, disputed: false, amount_refunded: 0 }
+    }
+  };
+  const sent = [];
+  const repository = createMemoryRepository(state);
+  const emailAdapter = { async send(message) { sent.push(message); return { delivery: "sent", externalCall: false }; } };
+  let stripeReads = 0;
+  const service = new Phase3IntegrationService({
+    repository, environment: "production", emailAdapter, publicBaseUrl: "https://race.example",
+    stripeGateway: {
+      mode: "live",
+      async retrieveCheckoutSession(id) { assert.equal(id, session.id); stripeReads++; return structuredClone(session); },
+      verifyWebhook(rawBody) { return JSON.parse(rawBody); }
+    }
+  });
+  const api = createProductionApi({ service: new ProductionRegistrationService({ repository, emailAdapter }), repository, phase3Integrations: service });
+  const read = () => api({ method: "GET", pathname: "/api/v3/payments/status", headers: { "x-management-token": accepted.managementToken } });
+  const check = (token) => api({ method: "POST", pathname: "/api/v3/payments/check", headers: token ? { "x-management-token": token } : {}, body: { registrationId: accepted.registration.id } });
+
+  const before = (await read()).body;
+  assert.equal(before.state, "checkout_pending");
+  assert.equal(before.canCheckWaitingListPayment, true);
+  assert.equal((await check()).status, 401);
+  assert.equal((await check(unrelated.managementToken)).body.code, "PAYMENT_REVIEW_UNAVAILABLE");
+  assert.equal(stripeReads, 0);
+  assert.equal((await check(accepted.managementToken)).body.code, "PAYMENT_NOT_CONFIRMED");
+  assert.equal((await read()).body.state, "checkout_pending");
+  assert.equal(sent.length, 0);
+
+  Object.assign(session, { status: "complete", payment_status: "paid" });
+  assert.equal((await check(accepted.managementToken)).body.paymentStatus, "paid");
+  const after = (await read()).body;
+  assert.equal(after.state, "paid");
+  assert.equal(after.canCheckWaitingListPayment, false);
+
+  const webhook = { id: "evt_delayed", type: "checkout.session.completed", data: { object: session } };
+  assert.equal((await service.webhook(JSON.stringify(webhook), "test-signature", now)).duplicate, true);
+  assert.equal((await check(accepted.managementToken)).body.duplicate, true);
+  assert.equal(stripeReads, 2);
+  const final = await repository.read();
+  assert.equal(capacitySummary(final).confirmed, 1);
+  assert.equal(final.registrations.find((item) => item.id === unrelated.registration.id).placeStatus, "payment_reserved");
+  assert.equal(final.auditEvents.filter((event) => event.action === "stripe_payment_checked_by_runner").length, 1);
+  assert.deepEqual(sent.map((item) => item.template), ["entry_confirmed"]);
+});
+
 test("development test-state allowance does not relax production waiting-offer authorisation", () => {
   const state = baseState();
   const waiting = joinWaitingList(state, waitingRunner(1), { at }).waitingListEntry;

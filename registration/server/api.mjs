@@ -45,6 +45,10 @@ export function createApi({ service, phase3Integrations = null, environment = "l
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.paymentStatus(headers["x-management-token"]));
     }
+    if (method === "POST" && pathname === "/api/v3/payments/check") {
+      if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
+      return resultResponse(await phase3Integrations.checkOwnWaitingListPayment(headers["x-management-token"]));
+    }
     if (method === "GET" && pathname === "/api/v3/management/entry") {
       if (!phase3Integrations) return response(503, { ok: false, code: "INTEGRATION_NOT_CONFIGURED" });
       return resultResponse(await phase3Integrations.managementEntry(headers["x-management-token"]));
