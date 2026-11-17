@@ -3,19 +3,19 @@
     {
       "runtime": "20.20.2",
       "command": "node --test tests/*.test.mjs",
-      "tests": 351,
-      "passed": 351,
+      "tests": 352,
+      "passed": 352,
       "failed": 0,
-      "fullLogSha256": "cd797e7e1f62d95abab01a90f61adf740903ff0f28ee18f41e49b325352c3fa3",
+      "fullLogSha256": "6ac4d1717641ac5db4654e8d6104fcc2a9fb1860938ed87228b8bcc4ee85507a",
       "localFullLog": "/private/tmp/blorenge-remediation-node20-tests.txt"
     },
     {
       "runtime": "22.23.5",
       "command": "node --test tests/*.test.mjs",
-      "tests": 351,
-      "passed": 351,
+      "tests": 352,
+      "passed": 352,
       "failed": 0,
-      "fullLogSha256": "76dd3dc03966fd0d35b19fd3e928da88b580dab7548c706e8ea3a270432ee1dc",
+      "fullLogSha256": "ee127b956cbd932e0261cd39bd96177d26a429d8216732be0d21b83008f8dc33",
       "localFullLog": "/private/tmp/blorenge-remediation-node22-tests.txt"
     }
   ],
@@ -32,5 +32,7 @@
   "validatorResult": "all passed",
   "hostedStagingDeployed": false,
   "localStagedSmoke": "passed on Node 20 and 22",
-  "overOfferingGuard": "byte-identical to current main"
+  "overOfferingGuard": "byte-identical to current main",
+  "schedulerReleasePackage": "Only three changed source files; every other deployed ZIP file byte-identical",
+  "crossVersionSmoke": "Corrected API manually resolves and idempotently acknowledges holds created by patched deployed scheduler"
 }

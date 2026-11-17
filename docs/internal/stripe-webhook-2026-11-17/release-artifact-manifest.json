@@ -2,9 +2,9 @@
   "baseCommit": "01de1d47342b05feeb9f7a7aed49bb5de7a8736c",
   "nodeApi": "20.20.2",
   "nodeScheduler": "22.23.5",
-  "schedulerZipSha256": "eb7155b55f30679542c88d7898dc9ff07f5e12fab33eb7a0a9885a1d6d4f7990",
-  "schedulerZipBytes": 11919566,
-  "schedulerZipFiles": 8397,
+  "schedulerZipSha256": "184f9e95d3b54db7f55b672b61ac84d27ebc4852375fe2e8cddfc4999a92a547",
+  "schedulerZipBytes": 11917134,
+  "schedulerZipFiles": 8399,
   "overOfferingGuardUnchanged": true,
   "apiSourceHashes": {
     "package-lock.json": "e1f22fa734cac9b90094d5b459531cb889193b6c85e9b124df7a822431a5a4cf",
@@ -32,7 +32,9 @@
     "src/shared/server/repositories.mjs": "68fcbe7c8047f7069f0e19a19aea8dab1fc1721c9c72e248b4c9076aff1f6e3a"
   },
   "schedulerSourceHashes": {
+    ".ostype": "1822ea02852d61796781130124553f0ef14504c436c98656685fcf97edcb23ec",
     "host.json": "0a69c9bf73db2b69866b72fe1e79dff00c0a04de229a67e7de788b97f209ab70",
+    "oryx-manifest.toml": "6f8842b909f613b420cc57a8614dc3221086ab81f2349ed43b301b2480afbcb5",
     "package-lock.json": "9cf8e9f44c155aeb110890374f0c7d98527d5677a96530ac0b1c42633f61e704",
     "package.json": "34b5c200aabdd55a99d3c1cdee16e959106352453c36d9419b996072fdde97e4",
     "src/functions/registration-production-scheduler.mjs": "a69d2190bb9c2c44a76d373d951debf8adf73fd4e2e27fc73780b5d0da9589f6",
@@ -45,12 +47,20 @@
     "src/shared/server/communications.mjs": "a8833b48aedbdc456d6b230e6ded04b6a94569f47b6ea42a6f803f551d69dcaa",
     "src/shared/server/email-health.mjs": "654b0b9a91c5e43d03d6fdf7c9cc3d4e4ded9fcd40481b13c17270e88c5b5f5f",
     "src/shared/server/email-templates.mjs": "da9b4ddddc12eae13f0fd92d3fae49463bdd00dcdb08239aba613a4453ad14b9",
-    "src/shared/server/order-service.mjs": "a717b43cd1a0257dfe0fe157d4314a37316ba82d31bada93ab33c40e10c271cb",
-    "src/shared/server/phase3-domain.mjs": "2d03d982d3b3d57920f5fedfc0ffdb7608884a810b96242d060bf4738fc670ce",
-    "src/shared/server/phase3-integrations.mjs": "a38520c1e1bac7e516b3bfab7ae8181ee9b04e203f83ed3f10ffbdee7357c7ac",
-    "src/shared/server/phase3-service.mjs": "2a828ad0ba9c57515b017e649870ba3ced844376921108dfba62f552e927d168",
+    "src/shared/server/order-service.mjs": "23cc1c8249d1bd7339fae8a4a641170ee9d7d5e751bff2b8dea91d4a29c0cc8c",
+    "src/shared/server/phase3-domain.mjs": "11c3aae5b7463c33c69e8c07cc47836e075bf895e9a2e57655aa32bfafe55805",
+    "src/shared/server/phase3-integrations.mjs": "0f553676aff6a8507784682adbeaadd86e536ae7bdf772152ad0c3ce222b9abb",
+    "src/shared/server/phase3-service.mjs": "1436a06d843cbf4fe444d44003502c48ea56d74b527d819f8bc3e9363ac21217",
     "src/shared/server/production-bootstrap.mjs": "530b4ff952198d946e39401c07c1e859a0ee07c4e709d7a25fa8cb771c1e15b4",
     "src/shared/server/production-storage-codec.mjs": "bbc1c1241bec93c18e5f401054b050622a8563c84053dfae141b613e0d000708",
     "src/shared/server/repositories.mjs": "68fcbe7c8047f7069f0e19a19aea8dab1fc1721c9c72e248b4c9076aff1f6e3a"
-  }
+  },
+  "schedulerPackaging": "Verified active deployed ZIP plus exactly three reviewed expiry/review/monitoring source changes",
+  "schedulerBaselineDeployment": "2260a9ac-e444-415a-ad43-adbb52eed86a",
+  "schedulerBaselineSha256": "3c8e52bae55141a775457555a067faf8388df8e5af84fdd5881e78a3c2f8967d",
+  "schedulerChangedFiles": [
+    "src/production-scheduler.mjs",
+    "src/shared/server/phase3-integrations.mjs",
+    "src/shared/server/phase3-service.mjs"
+  ]
 }

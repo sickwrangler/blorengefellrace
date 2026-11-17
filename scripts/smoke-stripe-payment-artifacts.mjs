@@ -182,6 +182,29 @@ try {
   assert.equal(held.registrations[0].placeStatus, "payment_reserved");
   assert.equal(held.payments[1].reservationReview.status, "open");
   assert.equal(reviewWarning, true);
+  // Confirm the new API can resolve a hold written by the narrowly patched,
+  // older deployed scheduler, without fetching any real provider data.
+  const reviewGateway = {
+    ...gateway,
+    async retrieveCheckoutSession() {
+      return { id: "cs_synthetic", mode: "payment", livemode: true,
+        status: "complete", payment_status: "paid", amount_total: 600, currency: "gbp",
+        metadata: { registrationId: "reg", paymentId: "payment" },
+        payment_intent: { id: "pi_synthetic", status: "succeeded", amount_received: 600, currency: "gbp",
+          latest_charge: { id: "ch_synthetic", status: "succeeded", captured: true,
+            disputed: false, amount_refunded: 0, amount_captured: 600, currency: "gbp" } } };
+    },
+  };
+  const reviewService = new Phase3IntegrationService({ repository: schedulerRepository,
+    stripeGateway: reviewGateway, emailAdapter });
+  const manual = await reviewService.checkWaitingListPayment(
+    { authenticated: true, role: "organiser", actorType: "synthetic_organiser" }, "reg", at);
+  assert.equal(manual.ok, true);
+  assert.equal((await reviewService.webhook(payload, signature, at)).duplicate, true);
+  const resolved = await schedulerRepository.read();
+  assert.equal(resolved.payments[1].reservationReview.status, "resolved");
+  assert.equal(resolved.registrations[0].placeStatus, "confirmed");
+  assert.equal(emails, 1);
   console.log(
     JSON.stringify({
       ok: true,
@@ -190,7 +213,9 @@ try {
       invalidSignatureStatus: 400,
       organiserUnauthenticatedStatus: 403,
       duplicateEntries: 0,
-      emailsSent: emails,
+      duplicateConfirmationEmails: 0,
+      isolatedManualConfirmationEmails: emails,
+      apiResolvesDeployedSchedulerHold: true,
       capacityChangesOnDuplicate: 0,
       schedulerReviewHold: true,
       monitoringWarning: true,
