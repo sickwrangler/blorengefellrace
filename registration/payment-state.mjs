@@ -1,6 +1,6 @@
 export const PAYMENT_PRESENTATIONS = Object.freeze({
   not_configured: Object.freeze({ title: "Continue to payment", message: "Online payment is not available yet in this development environment.", canRetry: false }),
-  checkout_pending: Object.freeze({ title: "Awaiting payment", message: "Your payment session is still open. Complete it in the Stripe checkout window.", canRetry: false }),
+  checkout_pending: Object.freeze({ title: "Awaiting payment confirmation", message: "We’re waiting for Stripe to confirm your payment. If you’ve already paid, use Refresh status to check for confirmation before trying again.", canRetry: false }),
   payment_review: Object.freeze({ title: "Payment needs checking", message: "Contact the race organiser to check your payment and race place.", canRetry: false }),
   processing: Object.freeze({ title: "Payment processing", message: "Payment is still being confirmed. Refresh this page shortly.", canRetry: false }),
   paid: Object.freeze({ title: "Entry confirmed", message: "Payment has been confirmed and your entry place is secured.", canRetry: false }),

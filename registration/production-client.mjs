@@ -81,6 +81,7 @@ export const prototype = {
   executeOneEmailRecovery(input) { return v4("/organiser/email-recovery/execute-one", { method: "POST", body: JSON.stringify(input) }); },
   integrationStatus() { return v3("/registration/status"); },
   paymentStatus(token = this.managementToken()) { return token ? v3("/payments/status", { headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
+  checkOwnWaitingListPayment(token) { return v3("/payments/check", { method: "POST", headers: { "x-management-token": token } }); },
   checkout(token = this.managementToken()) { return token ? v3("/payments/checkout", { method: "POST", headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "PAYMENTS_UNAVAILABLE" }); },
   requestRefund(token = this.managementToken()) { return token ? v3("/refunds/request", { method: "POST", headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
   requestProviderProofRefund(id) { return v3(`/organiser/registrations/${encodeURIComponent(id)}/provider-proof-refund-request`, { method: "POST" }); },

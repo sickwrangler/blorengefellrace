@@ -220,6 +220,10 @@ export const prototype = {
     try { return await phase3Api("/payments/checkout", { method: "POST", headers: { "x-management-token": token } }); }
     catch { return { ok: false, code: "PAYMENTS_UNAVAILABLE" }; }
   },
+  async checkOwnWaitingListPayment(token) {
+    try { return await phase3Api("/payments/check", { method: "POST", headers: { "x-management-token": token } }); }
+    catch { return { ok: false, code: "PAYMENTS_UNAVAILABLE" }; }
+  },
   async requestRefund(token = this.managementToken()) {
     if (!usesApi || !token) return { ok: false, code: "MANAGEMENT_TOKEN_INVALID" };
     try { return await phase3Api("/refunds/request", { method: "POST", headers: { "x-management-token": token } }); }

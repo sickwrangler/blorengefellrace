@@ -10,6 +10,7 @@ const refresh = document.querySelector("#refresh-payment");
 const requestRefund = document.querySelector("#request-refund");
 const confirmedRunners = document.querySelector("#confirmed-runners");
 const environmentStatus = document.querySelector("#payment-environment-status");
+const paymentReviewCodes = new Set(["PAID_CAPACITY_CONFLICT", "PAYMENT_MISMATCH", "PAYMENT_REVIEW_REQUIRED"]);
 
 const fragment = new URLSearchParams(location.hash.replace(/^#/, ""));
 if (fragment.get("manage")) prototype.rememberManagementToken(fragment.get("manage"));
@@ -41,8 +42,15 @@ async function render() {
     message.textContent = "Use the secure link supplied when the entry was created.";
     actions.hidden = true; return;
   }
-  const [status, integrations] = await Promise.all([prototype.paymentStatus(token), prototype.integrationStatus()]);
+  let [status, integrations] = await Promise.all([prototype.paymentStatus(token), prototype.integrationStatus()]);
   environmentStatus.textContent = integrationLabel(integrations);
+  if (status.canCheckWaitingListPayment) {
+    title.textContent = "Checking payment with Stripe…";
+    message.textContent = "We’re checking the original checkout.";
+    const checked = await prototype.checkOwnWaitingListPayment(token).catch(() => ({ ok: false, code: "PAYMENTS_UNAVAILABLE" }));
+    if (checked.ok) status = await prototype.paymentStatus(token);
+    else if (paymentReviewCodes.has(checked.code)) status = { ...status, state: "payment_review" };
+  }
   if (!status.ok) {
     title.textContent = "Payment status unavailable";
     message.textContent = runnerMessageForCode(status.code);
@@ -71,5 +79,20 @@ requestRefund.addEventListener("click", async () => {
   requestRefund.hidden = result.ok;
   requestRefund.disabled = false;
 });
-refresh.addEventListener("click", render);
-await render();
+async function refreshStatus() {
+  refresh.disabled = true;
+  try {
+    await render();
+  } catch {
+    title.textContent = "Payment status unavailable";
+    message.textContent = "Use Refresh status to check again. If you’ve already paid, wait for confirmation before trying again.";
+    retry.hidden = true;
+    requestRefund.hidden = true;
+    actions.hidden = false;
+  } finally {
+    refresh.disabled = false;
+  }
+}
+
+refresh.addEventListener("click", refreshStatus);
+await refreshStatus();

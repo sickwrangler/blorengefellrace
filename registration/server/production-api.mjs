@@ -42,6 +42,7 @@ export function createProductionApi({ service, phase3Integrations, repository, s
     if (method === "POST" && pathname === "/api/v3/stripe/webhook") return resultResponse(await phase3Integrations.webhook(body.rawBody, headers["stripe-signature"]));
     if (method === "GET" && pathname === "/api/v3/registration/status") return response(200, phase3Integrations.integrationStatus());
     if (method === "POST" && pathname === "/api/v3/payments/checkout") return resultResponse(await phase3Integrations.checkout(headers["x-management-token"]));
+    if (method === "POST" && pathname === "/api/v3/payments/check") return resultResponse(await phase3Integrations.checkOwnWaitingListPayment(headers["x-management-token"]));
     if (method === "GET" && pathname === "/api/v3/payments/status") return resultResponse(await phase3Integrations.paymentStatus(headers["x-management-token"]));
     if (method === "GET" && pathname === "/api/v3/management/entry") return resultResponse(await phase3Integrations.managementEntry(headers["x-management-token"]));
     if (method === "POST" && pathname === "/api/v3/management/recover") return response(202, await phase3Integrations.recoverManagementLink(body.email));

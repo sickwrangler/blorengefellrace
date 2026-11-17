@@ -15,6 +15,13 @@ const runnerFor = (state, registration) => state.runners.find((item) => item.id 
 const paymentFor = (state, registration) => state.payments.find((item) => item.registrationId === registration?.id || item.registrationIds?.includes(registration?.id));
 const refundFor = (state, registration) => [...state.refundRequests].reverse().find((item) => item.registrationId === registration?.id);
 const WITHDRAWAL_NOTIFICATION_PURPOSES = new Set(["runner_withdrawal_confirmation", "organiser_withdrawal_notification"]);
+const CHECKABLE_WAITING_LIST_PAYMENTS = new Set(["checkout_pending", "processing", "expired", "failed"]);
+
+function waitingListPaymentWithCheckout(state, registration) {
+  if (!activeRegistration(registration) || !acceptedWaitingListRegistration(state, registration.id)) return null;
+  const payment = paymentFor(state, registration);
+  return payment?.checkoutSessionId && !payment.orderId ? payment : null;
+}
 
 function managementAccess(state, token, at = new Date()) {
   const tokenHash = hashToken(token);
@@ -202,7 +209,10 @@ export class Phase3IntegrationService {
     const state = await this.repository.read(); const access = managementAccess(state, managementToken, at);
     if (!access.ok) return access;
     const view = managementView(state, access.registration, at, { paymentsAvailable: Boolean(this.stripeGateway) });
-    return { ...runnerPaymentState(state, access.registration.id, at), state: view.registration.payment.state, label: view.registration.payment.label };
+    const waitingListPayment = waitingListPaymentWithCheckout(state, access.registration);
+    const canCheckWaitingListPayment = Boolean(this.stripeGateway?.retrieveCheckoutSession)
+      && CHECKABLE_WAITING_LIST_PAYMENTS.has(waitingListPayment?.status);
+    return { ...runnerPaymentState(state, access.registration.id, at), state: view.registration.payment.state, label: view.registration.payment.label, canCheckWaitingListPayment };
   }
 
   async managementEntry(managementToken, at = new Date()) {
@@ -494,7 +504,8 @@ export class Phase3IntegrationService {
         });
       }
       if (expectedPayment) state.auditEvents.push({
-        id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), action: "stripe_payment_checked_by_organiser",
+        id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at),
+        action: actor.actorType === "runner" ? "stripe_payment_checked_by_runner" : "stripe_payment_checked_by_organiser",
         subjectId: registration.id, actorType: actor.actorType, actorId: actor.id ?? null,
         environment: state.environment, before: null, after: { paymentStatus: result.paymentStatus }
       });
@@ -514,13 +525,24 @@ export class Phase3IntegrationService {
 
   async checkWaitingListPayment(actor, registrationId, at = new Date()) {
     if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
-    if (!this.stripeGateway?.retrieveCheckoutSession) return { ok: false, code: "PAYMENTS_UNAVAILABLE" };
     const state = await this.repository.read();
-    const registration = state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
-    const payment = registration && paymentFor(state, registration);
-    if (!payment?.checkoutSessionId || payment.orderId || !acceptedWaitingListRegistration(state, registrationId)) return { ok: false, code: "PAYMENT_REVIEW_UNAVAILABLE" };
+    const registration = state.registrations.find((item) => item.id === registrationId);
+    return this.#verifyWaitingListPayment(state, registration, actor, at);
+  }
+
+  async checkOwnWaitingListPayment(managementToken, at = new Date()) {
+    const state = await this.repository.read();
+    const access = managementAccess(state, managementToken, at);
+    if (!access.ok) return access;
+    return this.#verifyWaitingListPayment(state, access.registration, { actorType: "runner" }, at);
+  }
+
+  async #verifyWaitingListPayment(state, registration, actor, at) {
+    if (!this.stripeGateway?.retrieveCheckoutSession) return { ok: false, code: "PAYMENTS_UNAVAILABLE" };
+    const payment = waitingListPaymentWithCheckout(state, registration);
+    if (!payment) return { ok: false, code: "PAYMENT_REVIEW_UNAVAILABLE" };
     if (payment.status === "paid" && registration.placeStatus === "confirmed") return { ok: true, duplicate: true, paymentStatus: "paid", placeStatus: "confirmed" };
-    if (!["checkout_pending", "processing", "expired", "failed"].includes(payment.status)) return { ok: false, code: "PAYMENT_REVIEW_UNAVAILABLE" };
+    if (!CHECKABLE_WAITING_LIST_PAYMENTS.has(payment.status)) return { ok: false, code: "PAYMENT_REVIEW_UNAVAILABLE" };
 
     let session;
     try { session = await this.stripeGateway.retrieveCheckoutSession(payment.checkoutSessionId); }
