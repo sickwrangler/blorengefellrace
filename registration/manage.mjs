@@ -45,6 +45,7 @@ function setBadge(id, label, tone, icon) {
 
 function paymentPresentation(payment) {
   if (payment.state === "paid") return { label: "Paid", tone: "positive", icon: "✓", summary: "Payment has been confirmed." };
+  if (payment.state === "fee_waived") return { label: "Entry fee waived", tone: "positive", icon: "✓", summary: "Your race place is confirmed and no payment is due." };
   if (["created", "not_configured", "failed", "expired", "checkout_pending"].includes(payment.state)) return { label: "Payment required", tone: "required", icon: "!", summary: "Payment is required to confirm this race place." };
   if (payment.state === "processing") return { label: "Payment processing", tone: "info", icon: "…", summary: "Payment is being confirmed." };
   if (payment.state === "refund_requested") return { label: "Refund requested", tone: "info", icon: "…", summary: "Your refund request is awaiting organiser review." };
@@ -62,6 +63,7 @@ function actionReason(label, action) {
   const deadline = deadlineText(action.deadline);
   const reasons = {
     ENTRY_INACTIVE: "This entry is no longer active.",
+    ENTRY_FEE_WAIVED: "The entry fee has been waived.",
     PAYMENTS_UNAVAILABLE: "Online payment is temporarily unavailable.",
     REGISTRATION_NOT_ACCEPTING: "Registration is not currently accepting payments.",
     PAYMENT_ALREADY_COMPLETE: "Payment is already complete.",

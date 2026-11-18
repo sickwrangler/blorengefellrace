@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { acceptedWaitingListRegistration, capacitySummary, expireWaitingListOffers, waitingListPriorityActive } from "./phase3-domain.mjs";
+import { acceptedWaitingListRegistration, capacitySummary, expireWaitingListOffers, hasWaivedEntryFee, waitingListPriorityActive } from "./phase3-domain.mjs";
 
 export const CHECKOUT_RESERVATION_MINUTES = 30;
 export const PAYMENT_CURRENCY = "gbp";
@@ -214,6 +214,9 @@ function waitingListCheckoutNeedsReview(payment, at) {
 }
 
 export function runnerPaymentState(state, registrationId, at = new Date()) {
+  if (state.registrations.some((entry) => entry.id === registrationId && hasWaivedEntryFee(entry))) {
+    return { ok: true, state: "fee_waived", label: "Entry fee waived", canRetry: false };
+  }
   const payment = paymentFor(state, registrationId);
   if (!payment) return { ok: false, code: "NOT_FOUND" };
   const labels = { created: "Continue to payment", not_configured: "Continue to payment", checkout_pending: "Awaiting payment", processing: "Payment processing", paid: "Entry confirmed", payment_review: "Payment needs checking", failed: "Payment unsuccessful", abandoned: "Payment session expired", expired: "Payment session expired", refunded: "Refund completed" };

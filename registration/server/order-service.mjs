@@ -1,7 +1,7 @@
 import { findPaymentForStripeEvent } from "./phase3-integrations.mjs";
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, issueManagementToken, managementTokenExpiry, managementTokenIsExpired, validateProductionRunner, waitingListPriorityActive } from "./phase3-domain.mjs";
+import { ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, hasWaivedEntryFee, issueManagementToken, managementTokenExpiry, managementTokenIsExpired, validateProductionRunner, waitingListPriorityActive } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { confirmationRecoveryPlan, reconcileEmailHealth, recoveryFingerprint } from "./email-health.mjs";
 
@@ -68,8 +68,9 @@ function orderPayment(state, order) { return state.payments.find((item) => item.
 function fullName(runner) { return normalizeText(`${runner?.firstName ?? ""} ${runner?.lastName ?? ""}`); }
 function declarationFor(state, registrationId) { return [...state.declarations].reverse().find((item) => item.registrationId === registrationId && !item.revokedAt); }
 
-function paidRegistration(state, registration) {
+function confirmedRegistration(state, registration) {
   if (!active(registration) || registration.placeStatus !== "confirmed") return false;
+  if (hasWaivedEntryFee(registration)) return true;
   const payment = state.payments.find((item) => item.registrationId === registration.id || item.registrationIds?.includes(registration.id));
   return payment?.status === "paid" && !payment.refundedRegistrationIds?.includes(registration.id);
 }
@@ -87,7 +88,7 @@ function comparePublicEntries(left, right) {
 }
 
 export function buildPublicStartList(state) {
-  const entries = state.registrations.filter((registration) => paidRegistration(state, registration)).map((registration) => {
+  const entries = state.registrations.filter((registration) => confirmedRegistration(state, registration)).map((registration) => {
     const runner = runnerFor(state, registration);
     return runner ? {
       runnerName: fullName(runner),

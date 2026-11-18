@@ -1,7 +1,7 @@
 import { waitingListPaymentReviews } from "./phase3-integrations.mjs";
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { acceptedWaitingListRegistration, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, expirePrivateInvitation, issuePrivateInvitation, PROVIDER_PROOF_INVITATION_HOURS, publicWaitingListAvailable, registrationEmergencyContact, registrationReference, revokePrivateInvitation } from "./phase3-domain.mjs";
+import { acceptedWaitingListRegistration, addOrganiserEntry, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, expirePrivateInvitation, hasWaivedEntryFee, issuePrivateInvitation, PROVIDER_PROOF_INVITATION_HOURS, publicWaitingListAvailable, registrationEmergencyContact, registrationReference, revokePrivateInvitation } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { buildPrivateWorkbookModel, buildTransferHistory, buildWaitingListView, transferSummaryForRegistration, waitingListSummary } from "./private-export.mjs";
 
@@ -34,7 +34,7 @@ function registrationView(state, registration, transferHistory = buildTransferHi
     canCheckWaitingListPayment: active(registration) && !payment?.orderId && Boolean(payment?.checkoutSessionId)
       && ["checkout_pending", "processing", "expired", "failed"].includes(payment.status)
       && acceptedWaitingListRegistration(state, registration.id),
-    paymentStatus: refunded ? "refunded" : payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status === "expired" ? "abandoned" : payment?.status ?? "created",
+    paymentStatus: hasWaivedEntryFee(registration) ? "fee_waived" : refunded ? "refunded" : payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status === "expired" ? "abandoned" : payment?.status ?? "created",
     pricing: registration.pricing ?? (payment ? { standardPricePence: state.event.entryFeePence, wfraMemberPricePence: state.event.wfraMemberPricePence, priceActuallyChargedPence: registration.priceActuallyChargedPence, adjustmentReason: registration.pricing?.adjustmentReason, wfraDiscountApplied: registration.pricing?.wfraDiscountApplied } : null),
     payment: payment ? { expectedAmountPence: registration.priceActuallyChargedPence ?? payment.expectedAmountPence, actualPaidAmountPence: payment.status === "paid" ? registration.priceActuallyChargedPence ?? payment.actualPaidAmountPence : payment.actualPaidAmountPence, currency: payment.currency, refundState: refunded ? "refunded" : payment.refundState, webhookReconciliationState: payment.webhookReconciliationState, reservationReview: payment.reservationReview ?? null } : undefined,
     runner: { ...runner, emergencyName: emergency?.name, emergencyPhone: emergency?.phone },
@@ -85,6 +85,22 @@ export class ProductionRegistrationService {
     return { ok: true, state: { version: state.schemaVersion, event: state.event, environment: "production", registrationState: state.registrationState, phase3RegistrationState: state.registrationState, registrations, waitingList, paymentReviews: waitingListPaymentReviews(state), waitingListSummary: waitingListSummary(waitingList), communications: state.communications, refundRequests: state.refundRequests.map(({ id, registrationId, status, requestedAt, decidedAt, refundedAt, placeReleasedAt }) => ({ id, registrationId, status, requestedAt, decidedAt, refundedAt, placeReleasedAt })), auditEvents: [] }, totals: totals(state) };
   }
   async entry(actor, id) { if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); const registration = state.registrations.find((item) => item.id === id && !item.deletedAt); return registration ? { ok: true, registration: registrationView(state, registration) } : { ok: false, code: "NOT_FOUND" }; }
+  addDirectEntry(actor, input, at = new Date()) {
+    if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
+    return this.repository.transaction((state) => {
+      const result = addOrganiserEntry(state, input, actor, at);
+      if (!result.ok) return result;
+      const { registration } = result;
+      return {
+        ok: true,
+        duplicate: result.duplicate,
+        reference: registrationReference(registration, state.environment),
+        placeStatus: registration.placeStatus,
+        paymentStatus: "fee_waived",
+        declarationStatus: registration.declarationStatus
+      };
+    });
+  }
   manage(actor, id, action, payload = {}) {
     if (!authorize(actor, action.includes("race_number") ? "race_number" : "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
     return this.repository.transaction(async (state) => {

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { acceptedWaitingListRegistration, acceptWaitingListOffer, authorizePrivateInvitation, cancelWaitingListOffer, capacitySummary, createNextWaitingListOffer, createWaitingListOffer, decideRefund, declineWaitingListOffer, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, publicWaitingListAvailable, registrationEmergencyContact, registrationReference, requestRefund, validateProductionRunner, withdrawRegistration, withdrawWaitingListEntry } from "./phase3-domain.mjs";
+import { acceptedWaitingListRegistration, acceptWaitingListOffer, authorizePrivateInvitation, cancelWaitingListOffer, capacitySummary, createNextWaitingListOffer, createWaitingListOffer, decideRefund, declineWaitingListOffer, hasWaivedEntryFee, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, publicWaitingListAvailable, registrationEmergencyContact, registrationReference, requestRefund, validateProductionRunner, withdrawRegistration, withdrawWaitingListEntry } from "./phase3-domain.mjs";
 import { findPaymentForStripeEvent, beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
 import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken, prepareRegistrationEmailOutboxAttempt } from "./order-service.mjs";
@@ -52,6 +52,7 @@ export function managementActionEligibility(state, registration, { at = new Date
 
   let continuePayment = available();
   if (!active) continuePayment = unavailable("ENTRY_INACTIVE");
+  else if (hasWaivedEntryFee(registration)) continuePayment = unavailable("ENTRY_FEE_WAIVED");
   else if (!paymentsAvailable) continuePayment = unavailable("PAYMENTS_UNAVAILABLE");
   else if (!acceptingPayments) continuePayment = unavailable("REGISTRATION_NOT_ACCEPTING");
   else if (payment?.status === "paid") continuePayment = unavailable("PAYMENT_ALREADY_COMPLETE");
@@ -82,7 +83,8 @@ export function managementActionEligibility(state, registration, { at = new Date
   if (withdrawn) withdraw = unavailable("ENTRY_ALREADY_WITHDRAWN");
   else if (!active) withdraw = unavailable("ENTRY_INACTIVE");
   else if (new Date(at) >= new Date(raceStart)) withdraw = unavailable("WITHDRAWAL_RACE_STARTED", raceStart);
-  else if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") withdraw = unavailable("WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED");
+  else if ((!hasWaivedEntryFee(registration) && (payment?.status !== "paid" || payment.refundedRegistrationIds?.includes(registration.id))) ||
+    registration.placeStatus !== "confirmed") withdraw = unavailable("WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED");
 
   return { continuePayment, signDeclaration, amend, transfer, requestRefund: requestRefundAction, withdraw };
 }
@@ -296,14 +298,21 @@ export class Phase3IntegrationService {
     };
   }
 
-  async organiserWithdraw(actor, registrationId, { reason = null } = {}, at = new Date()) {
+  async organiserWithdraw(actor, registrationId, { reason = null, expectedEmail = null } = {}, at = new Date()) {
     if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
     if (String(reason ?? "").trim().length > 250) return { ok: false, code: "WITHDRAWAL_REASON_TOO_LONG" };
-    const prepared = await this.repository.transaction((state) => prepareWithdrawal(state, registrationId, actor, at, {
-      organiserEmail: this.organiserEmail,
-      publicBaseUrl: this.publicBaseUrl,
-      reason
-    }));
+    const prepared = await this.repository.transaction((state) => {
+      const registration = state.registrations.find((item) => item.id === registrationId && !item.deletedAt);
+      if (expectedEmail !== null && (!registration || !normalizeEmail(expectedEmail) ||
+        normalizeEmail(runnerFor(state, registration)?.email) !== normalizeEmail(expectedEmail))) {
+        return { ok: false, code: "WITHDRAWAL_ENTRY_MISMATCH" };
+      }
+      return prepareWithdrawal(state, registrationId, actor, at, {
+        organiserEmail: this.organiserEmail,
+        publicBaseUrl: this.publicBaseUrl,
+        reason
+      });
+    });
     if (!prepared.ok) return prepared;
     const notifications = [];
     for (const attemptId of prepared.outboxAttemptIds) notifications.push(await this.orders.deliverPreparedOutboxAttempt(attemptId, at));
