@@ -110,7 +110,26 @@ export class ProductionRegistrationService {
       else if (action === "remove_race_number") { if (!registration.raceNumber) return { ok: false, code: "NO_RACE_NUMBER" }; metadata.releasedRaceNumber = registration.raceNumber; registration.raceNumber = null; audit(state, actor, "race_number_removed", id, { raceNumber: before.raceNumber }, { raceNumber: null }); }
       else if (action === "cancel") { if (payload.releaseRaceNumber && registration.raceNumber) { metadata.releasedRaceNumber = registration.raceNumber; registration.raceNumber = null; } registration.entryStatus = "cancelled"; registration.placeStatus = "none"; registration.waitingListPosition = null; refreshWaiting(state); audit(state, actor, "entry_cancelled", id, { entryStatus: before.entryStatus }, { entryStatus: "cancelled" }); const runner = entities(state, registration).runner; await deliverRegistrationCommunication(state, this.emailAdapter, { registrationId: id, template: "registration_cancelled", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}` } }, { idempotencyKey: `registration:${id}:cancelled:v1` }); }
       else if (action === "promote" || action === "entry_status") { const requested = action === "promote" ? "accepted" : payload.entryStatus; if (requested === "accepted" && registration.entryStatus === "waiting_list" && totals(state).remaining > 0) { registration.entryStatus = "accepted"; registration.waitingListPosition = null; refreshWaiting(state); audit(state, actor, "entry_promoted", id, { entryStatus: before.entryStatus }, { entryStatus: "accepted" }); } else if (requested === "waiting_list" && registration.entryStatus === "accepted") { registration.entryStatus = "waiting_list"; registration.waitingSequence = ++state.counters.waitingSequence; refreshWaiting(state); audit(state, actor, "entry_status_changed", id, { entryStatus: before.entryStatus }, { entryStatus: "waiting_list" }); } else if (requested !== registration.entryStatus) return { ok: false, code: "INVALID_ENTRY_TRANSITION" }; }
-      else if (action === "correct") { const runner = entities(state, registration).runner; const fields = []; for (const field of ["firstName", "lastName", "phone", "club"]) if (payload[field] !== undefined) { runner[field] = normalizeName(payload[field]); fields.push(field); } audit(state, actor, "data_corrected", id, null, { fields }); }
+      else if (action === "correct") {
+        const { runner } = entities(state, registration);
+        if (!runner) return { ok: false, code: "NOT_FOUND" };
+        const expected = payload.expected;
+        if (expected && (!active(registration) || registration.placeStatus !== "confirmed" ||
+          expected.runnerId !== runner.id || expected.phone !== (runner.phone ?? "") ||
+          expected.club !== (runner.club ?? ""))) return { ok: false, code: "ENTRY_CHANGED" };
+        const fields = ["firstName", "lastName", "phone", "club"].filter((field) => payload[field] !== undefined);
+        const changes = {};
+        for (const field of fields) {
+          if (typeof payload[field] !== "string") return { ok: false, code: "INVALID_CORRECTION" };
+          const value = normalizeName(payload[field]);
+          if ((field !== "club" && !value) || value.length > (field === "phone" ? 80 : 160)) {
+            return { ok: false, code: "INVALID_CORRECTION" };
+          }
+          changes[field] = value;
+        }
+        Object.assign(runner, changes);
+        audit(state, actor, "data_corrected", id, null, { fields });
+      }
       else return { ok: false, code: "INVALID_ACTION" };
       registration.updatedAt = now(); return { ok: true, registration: registrationView(state, registration), ...metadata };
     });

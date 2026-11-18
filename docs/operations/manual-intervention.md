@@ -22,6 +22,17 @@ Examples: supported state transition, entry correction/cancellation, transfer, d
 
 The dashboard does not currently expose operational state transition controls. The confirmation-protected authenticated endpoint is supported, but execution should use a reviewed operator command from a signed-in session.
 
+### Edit live registration places
+
+Open the organiser dashboard and go to **Registration places**. Search by name or entry reference, or use the place, payment and declaration filters.
+
+- **Add runner** creates a fee-waived place from the runner's details. Enter the reason and confirm the fee waiver.
+- **Restore place** uses the saved details from a **Refunded / Place released** entry. It creates a confirmed fee-waived entry and preserves the original refund.
+- **Edit** updates phone and club details. Open **Manage** for race numbers, declarations and eligible transfers.
+- **Remove** withdraws the runner and frees the place. The withdrawal email is sent and the financial record is retained. Refunds use the existing refund workflow.
+
+Add and restore send no email. A runner with a pending declaration can sign at check-in. Every save is checked against live data, and the dashboard reloads the registration list and capacity. The start list and fresh race-day exports use the same saved registration records.
+
 ### Direct entry and withdrawal commands
 
 Install the command's browser dependency once, then use your existing Microsoft Entra organiser account when the browser prompts you. The separate browser profile retains that sign-in locally.

@@ -12,15 +12,18 @@ let pendingRaceNumber = null;
 let pendingCorrection = null;
 let pendingWaitingListAction = null;
 let pendingOrganiserWithdrawal = null;
+let restoreSource = null;
 let currentIntegrations = { paymentsAvailable: false, email: "captured-only" };
-if (canTest) await render();
+if (canTest) await render().catch(() => showNotice("Registration data is unavailable. Reload the dashboard to try again.", true));
 
 function showNotice(message, error = false) {
   const notice = document.querySelector("#organiser-alert"); notice.textContent = message; notice.hidden = false;
   notice.classList.toggle("form-alert--success", !error); notice.focus();
 }
 async function render() {
-  const [snapshot, integrations] = await Promise.all([prototype.all(), prototype.integrationStatus()]); currentState = snapshot.state; currentIntegrations = integrations;
+  const [snapshot, integrations] = await Promise.all([prototype.all(), prototype.integrationStatus()]);
+  if (!snapshot.state) throw new Error("Registration data unavailable");
+  currentState = snapshot.state; currentIntegrations = integrations;
   const reviews = currentState.paymentReviews ?? [];
   let reviewNotice = document.querySelector("#payment-review-notice");
   if (!reviewNotice) {
@@ -208,8 +211,57 @@ function filteredEntries() {
   const declaration = document.querySelector("#declaration-filter").value;
   return declaration ? entries.filter((item) => item.declarationStatus === declaration) : entries;
 }
+function canRestorePlace(item) {
+  return prototype.addDirectEntry && item.entryStatus === "place_released" &&
+    item.paymentStatus === "refunded" && item.runner.email;
+}
+
+function renderPlaceTable(entries) {
+  const rows = document.querySelector("#place-rows");
+  rows.replaceChildren();
+  for (const item of entries) {
+    const row = rows.insertRow();
+    const name = `${item.runner.firstName} ${item.runner.lastName}`;
+    for (const value of [item.raceNumber ?? "—", name, item.runner.club || "—",
+      (item.placeStatus === "none" ? item.entryStatus : item.placeStatus).replaceAll("_", " "),
+      item.paymentStatus.replaceAll("_", " "), item.declarationStatus === "complete" ? "Complete" : "Required"]) {
+      row.insertCell().textContent = value;
+    }
+    const actions = row.insertCell();
+    const view = actionButton("Manage", () => selectEntry(item.testReference), "text-button");
+    view.setAttribute("aria-label", `Manage ${name}`);
+    actions.append(view);
+    if (item.placeStatus === "confirmed") {
+      const edit = actionButton("Edit", () => openCorrection(item), "text-button");
+      edit.setAttribute("aria-label", `Edit phone and club for ${name}`);
+      actions.append(edit);
+    }
+    if (canWithdrawPlace(item)) {
+      const remove = actionButton("Remove", () => openWithdrawal(item), "text-button");
+      remove.setAttribute("aria-label", `Remove place for ${name}`);
+      actions.append(remove);
+    }
+    if (canRestorePlace(item)) {
+      const restore = actionButton("Restore place", () => openDirectPlace(item), "text-button");
+      restore.setAttribute("aria-label", `Restore place for ${name}`);
+      actions.append(restore);
+    }
+  }
+}
+
 function renderList() {
   const entries = filteredEntries(); const list = document.querySelector("#entrant-list"); list.replaceChildren();
+  const placeEditor = Boolean(prototype.addDirectEntry);
+  document.querySelector("#place-editor-toolbar").hidden = !placeEditor;
+  document.querySelector("#place-table").hidden = !placeEditor || entries.length === 0;
+  list.hidden = placeEditor;
+  document.querySelector("#empty-state").hidden = entries.length > 0;
+  if (placeEditor) {
+    document.querySelector("#entries-title").textContent = "Registration places";
+    document.querySelector("#add-place").disabled = currentRemainingPlaces < 1;
+    renderPlaceTable(entries);
+    return;
+  }
   for (const item of entries) {
     const card = document.createElement("article"); card.className = "entrant-card";
     if (item.testReference === selectedReference) card.classList.add("entrant-card--selected");
@@ -224,7 +276,6 @@ function renderList() {
     button.addEventListener("click", () => selectEntry(item.testReference));
     card.append(heading, reference, facts, button); list.append(card);
   }
-  document.querySelector("#empty-state").hidden = entries.length > 0;
 }
 async function selectEntry(reference) {
   selectedReference = reference; history.replaceState(null, "", `dashboard.html?ref=${encodeURIComponent(reference)}`);
@@ -271,9 +322,34 @@ function openWaitingListAction(item, action) {
   document.querySelector("#waiting-list-action-dialog").showModal();
   reasonInput.focus();
 }
+function canWithdrawPlace(item) {
+  return item.placeStatus === "confirmed" && ["successful", "fee_waived"].includes(item.paymentStatus) &&
+    !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus);
+}
+
+function openCorrection(item) {
+  pendingCorrection = item;
+  document.querySelector("#entry-correction-reference").textContent = item.testReference;
+  document.querySelector("#entry-correction-phone").value = item.runner.phone ?? "";
+  document.querySelector("#entry-correction-club").value = item.runner.club ?? "";
+  document.querySelector("#entry-correction-error").hidden = true;
+  document.querySelector("#entry-correction-dialog").showModal();
+  document.querySelector("#entry-correction-phone").focus();
+}
+
+function openWithdrawal(item) {
+  pendingOrganiserWithdrawal = item;
+  document.querySelector("#withdraw-entry-runner").textContent = `${item.runner.firstName} ${item.runner.lastName} · ${item.testReference}`;
+  document.querySelector("#withdraw-entry-reason").value = "";
+  document.querySelector("#withdraw-entry-error").hidden = true;
+  document.querySelector("#withdraw-entry-dialog").showModal();
+  document.querySelector("#withdraw-entry-reason").focus();
+}
+
 function renderActions(item) {
   const actions = document.querySelector("#entry-actions"); actions.replaceChildren();
   const available = availableOrganiserActions(item);
+  if (canRestorePlace(item)) actions.append(actionButton("Restore place", () => openDirectPlace(item)));
   const refundRequest = currentState.refundRequests?.find((request) => request.registrationId === item.id && ["requested", "approved"].includes(request.status));
   if (item.canCheckWaitingListPayment && currentIntegrations.paymentsAvailable && prototype.checkWaitingListPayment) {
     actions.append(actionButton("Check Stripe payment", async (event) => {
@@ -305,25 +381,12 @@ function renderActions(item) {
     actions.append(actionButton("Record paper declaration", async () => { if (!window.confirm("Confirm that the named runner signed the current paper declaration in person? This records an audited organiser action, not a digital signature.")) return; const result = await prototype.recordPaperDeclaration(item.id); showNotice(result.ok ? "Paper declaration recorded. Runner is cleared from the declaration perspective." : `Declaration could not be recorded: ${result.code}`, !result.ok); await render(); }));
   }
   if (item.placeStatus === "confirmed") {
-    actions.append(actionButton("Edit phone / club", () => {
-      pendingCorrection = item.id;
-      document.querySelector("#entry-correction-reference").textContent = item.testReference;
-      document.querySelector("#entry-correction-phone").value = item.runner.phone ?? "";
-      document.querySelector("#entry-correction-club").value = item.runner.club ?? "";
-      document.querySelector("#entry-correction-dialog").showModal();
-      document.querySelector("#entry-correction-phone").focus();
-    }));
+    actions.append(actionButton("Edit phone / club", () => openCorrection(item)));
     actions.append(actionButton("Transfer entry", () => openTransferDialog(item)));
     actions.append(actionButton("Resend management link", async () => { const result = await prototype.resendManagementLink(item.id); showNotice(result.ok ? "A new management link was sent through the controlled development channel." : `Management link unavailable: ${result.code}`, !result.ok); await render(); }));
   }
-  if (item.placeStatus === "confirmed" && ["successful", "fee_waived"].includes(item.paymentStatus) && !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus)) {
-    actions.append(actionButton("Withdraw runner", () => {
-      pendingOrganiserWithdrawal = item.id;
-      document.querySelector("#withdraw-entry-runner").textContent = `${item.runner.firstName} ${item.runner.lastName} · ${item.testReference}`;
-      document.querySelector("#withdraw-entry-reason").value = "";
-      document.querySelector("#withdraw-entry-dialog").showModal();
-      document.querySelector("#withdraw-entry-reason").focus();
-    }, "button button--quiet danger-button"));
+  if (canWithdrawPlace(item)) {
+    actions.append(actionButton("Withdraw runner", () => openWithdrawal(item), "button button--quiet danger-button"));
   }
   if (available.includes("race_number")) actions.append(actionButton(item.raceNumber ? "Change race number" : "Assign race number", () => {
     pendingRaceNumber = item.id;
@@ -445,17 +508,120 @@ document.querySelector("#close-withdraw-entry")?.addEventListener("click", () =>
 document.querySelector("#withdraw-entry-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!pendingOrganiserWithdrawal) return;
-  const registrationId = pendingOrganiserWithdrawal;
+  const { id: registrationId, runner } = pendingOrganiserWithdrawal;
   const reason = document.querySelector("#withdraw-entry-reason").value.trim();
-  const result = await prototype.organiserWithdrawEntry(registrationId, reason);
-  if (result.ok) {
-    pendingOrganiserWithdrawal = null;
-    document.querySelector("#withdraw-entry-dialog").close();
+  const submit = event.submitter;
+  submit.disabled = true;
+  let result;
+  try {
+    result = await prototype.organiserWithdrawEntry(registrationId, reason, runner.email);
+  } catch {
+    result = { ok: false, code: "API_UNAVAILABLE" };
+  } finally {
+    submit.disabled = false;
   }
-  showNotice(result.ok
-    ? "The runner has been withdrawn. Their place is available, no refund was issued, and no waiting-list offer was created automatically."
-    : `Runner withdrawal unavailable: ${result.code}`, !result.ok);
-  await render();
+  if (!result.ok) {
+    const error = document.querySelector("#withdraw-entry-error");
+    error.textContent = result.code === "WITHDRAWAL_ENTRY_MISMATCH"
+      ? "The runner on this entry changed. Cancel and refresh places before continuing."
+      : `The runner could not be withdrawn. Refresh places to check the current status. (${result.code})`;
+    error.hidden = false;
+    return;
+  }
+  pendingOrganiserWithdrawal = null;
+  document.querySelector("#withdraw-entry-dialog").close();
+  try {
+    await render();
+    showNotice(result.notificationDeliveryFailed
+      ? "Place released. The withdrawal email could not be delivered."
+      : "Place released. The withdrawal is recorded and any refund can be handled separately.");
+  } catch {
+    showNotice("Place released. Refresh places to see the updated list.", true);
+  }
+});
+function openDirectPlace(item = null) {
+  restoreSource = item;
+  const form = document.querySelector("#direct-place-form");
+  form.reset();
+  const fields = document.querySelector("#direct-place-fields");
+  fields.hidden = Boolean(item);
+  for (const field of fields.querySelectorAll("input, select")) field.disabled = Boolean(item);
+  document.querySelector("#direct-place-title").textContent = item ? "Restore place" : "Add runner";
+  const runner = document.querySelector("#direct-place-runner");
+  runner.hidden = !item;
+  runner.textContent = item ? `${item.runner.firstName} ${item.runner.lastName} · ${item.testReference}` : "";
+  document.querySelector("#direct-place-description").textContent = item
+    ? "Confirm a new place using the saved runner details. The original refund stays on the old entry. No email is sent."
+    : "Create a confirmed place with the fee waived. The runner can sign their declaration at check-in. No email is sent.";
+  document.querySelector("#direct-place-error").hidden = true;
+  document.querySelector("#direct-place-dialog").showModal();
+}
+
+document.querySelector("#add-place").addEventListener("click", () => openDirectPlace());
+document.querySelector("#refresh-places").addEventListener("click", async () => {
+  try {
+    await render();
+    showNotice("Registration places refreshed.");
+  } catch {
+    showNotice("Could not refresh registration places. Try again.", true);
+  }
+});
+document.querySelector("#close-direct-place").addEventListener("click", () => document.querySelector("#direct-place-dialog").close());
+document.querySelector("#direct-place-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const dialog = document.querySelector("#direct-place-dialog");
+  const error = document.querySelector("#direct-place-error");
+  const submit = document.querySelector("#save-direct-place");
+  if (submit.disabled) return;
+  const { reason, confirmFeeWaiver, ...fields } = Object.fromEntries(new FormData(form));
+  const source = restoreSource;
+  const input = source
+    ? { restoreReference: source.testReference, expectedEmail: source.runner.email }
+    : { runner: { ...fields, wfraMember: fields.wfraMember === "yes" } };
+  const messages = {
+    CAPACITY_FULL: "All places are now taken or reserved.",
+    DUPLICATE_ACTIVE_ENTRY: "This email already has a confirmed or reserved place.",
+    ACTIVE_WAITING_LIST_OFFER: "This runner has an outstanding offer. Resolve it in the waiting list first.",
+    EXISTING_PAYMENT_REQUIRES_REVIEW: "Check the runner’s existing payment before confirming a place.",
+    RESTORE_ENTRY_MISMATCH: "The runner on the original entry has changed. Refresh places and check the entry.",
+    RESTORE_REFUNDED_ENTRY_REQUIRED: "The original entry must show Refunded and Place released.",
+    RESTORED_ENTRY_NO_LONGER_ACTIVE: "This entry was previously restored, then removed. Check its history.",
+    ORGANISER_ENTRY_REASON_REQUIRED: "Enter a reason for waiving the fee.",
+    FORBIDDEN: "Sign in with an organiser account to change places."
+  };
+  submit.disabled = true;
+  const cancel = document.querySelector("#close-direct-place");
+  cancel.disabled = true;
+  error.hidden = true;
+  const keepOpen = (dismiss) => dismiss.preventDefault();
+  dialog.addEventListener("cancel", keepOpen);
+  try {
+    const result = await prototype.addDirectEntry({ ...input, reason, confirmFeeWaiver: confirmFeeWaiver === "on" });
+    if (!result.ok) {
+      const labels = Object.fromEntries([...form.querySelectorAll("label > input, label > select")]
+        .map((field) => [field.name, field.parentElement.textContent.trim()]));
+      error.textContent = result.errors
+        ? Object.entries(result.errors).map(([field, message]) => `${labels[field] ?? field} — ${message}`).join(" ")
+        : messages[result.code] ?? "The place could not be confirmed. Refresh places before trying again.";
+      error.hidden = false;
+      return;
+    }
+    dialog.close();
+    try {
+      await selectEntry(result.reference);
+      showNotice(`Place confirmed with the fee waived. ${result.declarationStatus === "complete" ? "Declaration complete." : "Declaration required at check-in."}`);
+    } catch {
+      showNotice("Place confirmed. Refresh places to see the updated list.", true);
+    }
+  } catch {
+    error.textContent = "The connection failed. Close this form and refresh places to check whether it saved.";
+    error.hidden = false;
+  } finally {
+    dialog.removeEventListener("cancel", keepOpen);
+    submit.disabled = false;
+    cancel.disabled = false;
+  }
 });
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
@@ -503,11 +669,35 @@ document.querySelector("#race-number-form")?.addEventListener("submit", async (e
 document.querySelector("#close-entry-correction")?.addEventListener("click", () => { pendingCorrection = null; document.querySelector("#entry-correction-dialog").close(); });
 document.querySelector("#entry-correction-form")?.addEventListener("submit", async (event) => {
   event.preventDefault(); if (!pendingCorrection) return;
-  const registrationId = pendingCorrection; const data = Object.fromEntries(new FormData(event.currentTarget));
-  const result = await prototype.correctEntry(registrationId, data);
-  if (result.ok) { pendingCorrection = null; document.querySelector("#entry-correction-dialog").close(); }
-  showNotice(result.ok ? "Phone and club details updated without transferring the entry." : `Details could not be updated: ${result.code}`, !result.ok);
-  await render();
+  const { id: registrationId, runner } = pendingCorrection;
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  if (prototype.addDirectEntry) data.expected = { runnerId: runner.id, phone: runner.phone ?? "", club: runner.club ?? "" };
+  const submit = event.submitter;
+  const error = document.querySelector("#entry-correction-error");
+  error.hidden = true;
+  submit.disabled = true;
+  try {
+    const result = await prototype.correctEntry(registrationId, data);
+    if (!result.ok) {
+      error.textContent = result.code === "ENTRY_CHANGED"
+        ? "This entry changed since you opened it. Cancel and refresh places before editing."
+        : result.code === "INVALID_CORRECTION"
+          ? "Enter a phone number and keep both fields within the displayed length limits."
+          : "Could not save the runner’s details.";
+      error.hidden = false;
+      return;
+    }
+    pendingCorrection = null;
+    document.querySelector("#entry-correction-dialog").close();
+    await render();
+    showNotice("Phone and club details updated.");
+  } catch {
+    const message = "Could not refresh the entry. Check its latest details before trying again.";
+    if (pendingCorrection) { error.textContent = message; error.hidden = false; }
+    else showNotice(message, true);
+  } finally {
+    submit.disabled = false;
+  }
 });
 document.querySelector("#organiser-transfer-form")?.addEventListener("submit", async (event) => {
   event.preventDefault(); if (!pendingTransfer || !window.confirm("Transfer this paid race place to the replacement runner? The previous runner's secure links and declaration will be revoked.")) return;
