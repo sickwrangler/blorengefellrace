@@ -31,6 +31,10 @@ export function createProductionApi({ service, phase3Integrations, repository, s
     if (method === "POST" && declarationAction) return resultResponse(await (declarationAction[2] === "resend" ? phase3Integrations.orders.resendDeclaration(actor, decodeURIComponent(declarationAction[1])) : phase3Integrations.orders.recordPaperDeclaration(actor, decodeURIComponent(declarationAction[1]))));
     const organiserTransfer = pathname.match(/^\/api\/v4\/organiser\/registrations\/([^/]+)\/transfer$/);
     if (method === "POST" && organiserTransfer) return resultResponse(await phase3Integrations.organiserTransfer(actor, decodeURIComponent(organiserTransfer[1]), body));
+    if (method === "POST" && pathname === "/api/v4/organiser/direct-entries") {
+      const result = await service.addDirectEntry(actor, body);
+      return resultResponse(result, result.duplicate ? 200 : 201);
+    }
     if (method === "POST" && pathname === "/api/v4/organiser/state") {
       if (body.confirmation !== `CHANGE ${body.expectedState} TO ${body.state}`) return resultResponse({ ok: false, code: "CONFIRMATION_REQUIRED" });
       return resultResponse(await repository.transaction((state) => transitionRegistrationState(state, body.state, actor, { expectedState: body.expectedState })));

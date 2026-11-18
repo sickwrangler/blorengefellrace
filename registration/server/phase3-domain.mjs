@@ -67,6 +67,10 @@ export function registrationEmergencyContact(state, registration, runner) {
 export function acceptedWaitingListRegistration(state, registrationId) {
   return (state.auditEvents ?? []).some((event) => event.action === "waiting_list_offer_accepted" && event.after?.registrationId === registrationId);
 }
+
+export function hasWaivedEntryFee(registration) {
+  return registration?.entryFeeWaiver != null;
+}
 const hashToken = (token) => crypto.createHash("sha256").update(String(token)).digest("hex");
 const opaqueToken = () => crypto.randomBytes(32).toString("base64url");
 const iso = (value = new Date()) => new Date(value).toISOString();
@@ -267,6 +271,110 @@ export function addPlaceRegistration(state, { runnerId, placeStatus = "payment_r
   state.registrations.push(registration);
   recordAudit(state, actor, "registration_created", registration.id, null, { placeStatus }, at);
   return { ok: true, registration };
+}
+
+export function addOrganiserEntry(state, input, actor, at = new Date()) {
+  if (!organiser(actor)) return { ok: false, code: "FORBIDDEN" };
+  if (input === null || typeof input !== "object" || Array.isArray(input)) return { ok: false, code: "INVALID_ENTRY_INPUT" };
+  if (input.confirmFeeWaiver !== true) return { ok: false, code: "FEE_WAIVER_CONFIRMATION_REQUIRED" };
+  const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+  if (!reason || reason.length > 250) return { ok: false, code: "ORGANISER_ENTRY_REASON_REQUIRED" };
+
+  const sourceReference = input.restoreReference;
+  if (sourceReference !== undefined && (typeof sourceReference !== "string" || !sourceReference.trim())) {
+    return { ok: false, code: "RESTORE_ENTRY_MISMATCH" };
+  }
+  const source = sourceReference && state.registrations.find((entry) =>
+    !entry.deletedAt && registrationReference(entry, state.environment) === sourceReference);
+  const sourceRunner = source && state.runners.find((runner) => runner.id === source.runnerId);
+  if (sourceReference && (!sourceRunner || sourceRunner.anonymisedAt ||
+    String(input.expectedEmail ?? "").trim().toLowerCase() !== sourceRunner.email?.trim().toLowerCase())) {
+    return { ok: false, code: "RESTORE_ENTRY_MISMATCH" };
+  }
+  if (source) {
+    const payment = state.payments.find((item) => item.registrationId === source.id || item.registrationIds?.includes(source.id));
+    if (source.entryStatus !== "place_released" || source.placeStatus !== "none" ||
+      !(payment?.status === "refunded" || payment?.refundedRegistrationIds?.includes(source.id))) {
+      return { ok: false, code: "RESTORE_REFUNDED_ENTRY_REQUIRED" };
+    }
+    const replacement = state.registrations.find((entry) => entry.entryFeeWaiver?.restoredFromRegistrationId === source.id);
+    if (replacement && !activeRegistration(replacement)) return { ok: false, code: "RESTORED_ENTRY_NO_LONGER_ACTIVE" };
+    if (replacement) return { ok: true, duplicate: true, registration: replacement };
+  }
+
+  const sourceContact = source && registrationEmergencyContact(state, source, sourceRunner);
+  const details = source ? {
+    ...sourceRunner,
+    emergencyContactName: sourceContact?.name,
+    emergencyContactPhone: sourceContact?.phone
+  } : input.runner ?? {};
+  const runner = { id: shortId("runner") };
+  for (const field of ["email", "firstName", "lastName", "phone", "addressLine1", "addressLine2", "city", "postcode", "dateOfBirth", "raceCategory", "club", "wfraMembershipNumber"]) {
+    runner[field] = typeof details[field] === "string" ? details[field].trim() : "";
+  }
+  runner.email = runner.email.toLowerCase();
+  runner.raceCategory ||= typeof details.genderCategory === "string" ? details.genderCategory.trim() : "";
+  runner.wfraMember = details.wfraMember === true;
+  const emergencyContactName = typeof details.emergencyContactName === "string" ? details.emergencyContactName.trim() : "";
+  const emergencyContactPhone = typeof details.emergencyContactPhone === "string" ? details.emergencyContactPhone.trim() : "";
+  const errors = validateProductionRunner({ ...runner, emergencyContactName, emergencyContactPhone }, {
+    raceDate: state.event.raceDate,
+    under18EntriesEnabled: state.event.under18EntriesEnabled !== false
+  });
+  if (Object.keys(errors).length) return { ok: false, code: "VALIDATION_ERROR", errors };
+  if (!runner.wfraMember) runner.wfraMembershipNumber = null;
+
+  const matchingRunnerIds = new Set(state.runners
+    .filter((item) => item.email?.trim().toLowerCase() === runner.email)
+    .map((item) => item.id));
+  const currentEntry = state.registrations.find((entry) => activeRegistration(entry) &&
+    ["confirmed", "payment_reserved"].includes(entry.placeStatus) && matchingRunnerIds.has(entry.runnerId));
+  if (currentEntry) return { ok: false, code: "DUPLICATE_ACTIVE_ENTRY" };
+  const matchingEntries = state.registrations.filter((entry) => matchingRunnerIds.has(entry.runnerId) && activeRegistration(entry));
+  if (matchingEntries.some((entry) => state.payments.some((payment) =>
+    (payment.registrationId === entry.id || payment.registrationIds?.includes(entry.id)) &&
+    !payment.refundedRegistrationIds?.includes(entry.id) &&
+    (["paid", "processing", "checkout_pending"].includes(payment.status) ||
+      (payment.status === "expired" && payment.webhookReconciliationState === "locally_expired_awaiting_webhook") ||
+      payment.reservationReview?.status === "open")))) {
+    return { ok: false, code: "EXISTING_PAYMENT_REQUIRES_REVIEW" };
+  }
+  const waiting = state.waitingList.filter((item) => item.email?.trim().toLowerCase() === runner.email);
+  if (waiting.some((item) => item.status === "offered")) return { ok: false, code: "ACTIVE_WAITING_LIST_OFFER" };
+  if (capacitySummary(state).remaining < 1) return { ok: false, code: "CAPACITY_FULL" };
+
+  const { registration } = addPlaceRegistration(state, { runnerId: runner.id, placeStatus: "confirmed" }, actor, at);
+  Object.assign(registration, {
+    eventId: state.event.id,
+    environment: state.environment,
+    priceActuallyChargedPence: 0,
+    entryFeeWaiver: { reason, restoredFromRegistrationId: source?.id ?? null },
+    declarationStatus: "pending",
+    declarationCompletionMethod: null
+  });
+  state.runners.push(runner);
+  state.emergencyContacts.push({
+    id: shortId("emergency"), registrationId: registration.id, name: emergencyContactName, phone: emergencyContactPhone, deleteAfterEvent: true
+  });
+  const declaration = source && [...state.declarations].reverse().find((item) =>
+    item.registrationId === source.id && item.runnerId === sourceRunner.id && item.accepted === true &&
+    !item.revokedAt && item.declarationIdentifier === state.event.declarationIdentifier &&
+    item.declarationVersion === state.event.declarationVersion);
+  if (declaration) {
+    state.declarations.push({
+      ...declaration, id: shortId("declaration"), registrationId: registration.id, runnerId: runner.id,
+      restoredFromDeclarationId: declaration.id
+    });
+    registration.declarationStatus = "complete";
+    registration.declarationCompletionMethod = declaration.completionMethod;
+  }
+  for (const item of waiting.filter((entry) => entry.status === "waiting")) {
+    withdrawWaitingListEntry(state, item.id, actor, { reason: "Confirmed through an organiser entry" }, at);
+  }
+  recordAudit(state, actor, "entry_fee_waived", registration.id, null, {
+    ...registration.entryFeeWaiver, restoredFromDeclarationId: declaration?.id ?? null
+  }, at);
+  return { ok: true, duplicate: false, registration };
 }
 
 function validateDeclarationInput(state, declaration) {
@@ -561,7 +669,8 @@ export function withdrawRegistration(state, registrationId, actor = { actorType:
   const raceStart = state.event.raceStartUtc ?? PHASE3_EVENT.raceStartUtc;
   if (!organiser(actor) && new Date(at) >= new Date(raceStart)) return { ok: false, code: "WITHDRAWAL_RACE_STARTED" };
   const payment = state.payments.find((item) => item.registrationId === registration.id || item.registrationIds?.includes(registration.id));
-  if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") return { ok: false, code: "WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED" };
+  if ((!hasWaivedEntryFee(registration) && (payment?.status !== "paid" || payment.refundedRegistrationIds?.includes(registration.id))) ||
+    registration.placeStatus !== "confirmed") return { ok: false, code: "WITHDRAWAL_CONFIRMED_ENTRY_REQUIRED" };
   const before = { entryStatus: registration.entryStatus, placeStatus: registration.placeStatus, raceNumber: registration.raceNumber ?? null };
   registration.entryStatus = "withdrawn";
   registration.placeStatus = "none";

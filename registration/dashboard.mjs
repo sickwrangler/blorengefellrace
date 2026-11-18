@@ -316,7 +316,7 @@ function renderActions(item) {
     actions.append(actionButton("Transfer entry", () => openTransferDialog(item)));
     actions.append(actionButton("Resend management link", async () => { const result = await prototype.resendManagementLink(item.id); showNotice(result.ok ? "A new management link was sent through the controlled development channel." : `Management link unavailable: ${result.code}`, !result.ok); await render(); }));
   }
-  if (item.placeStatus === "confirmed" && item.paymentStatus === "successful" && !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus)) {
+  if (item.placeStatus === "confirmed" && ["successful", "fee_waived"].includes(item.paymentStatus) && !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus)) {
     actions.append(actionButton("Withdraw runner", () => {
       pendingOrganiserWithdrawal = item.id;
       document.querySelector("#withdraw-entry-runner").textContent = `${item.runner.firstName} ${item.runner.lastName} · ${item.testReference}`;

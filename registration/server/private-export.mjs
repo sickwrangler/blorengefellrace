@@ -1,4 +1,4 @@
-import { registrationEmergencyContact, registrationReference } from "./phase3-domain.mjs";
+import { hasWaivedEntryFee, registrationEmergencyContact, registrationReference } from "./phase3-domain.mjs";
 
 const TRANSFER_ACTIONS = new Set(["entry_transferred", "organiser_entry_transferred"]);
 
@@ -180,7 +180,7 @@ function currentEntry(state, registration, transferHistory) {
   const declaration = [...(state.declarations ?? [])].reverse().find((item) => item.registrationId === registration.id && !item.revokedAt);
   const refunded = payment?.refundedRegistrationIds?.includes(registration.id) || payment?.status === "refunded";
   const declarationStatus = declaration ? "complete" : registration.declarationStatus ?? "pending";
-  const paymentStatus = refunded ? "refunded" : payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status === "expired" ? "abandoned" : payment?.status ?? "created";
+  const paymentStatus = hasWaivedEntryFee(registration) ? "fee_waived" : refunded ? "refunded" : payment?.status === "paid" ? "successful" : payment?.status === "failed" ? "declined" : payment?.status === "expired" ? "abandoned" : payment?.status ?? "created";
   const transfer = transferSummaryForRegistration(transferHistory, registration.id);
   return {
     entryReference: registrationReference(registration, state.environment),
