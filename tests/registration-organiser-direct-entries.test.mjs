@@ -110,3 +110,18 @@ test("authorised direct admission and withdrawal check identity and capacity at 
   assert.equal(capacitySummary(after).remaining, 1);
   assert.equal(sent.length, 1);
 });
+
+test("editing a confirmed place validates the entire change and rejects stale details", async () => {
+  const { repository, call } = setup();
+  assert.equal((await call("POST", directEntries, restoreInput)).status, 201);
+  const state = await repository.read();
+  const registration = state.registrations.at(-1);
+  const runner = state.runners.find((item) => item.id === registration.runnerId);
+  const correct = `/api/v2/organiser/registrations/${registration.id}/correct`;
+  const expected = { runnerId: runner.id, phone: runner.phone, club: runner.club };
+  assert.equal((await call("POST", correct, { expected, club: "New club", phone: " " })).body.code, "INVALID_CORRECTION");
+  assert.equal((await repository.read()).runners.at(-1).club, runner.club);
+  assert.equal((await call("POST", correct, { expected, club: "New club", phone: runner.phone })).body.ok, true);
+  assert.equal((await call("POST", correct, { expected, club: "Stale club" })).body.code, "ENTRY_CHANGED");
+  assert.equal((await repository.read()).runners.at(-1).club, "New club");
+});

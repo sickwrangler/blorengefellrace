@@ -71,7 +71,7 @@ test("organiser dashboard presents and exports a separate filterable waiting lis
   assert.match(source, /prototype\.withdrawWaitingPlace\(pending\.waitingListId, reason\)/);
   assert.match(source, /prototype\.cancelWaitingPlaceOffer\(pending\.waitingListId, reason\)/);
   assert.match(source, /prototype\.retryWaitingPlaceOfferEmail\(item\.waitingListId\)/);
-  assert.match(source, /prototype\.organiserWithdrawEntry\(registrationId, reason\)/);
+  assert.match(source, /prototype\.organiserWithdrawEntry\(registrationId, reason, runner\.email\)/);
   assert.match(html, /id="waiting-list-action-dialog"/);
   assert.match(html, /id="withdraw-entry-dialog"/);
   for (const method of ["offerWaitingPlace", "withdrawWaitingPlace", "cancelWaitingPlaceOffer", "retryWaitingPlaceOfferEmail", "organiserWithdrawEntry"]) assert.match(productionClient, new RegExp(`${method}\\(`));
