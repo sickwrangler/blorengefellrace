@@ -173,6 +173,7 @@ export class ProductionRegistrationService {
     const state = await this.repository.read();
     const rows = [];
     const incomplete = [];
+    let missingGenderCount = 0;
     for (const registration of state.registrations) {
       if (!active(registration) || ["withdrawn", "released", "waiting_list"].includes(registration.entryStatus) || registration.placeStatus !== "confirmed") continue;
       const { payment } = entities(state, registration);
@@ -185,16 +186,20 @@ export class ProductionRegistrationService {
       if (!entry.testReference) missing.push("entry reference");
       if (!runner.firstName || !runner.lastName) missing.push("runner name");
       if (!category) missing.push("race category");
-      if (!TIMING_GENDERS.includes(runner.gender)) missing.push("gender");
       if (!validTimingDob(runner.dateOfBirth, state.event.raceDate)) missing.push("date of birth");
       if (missing.length) incomplete.push({ reference: entry.testReference || registration.id, fields: missing });
-      else rows.push([entry.testReference, entry.raceNumber, runner.firstName, runner.lastName, runner.club, category, entry.entryStatus, entry.paymentStatus, runner.gender, runner.dateOfBirth]);
+      else {
+        const gender = runner.gender ?? "";
+        if (!gender) missingGenderCount += 1;
+        rows.push([entry.testReference, entry.raceNumber, runner.firstName, runner.lastName, runner.club, category, entry.entryStatus, entry.paymentStatus, gender, runner.dateOfBirth]);
+      }
     }
     if (incomplete.length) return { ok: false, code: "INCOMPLETE_TIMING_DETAILS", incomplete };
     if (!rows.length) return { ok: false, code: "NO_CLEARED_ENTRIES" };
     return {
       ok: true,
       filename: "blorenge-race-day.csv",
+      missingGenderCount,
       csv: csv(["entry_reference", "race_number", "first_name", "last_name", "club", "category", "entry_status", "payment_status", "gender", "date_of_birth"], rows)
     };
   }

@@ -366,7 +366,7 @@ test("backup policy schedules one daily operational snapshot without embedding d
   assert.equal(PRODUCTION_BACKUP_POLICY.automaticDeletion, false);
 });
 
-test("race-day CSV requires verified timing details and exports only cleared paid entries", async () => {
+test("race-day CSV preserves recorded timing details and includes cleared legacy entries", async () => {
   const state = createProductionBootstrap();
   const cases = [
     { id: "standard", gender: "female", category: "Female" },
@@ -397,9 +397,15 @@ test("race-day CSV requires verified timing details and exports only cleared pai
     headers: { "x-ms-client-principal": Buffer.from(JSON.stringify({ userRoles: roles })).toString("base64") }
   });
   assert.equal((await download(["authenticated"])).status, 403);
+  const legacy = await download(["authenticated", "organiser"]);
+  assert.equal(legacy.status, 200);
+  assert.equal(legacy.body.missingGenderCount, 1);
+  assert.ok(legacy.body.csv.includes('"TEST-transfer","","transfer","Synthetic","","Male / Open","accepted","successful","","1986-11-28"'));
+  await repository.transaction((draft) => { draft.runners.find((runner) => runner.id === "transfer").dateOfBirth = null; });
   const incomplete = await download(["authenticated", "organiser"]);
   assert.equal(incomplete.status, 409);
-  assert.deepEqual(incomplete.body.incomplete, [{ reference: "TEST-transfer", fields: ["gender"] }]);
+  assert.deepEqual(incomplete.body.incomplete, [{ reference: "TEST-transfer", fields: ["date of birth"] }]);
+  assert.equal((await service.manage(organiser, "transfer", "correct", { dateOfBirth: "1986-11-28" })).ok, true);
   assert.equal((await service.manage(organiser, "transfer", "correct", { gender: "Male / Open" })).code, "INVALID_GENDER");
   assert.equal((await service.manage(organiser, "transfer", "correct", { dateOfBirth: "1986-02-30" })).code, "INVALID_DATE_OF_BIRTH");
   assert.equal((await service.manage(organiser, "transfer", "correct", { gender: "open" })).ok, true);
@@ -407,6 +413,7 @@ test("race-day CSV requires verified timing details and exports only cleared pai
   const result = await download(["authenticated", "organiser"]);
   assert.equal(result.status, 200);
   assert.equal(result.headers["cache-control"], "no-store");
+  assert.equal(result.body.missingGenderCount, 0);
   assert.equal(result.body.csv, [
     '"entry_reference","race_number","first_name","last_name","club","category","entry_status","payment_status","gender","date_of_birth"',
     '"TEST-standard","","standard","Synthetic","","Female","accepted","successful","female","1986-11-28"',

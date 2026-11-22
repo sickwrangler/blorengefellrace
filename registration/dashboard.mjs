@@ -644,6 +644,7 @@ document.querySelector("#export-csv")?.addEventListener("click", async () => {
     link.download = result.filename ?? "synthetic-registration-export.csv";
     link.click();
     URL.revokeObjectURL(url);
+    if (result.missingGenderCount) showNotice(`Race-day CSV downloaded. ${result.missingGenderCount} entries have no separately recorded gender. Their original race category and full date of birth are included.`);
   } catch {
     showNotice("The race-day CSV could not be downloaded.", true);
   }
