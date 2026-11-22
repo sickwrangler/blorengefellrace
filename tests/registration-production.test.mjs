@@ -365,3 +365,52 @@ test("backup policy schedules one daily operational snapshot without embedding d
   assert.equal(operationalDailyBackupDue(state, "2026-10-01T02:00:00Z", new Date("2026-10-02T02:00:00Z")), true);
   assert.equal(PRODUCTION_BACKUP_POLICY.automaticDeletion, false);
 });
+
+test("race-day CSV requires verified timing details and exports only cleared paid entries", async () => {
+  const state = createProductionBootstrap();
+  const cases = [
+    { id: "standard", gender: "female", category: "Female" },
+    { id: "wait-list-converted", gender: "male", category: "Male / Open" },
+    { id: "transfer", gender: undefined, category: "Male / Open" },
+    { id: "withdrawn", entryStatus: "withdrawn" },
+    { id: "waiting", entryStatus: "waiting_list", placeStatus: "waiting" },
+    { id: "pending", declarationStatus: "pending" },
+    { id: "refunded", paymentStatus: "refunded" },
+    { id: "unpaid", paymentStatus: "processing" }
+  ];
+  for (const entry of cases) {
+    const { id } = entry;
+    state.runners.push({ id, firstName: id, lastName: "Synthetic", raceCategory: entry.category, gender: entry.gender, dateOfBirth: "1986-11-28", email: "private@example.invalid" });
+    state.registrations.push({
+      id, testReference: `TEST-${id}`, runnerId: id,
+      entryStatus: entry.entryStatus ?? "accepted", placeStatus: entry.placeStatus ?? "confirmed",
+      declarationStatus: entry.declarationStatus ?? "complete"
+    });
+    state.payments.push({ registrationId: id, status: entry.paymentStatus ?? "paid" });
+  }
+
+  const repository = createMemoryRepository(state);
+  const service = new ProductionRegistrationService({ repository, emailAdapter: email });
+  const api = createProductionApi({ service, repository });
+  const download = (roles) => api({
+    method: "GET", pathname: "/api/v2/organiser/export/timing",
+    headers: { "x-ms-client-principal": Buffer.from(JSON.stringify({ userRoles: roles })).toString("base64") }
+  });
+  assert.equal((await download(["authenticated"])).status, 403);
+  const incomplete = await download(["authenticated", "organiser"]);
+  assert.equal(incomplete.status, 409);
+  assert.deepEqual(incomplete.body.incomplete, [{ reference: "TEST-transfer", fields: ["gender"] }]);
+  assert.equal((await service.manage(organiser, "transfer", "correct", { gender: "Male / Open" })).code, "INVALID_GENDER");
+  assert.equal((await service.manage(organiser, "transfer", "correct", { dateOfBirth: "1986-02-30" })).code, "INVALID_DATE_OF_BIRTH");
+  assert.equal((await service.manage(organiser, "transfer", "correct", { gender: "open" })).ok, true);
+
+  const result = await download(["authenticated", "organiser"]);
+  assert.equal(result.status, 200);
+  assert.equal(result.headers["cache-control"], "no-store");
+  assert.equal(result.body.csv, [
+    '"entry_reference","race_number","first_name","last_name","club","category","entry_status","payment_status","gender","date_of_birth"',
+    '"TEST-standard","","standard","Synthetic","","Female","accepted","successful","female","1986-11-28"',
+    '"TEST-wait-list-converted","","wait-list-converted","Synthetic","","Male / Open","accepted","successful","male","1986-11-28"',
+    '"TEST-transfer","","transfer","Synthetic","","Male / Open","accepted","successful","open","1986-11-28"'
+  ].join("\n"));
+});

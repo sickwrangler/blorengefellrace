@@ -94,6 +94,7 @@ export function createProductionApi({ service, phase3Integrations, repository, s
     if (method === "POST" && pathname === "/api/v2/organiser/private-invitations") return resultResponse(await service.createPrivateInvitation(actor, body), 201);
     const invitationAction = pathname.match(/^\/api\/v2\/organiser\/private-invitations\/([^/]+)\/(revoke|expire)$/);
     if (method === "POST" && invitationAction) return resultResponse(await (invitationAction[2] === "revoke" ? service.revokePrivateInvitation(actor, decodeURIComponent(invitationAction[1])) : service.expirePrivateInvitation(actor, decodeURIComponent(invitationAction[1]))));
+    if (method === "GET" && pathname === "/api/v2/organiser/export/timing") return resultResponse(await service.exportTiming(actor));
     if (method === "GET" && pathname === "/api/v2/organiser/export/public") return resultResponse(await service.exportPublic(actor));
     if (method === "GET" && pathname === "/api/v2/organiser/export/private") return resultResponse(await service.exportPrivate(actor));
     if (method === "GET" && pathname === "/api/v2/organiser/export/waiting-list") {

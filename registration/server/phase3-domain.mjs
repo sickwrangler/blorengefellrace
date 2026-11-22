@@ -5,6 +5,7 @@ export const PHASE3_REGISTRATION_STATES = Object.freeze(["CLOSED", "PRIVATE_LIVE
 export const PRIVATE_INVITATION_KINDS = Object.freeze(["registration", "waiting_list_join", "waiting_list_offer", "stripe_provider_proof"]);
 export const PROVIDER_PROOF_INVITATION_HOURS = 2;
 export const MANAGEMENT_TOKEN_LIFETIME_HOURS = 24;
+export const TIMING_GENDERS = Object.freeze(["female", "male", "open"]);
 export const RACE_CATEGORIES = Object.freeze(["Female", "Male / Open"]);
 export const REFUND_STATES = Object.freeze(["requested", "approved", "rejected", "refunded"]);
 
@@ -217,6 +218,7 @@ export function validateProductionRunner(input, { raceDate = PHASE3_EVENT.raceDa
   for (const field of required) if (!String(input[field] ?? "").trim()) errors[field] = "This field is required.";
   if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(input.email).trim())) errors.email = "Enter a valid email address.";
   if (input.raceCategory && !RACE_CATEGORIES.includes(input.raceCategory)) errors.raceCategory = "Select Female or Male / Open.";
+  if (input.gender !== undefined && !TIMING_GENDERS.includes(input.gender)) errors.gender = "Select Female, Male or Open.";
   const age = ageOnRaceDate(input.dateOfBirth, raceDate);
   if (!Number.isFinite(age)) errors.dateOfBirth = "Enter a valid date of birth.";
   else if (age < 16) errors.dateOfBirth = "Entrants must be at least 16 on race day.";
@@ -312,6 +314,7 @@ export function addOrganiserEntry(state, input, actor, at = new Date()) {
   for (const field of ["email", "firstName", "lastName", "phone", "addressLine1", "addressLine2", "city", "postcode", "dateOfBirth", "raceCategory", "club", "wfraMembershipNumber"]) {
     runner[field] = typeof details[field] === "string" ? details[field].trim() : "";
   }
+  if (details.gender !== undefined && details.gender !== null) runner.gender = details.gender;
   runner.email = runner.email.toLowerCase();
   runner.raceCategory ||= typeof details.genderCategory === "string" ? details.genderCategory.trim() : "";
   runner.wfraMember = details.wfraMember === true;
@@ -395,7 +398,7 @@ function validateUnder18Declaration(state, runner, declaration) {
 
 function storeRunner(state, input) {
   const runner = { id: shortId("runner") };
-  for (const field of ["email", "firstName", "lastName", "phone", "addressLine1", "addressLine2", "city", "postcode", "raceCategory", "dateOfBirth", "club", "wfraMember", "wfraMembershipNumber", "emergencyContactName", "emergencyContactPhone"]) runner[field] = typeof input[field] === "string" ? input[field].trim() : input[field];
+  for (const field of ["email", "firstName", "lastName", "phone", "addressLine1", "addressLine2", "city", "postcode", "raceCategory", "gender", "dateOfBirth", "club", "wfraMember", "wfraMembershipNumber", "emergencyContactName", "emergencyContactPhone"]) runner[field] = typeof input[field] === "string" ? input[field].trim() : input[field];
   if (runner.wfraMember !== true) runner.wfraMembershipNumber = null;
   runner.wfraMembershipVerified = false;
   state.runners.push(runner);
