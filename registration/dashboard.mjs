@@ -233,7 +233,7 @@ function renderPlaceTable(entries) {
     actions.append(view);
     if (item.placeStatus === "confirmed") {
       const edit = actionButton("Edit", () => openCorrection(item), "text-button");
-      edit.setAttribute("aria-label", `Edit phone and club for ${name}`);
+      edit.setAttribute("aria-label", `Edit runner details for ${name}`);
       actions.append(edit);
     }
     if (canWithdrawPlace(item)) {
@@ -332,6 +332,8 @@ function openCorrection(item) {
   document.querySelector("#entry-correction-reference").textContent = item.testReference;
   document.querySelector("#entry-correction-phone").value = item.runner.phone ?? "";
   document.querySelector("#entry-correction-club").value = item.runner.club ?? "";
+  document.querySelector("#entry-correction-gender").value = item.runner.gender ?? "";
+  document.querySelector("#entry-correction-dob").value = item.runner.dateOfBirth ?? "";
   document.querySelector("#entry-correction-error").hidden = true;
   document.querySelector("#entry-correction-dialog").showModal();
   document.querySelector("#entry-correction-phone").focus();
@@ -381,7 +383,7 @@ function renderActions(item) {
     actions.append(actionButton("Record paper declaration", async () => { if (!window.confirm("Confirm that the named runner signed the current paper declaration in person? This records an audited organiser action, not a digital signature.")) return; const result = await prototype.recordPaperDeclaration(item.id); showNotice(result.ok ? "Paper declaration recorded. Runner is cleared from the declaration perspective." : `Declaration could not be recorded: ${result.code}`, !result.ok); await render(); }));
   }
   if (item.placeStatus === "confirmed") {
-    actions.append(actionButton("Edit phone / club", () => openCorrection(item)));
+    actions.append(actionButton("Edit runner details", () => openCorrection(item)));
     actions.append(actionButton("Transfer entry", () => openTransferDialog(item)));
     actions.append(actionButton("Resend management link", async () => { const result = await prototype.resendManagementLink(item.id); showNotice(result.ok ? "A new management link was sent through the controlled development channel." : `Management link unavailable: ${result.code}`, !result.ok); await render(); }));
   }
@@ -430,7 +432,7 @@ function renderActions(item) {
 
 function openTransferDialog(item) {
   pendingTransfer = item.id; const form = document.querySelector("#organiser-transfer-form");
-  const runner = item.runner; const values = { firstName: runner.firstName, lastName: runner.lastName, email: runner.email, phone: runner.phone, addressLine1: runner.addressLine1, addressLine2: runner.addressLine2, city: runner.city, postcode: runner.postcode, dateOfBirth: runner.dateOfBirth, raceCategory: runner.genderCategory, club: runner.club, wfraMember: runner.wfraMember ? "yes" : "no", wfraMembershipNumber: runner.wfraMembershipNumber, emergencyContactName: runner.emergencyName, emergencyContactPhone: runner.emergencyPhone };
+  const runner = item.runner; const values = { gender: "", firstName: runner.firstName, lastName: runner.lastName, email: runner.email, phone: runner.phone, addressLine1: runner.addressLine1, addressLine2: runner.addressLine2, city: runner.city, postcode: runner.postcode, dateOfBirth: runner.dateOfBirth, raceCategory: runner.genderCategory, club: runner.club, wfraMember: runner.wfraMember ? "yes" : "no", wfraMembershipNumber: runner.wfraMembershipNumber, emergencyContactName: runner.emergencyName, emergencyContactPhone: runner.emergencyPhone };
   for (const [name, value] of Object.entries(values)) if (form.elements[name]) form.elements[name].value = value ?? "";
   form.elements.overrideCutoff.checked = false; document.querySelector("#transfer-entry-dialog").showModal();
 }
@@ -625,7 +627,27 @@ document.querySelector("#direct-place-form").addEventListener("submit", async (e
 });
 document.querySelector("#close-detail")?.addEventListener("click", () => { selectedReference = null; history.replaceState(null, "", "dashboard.html"); document.querySelector("#entry-detail").hidden = true; renderList(); });
 document.querySelector("#reset-test")?.addEventListener("click", async () => { if (!window.confirm("Delete every synthetic test entry and reset the guided test?")) return; const result = await prototype.reset(); if (!result.ok) showNotice(result.message || "Reset failed.", true); else { selectedReference = null; history.replaceState(null, "", "dashboard.html"); showNotice("Test reset. There are now zero test entries."); } await render(); });
-document.querySelector("#export-csv")?.addEventListener("click", async () => { const csv = await prototype.csv(); const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); const link = document.createElement("a"); link.href = url; link.download = "synthetic-registration-export.csv"; link.click(); URL.revokeObjectURL(url); });
+document.querySelector("#export-csv")?.addEventListener("click", async () => {
+  try {
+    const result = await prototype.csv();
+    if (typeof result !== "string" && !result.ok) {
+      const missing = result.incomplete?.map(({ reference, fields }) => `${reference} (${fields.join(", ")})`).join("; ");
+      showNotice(missing ? `Complete timing details before exporting: ${missing}`
+        : result.code === "NO_CLEARED_ENTRIES" ? "No entries are cleared for timing export."
+        : "The race-day CSV could not be downloaded.", true);
+      return;
+    }
+    const csv = typeof result === "string" ? result : result.csv;
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = result.filename ?? "synthetic-registration-export.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    showNotice("The race-day CSV could not be downloaded.", true);
+  }
+});
 document.querySelector("#export-waiting-list-csv")?.addEventListener("click", async () => {
   const result = await prototype.waitingListCsv();
   if (!result.ok) { showNotice(`Waiting-list CSV unavailable: ${result.code}`, true); return; }
@@ -671,7 +693,9 @@ document.querySelector("#entry-correction-form")?.addEventListener("submit", asy
   event.preventDefault(); if (!pendingCorrection) return;
   const { id: registrationId, runner } = pendingCorrection;
   const data = Object.fromEntries(new FormData(event.currentTarget));
-  if (prototype.addDirectEntry) data.expected = { runnerId: runner.id, phone: runner.phone ?? "", club: runner.club ?? "" };
+  if (!data.gender) delete data.gender;
+  if (!data.dateOfBirth) delete data.dateOfBirth;
+  if (prototype.addDirectEntry) data.expected = { runnerId: runner.id, phone: runner.phone ?? "", club: runner.club ?? "", gender: runner.gender ?? "", dateOfBirth: runner.dateOfBirth ?? "" };
   const submit = event.submitter;
   const error = document.querySelector("#entry-correction-error");
   error.hidden = true;
@@ -690,7 +714,7 @@ document.querySelector("#entry-correction-form")?.addEventListener("submit", asy
     pendingCorrection = null;
     document.querySelector("#entry-correction-dialog").close();
     await render();
-    showNotice("Phone and club details updated.");
+    showNotice("Runner details updated.");
   } catch {
     const message = "Could not refresh the entry. Check its latest details before trying again.";
     if (pendingCorrection) { error.textContent = message; error.hidden = false; }

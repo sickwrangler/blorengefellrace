@@ -1,12 +1,15 @@
 import { waitingListPaymentReviews } from "./phase3-integrations.mjs";
 import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
-import { acceptedWaitingListRegistration, addOrganiserEntry, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, expirePrivateInvitation, hasWaivedEntryFee, issuePrivateInvitation, PROVIDER_PROOF_INVITATION_HOURS, publicWaitingListAvailable, registrationEmergencyContact, registrationReference, revokePrivateInvitation } from "./phase3-domain.mjs";
+import { acceptedWaitingListRegistration, addOrganiserEntry, ageOnRaceDate, authorizePrivateInvitation, calculateEntryPrice, capacitySummary, expirePrivateInvitation, hasWaivedEntryFee, issuePrivateInvitation, PROVIDER_PROOF_INVITATION_HOURS, publicWaitingListAvailable, registrationEmergencyContact, registrationReference, revokePrivateInvitation, TIMING_GENDERS } from "./phase3-domain.mjs";
 import { deliverRegistrationCommunication } from "./communications.mjs";
 import { buildPrivateWorkbookModel, buildTransferHistory, buildWaitingListView, transferSummaryForRegistration, waitingListSummary } from "./private-export.mjs";
 
 const now = () => new Date().toISOString();
 const active = (registration) => !["cancelled", "place_released", "withdrawn"].includes(registration.entryStatus) && !registration.deletedAt;
+const validTimingDob = (value, raceDate) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+  && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value
+  && ageOnRaceDate(value, raceDate) >= 16;
 const normalizeName = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
 const formulaSafe = (value) => /^[\s]*[=+\-@]/.test(String(value ?? "")) ? `'${value}` : String(value ?? "");
 const quote = (value) => `"${formulaSafe(value).replaceAll('"', '""')}"`;
@@ -116,7 +119,9 @@ export class ProductionRegistrationService {
         const expected = payload.expected;
         if (expected && (!active(registration) || registration.placeStatus !== "confirmed" ||
           expected.runnerId !== runner.id || expected.phone !== (runner.phone ?? "") ||
-          expected.club !== (runner.club ?? ""))) return { ok: false, code: "ENTRY_CHANGED" };
+          expected.club !== (runner.club ?? "") ||
+          (expected.gender !== undefined && expected.gender !== (runner.gender ?? "")) ||
+          (expected.dateOfBirth !== undefined && expected.dateOfBirth !== (runner.dateOfBirth ?? "")))) return { ok: false, code: "ENTRY_CHANGED" };
         const fields = ["firstName", "lastName", "phone", "club"].filter((field) => payload[field] !== undefined);
         const changes = {};
         for (const field of fields) {
@@ -126,6 +131,16 @@ export class ProductionRegistrationService {
             return { ok: false, code: "INVALID_CORRECTION" };
           }
           changes[field] = value;
+        }
+        if (payload.gender !== undefined) {
+          if (!TIMING_GENDERS.includes(payload.gender)) return { ok: false, code: "INVALID_GENDER" };
+          changes.gender = payload.gender;
+          fields.push("gender");
+        }
+        if (payload.dateOfBirth !== undefined) {
+          if (!validTimingDob(payload.dateOfBirth, state.event.raceDate)) return { ok: false, code: "INVALID_DATE_OF_BIRTH" };
+          changes.dateOfBirth = payload.dateOfBirth;
+          fields.push("dateOfBirth");
         }
         Object.assign(runner, changes);
         audit(state, actor, "data_corrected", id, null, { fields });
@@ -153,6 +168,36 @@ export class ProductionRegistrationService {
   expirePrivateInvitation(actor, id) { if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); return this.repository.transaction((state) => expirePrivateInvitation(state, id, actor)); }
   async auditHistory(actor, id) { if (!authorize(actor, "audit")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); return { ok: true, events: state.auditEvents.filter((item) => item.subjectId === id).map((item) => ({ ...item, timestamp: item.occurredAt })) }; }
   async exportPublic(actor) { if (!authorize(actor, "read")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); const rows = state.registrations.filter((item) => !item.deletedAt).map((item) => { const entry = registrationView(state, item); return [entry.testReference, entry.raceNumber, entry.runner.firstName, entry.runner.lastName, entry.runner.club, entry.runner.raceCategory ?? entry.runner.genderCategory, entry.entryStatus, entry.paymentStatus]; }); return { ok: true, filename: "registration-race-management.csv", csv: csv(["entry_reference", "race_number", "first_name", "last_name", "club", "category", "entry_status", "payment_status"], rows) }; }
+  async exportTiming(actor) {
+    if (!authorize(actor, "export_private")) return { ok: false, code: "FORBIDDEN" };
+    const state = await this.repository.read();
+    const rows = [];
+    const incomplete = [];
+    for (const registration of state.registrations) {
+      if (!active(registration) || ["withdrawn", "released", "waiting_list"].includes(registration.entryStatus) || registration.placeStatus !== "confirmed") continue;
+      const { payment } = entities(state, registration);
+      if (payment?.status === "refunded" || payment?.refundedRegistrationIds?.includes(registration.id)) continue;
+      const entry = registrationView(state, registration);
+      if (!entry.clearedToStart || !["successful", "fee_waived"].includes(entry.paymentStatus)) continue;
+      const { runner } = entry;
+      const category = runner.raceCategory ?? runner.genderCategory;
+      const missing = [];
+      if (!entry.testReference) missing.push("entry reference");
+      if (!runner.firstName || !runner.lastName) missing.push("runner name");
+      if (!category) missing.push("race category");
+      if (!TIMING_GENDERS.includes(runner.gender)) missing.push("gender");
+      if (!validTimingDob(runner.dateOfBirth, state.event.raceDate)) missing.push("date of birth");
+      if (missing.length) incomplete.push({ reference: entry.testReference || registration.id, fields: missing });
+      else rows.push([entry.testReference, entry.raceNumber, runner.firstName, runner.lastName, runner.club, category, entry.entryStatus, entry.paymentStatus, runner.gender, runner.dateOfBirth]);
+    }
+    if (incomplete.length) return { ok: false, code: "INCOMPLETE_TIMING_DETAILS", incomplete };
+    if (!rows.length) return { ok: false, code: "NO_CLEARED_ENTRIES" };
+    return {
+      ok: true,
+      filename: "blorenge-race-day.csv",
+      csv: csv(["entry_reference", "race_number", "first_name", "last_name", "club", "category", "entry_status", "payment_status", "gender", "date_of_birth"], rows)
+    };
+  }
   async exportPrivate(actor) { if (!authorize(actor, "export_private")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); const rows = state.registrations.filter((item) => !item.deletedAt).map((item) => { const entry = registrationView(state, item); return [entry.id, entry.runner.firstName, entry.runner.lastName, entry.runner.email, entry.runner.phone, entry.entryStatus, entry.paymentStatus]; }); return { ok: true, warning: "PRIVATE OPERATIONAL EXPORT — store outside the public website", filename: `private-registration-${new Date().toISOString().slice(0, 10)}.csv`, csv: csv(["registration_id", "first_name", "last_name", "email", "phone", "entry_status", "payment_status"], rows) }; }
   async exportWaitingList(actor, generatedAt = new Date()) {
     if (!authorize(actor, "export_private")) return { ok: false, code: "FORBIDDEN" };
@@ -161,5 +206,5 @@ export class ProductionRegistrationService {
     return { ok: true, filename: `blorenge-waiting-list-${new Date(generatedAt).toISOString().slice(0, 10)}.csv`, csv: csv(["waiting_list_id", "original_sequence", "current_position", "first_name", "last_name", "email", "status", "joined_at", "offer_status", "offer_created_at", "offer_reminder_at", "offer_expires_at", "offer_completed_at", "registration_id", "entry_reference"], rows) };
   }
   async exportPrivateWorkbook(actor, generatedAt = new Date()) { if (!authorize(actor, "export_private")) return { ok: false, code: "FORBIDDEN" }; const state = await this.repository.read(); return { ok: true, filename: `blorenge-registration-private-${new Date(generatedAt).toISOString().slice(0, 10)}.xlsx`, workbook: buildPrivateWorkbookModel(state, generatedAt) }; }
-  erase(actor, id, mode = "anonymise") { if (!authorize(actor, "erase")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); if (mode !== "anonymise") return Promise.resolve({ ok: false, code: "ANONYMISE_ONLY" }); return this.repository.transaction((state) => { const registration = state.registrations.find((item) => item.id === id && !item.deletedAt); if (!registration) return { ok: false, code: "NOT_FOUND" }; const runner = entities(state, registration).runner; Object.assign(runner, { firstName: "Anonymised", lastName: "Runner", email: `${registration.id}@deleted.invalid`, phone: "deleted", addressLine1: null, addressLine2: null, city: null, postcode: null, dateOfBirth: null, wfraMembershipNumber: null, emergencyContactName: null, emergencyContactPhone: null, anonymisedAt: now() }); state.emergencyContacts = state.emergencyContacts.filter((item) => item.registrationId !== id); audit(state, actor, "record_anonymised", id); return { ok: true }; }); }
+  erase(actor, id, mode = "anonymise") { if (!authorize(actor, "erase")) return Promise.resolve({ ok: false, code: "FORBIDDEN" }); if (mode !== "anonymise") return Promise.resolve({ ok: false, code: "ANONYMISE_ONLY" }); return this.repository.transaction((state) => { const registration = state.registrations.find((item) => item.id === id && !item.deletedAt); if (!registration) return { ok: false, code: "NOT_FOUND" }; const runner = entities(state, registration).runner; Object.assign(runner, { firstName: "Anonymised", lastName: "Runner", email: `${registration.id}@deleted.invalid`, phone: "deleted", addressLine1: null, addressLine2: null, city: null, postcode: null, dateOfBirth: null, gender: null, wfraMembershipNumber: null, emergencyContactName: null, emergencyContactPhone: null, anonymisedAt: now() }); state.emergencyContacts = state.emergencyContacts.filter((item) => item.registrationId !== id); audit(state, actor, "record_anonymised", id); return { ok: true }; }); }
 }

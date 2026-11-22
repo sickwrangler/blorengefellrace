@@ -103,7 +103,7 @@ export const prototype = {
   removeRaceNumber(id) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/remove-race-number`, { method: "POST" }); },
   correctEntry(id, changes) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/correct`, { method: "POST", body: JSON.stringify(changes) }); },
   audit(id) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/audit`); },
-  async csv() { const result = await v2("/organiser/export/public"); return result.csv ?? ""; },
+  csv() { return v2("/organiser/export/timing"); },
   waitingListCsv,
   privateWorkbook,
   privateInvitations() { return v2("/organiser/private-invitations"); },

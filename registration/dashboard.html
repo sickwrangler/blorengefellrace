@@ -87,7 +87,7 @@
         </table>
       </div>
       <div id="entrant-list" class="entrant-list"></div><p id="empty-state">There are no test entries. Complete the runner test to add one.</p>
-      <div class="secondary-actions"><button id="export-csv" class="text-button" type="button">Export race-day CSV</button><span>Sanitised current-state data for timing and race-day systems. It excludes contact and emergency details.</span></div>
+      <div class="secondary-actions"><button id="export-csv" class="text-button" type="button">Export race-day CSV</button><span>Private timing CSV for cleared entries, including full date of birth and verified gender.</span></div>
       <div class="secondary-actions"><button id="export-private-workbook" class="text-button" type="button">Export full registration workbook</button><span>Private operational data including contact details and transfer history.</span></div>
     </section>
 
@@ -112,6 +112,7 @@
         <label>Address<input name="addressLine1" required></label><label>Address line 2<input name="addressLine2"></label>
         <label>Town or city<input name="city" required></label><label>Postcode<input name="postcode" required></label>
         <label>Date of birth<input name="dateOfBirth" type="date" required></label>
+        <label>Gender for race timing<select name="gender" required><option value="">Select one</option><option value="female">Female</option><option value="male">Male</option><option value="open">Open</option></select></label>
         <label>Race category<select name="raceCategory" required><option value="Female">Female</option><option value="Male / Open">Male / Open</option></select></label>
         <label>Club<input name="club"></label><label>WFRA member<select name="wfraMember"><option value="no">No</option><option value="yes">Yes</option></select></label>
         <label>WFRA membership number<input name="wfraMembershipNumber"></label>
@@ -132,6 +133,7 @@
         <label>Address<input name="addressLine1" required></label><label>Address line 2<input name="addressLine2"></label>
         <label>Town or city<input name="city" required></label><label>Postcode<input name="postcode" required></label>
         <label>Date of birth<input name="dateOfBirth" type="date" required></label>
+        <label>Gender for race timing<select name="gender" required><option value="">Select one</option><option value="female">Female</option><option value="male">Male</option><option value="open">Open</option></select></label>
         <label>Race category<select name="raceCategory" required><option value="Female">Female</option><option value="Male / Open">Male / Open</option></select></label>
         <label>Club<input name="club"></label><label>WFRA member<select name="wfraMember"><option value="no">No</option><option value="yes">Yes</option></select></label>
         <label>WFRA membership number<input name="wfraMembershipNumber"></label>
@@ -160,11 +162,13 @@
   </dialog>
   <dialog id="entry-correction-dialog" class="confirmation-dialog" aria-labelledby="entry-correction-title">
     <form id="entry-correction-form">
-      <h2 id="entry-correction-title">Edit phone / club</h2>
+      <h2 id="entry-correction-title">Edit runner details</h2>
       <p id="entry-correction-reference"></p>
       <div class="form-grid">
         <label>Phone<input id="entry-correction-phone" name="phone" type="tel" maxlength="80" required></label>
         <label>Club<input id="entry-correction-club" name="club" maxlength="160"></label>
+        <label>Verified gender<select name="gender" id="entry-correction-gender"><option value="">Select one</option><option value="female">Female</option><option value="male">Male</option><option value="open">Open</option></select></label>
+        <label>Verified date of birth<input id="entry-correction-dob" name="dateOfBirth" type="date"></label>
       </div>
       <p id="entry-correction-error" class="form-alert" role="alert" hidden></p>
       <div class="form-actions"><button id="close-entry-correction" class="button button--quiet" type="button">Cancel</button><button class="button" type="submit">Save details</button></div>

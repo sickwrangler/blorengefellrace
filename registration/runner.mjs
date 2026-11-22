@@ -81,6 +81,7 @@ function showErrors(errors) {
 
 function validationErrors() {
   const data = payload(); const errors = validateRunner(data);
+  if (!["female", "male", "open"].includes(data.gender)) errors.gender = "Select Female, Male or Open.";
   if (data.declarationTiming === "later") for (const key of ["declarationName", "declarationSignatoryRole", "acceptDeclaration", "completedByNamedRunner", "completedByParentOrLegalGuardian"]) delete errors[key];
   if (data.declarationTiming === "now" && guardianRequired()) {
     if (errors.declarationName) { errors.guardianDeclarationName = errors.declarationName; delete errors.declarationName; }
@@ -94,7 +95,7 @@ function validationErrors() {
 
 function validateStage(target) {
   const errors = validationErrors();
-  const fields = target === 1 ? ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "wfraMembershipNumber"] : ["emergencyName", "emergencyPhone", "declarationName", "guardianDeclarationName", "acceptDeclaration", "completedByNamedRunner", "completedByParentOrLegalGuardian", "acceptTerms", "acceptPrivacy"];
+  const fields = target === 1 ? ["firstName", "lastName", "email", "phone", "addressLine1", "city", "postcode", "dateOfBirth", "genderCategory", "gender", "wfraMembershipNumber"] : ["emergencyName", "emergencyPhone", "declarationName", "guardianDeclarationName", "acceptDeclaration", "completedByNamedRunner", "completedByParentOrLegalGuardian", "acceptTerms", "acceptPrivacy"];
   const relevant = Object.fromEntries(Object.entries(errors).filter(([name]) => fields.includes(name)));
   if (Object.keys(relevant).length) { showErrors(relevant); return false; } clearErrors(); return true;
 }
@@ -113,7 +114,7 @@ function renderReview() {
 
 function setFormFromRunner(item) {
   const runner = item.runner;
-  const mapping = { firstName: runner.firstName, lastName: runner.lastName, email: runner.email, phone: runner.phone, addressLine1: runner.addressLine1, addressLine2: runner.addressLine2, city: runner.city, postcode: runner.postcode, genderCategory: runner.raceCategory, dateOfBirth: runner.dateOfBirth, club: runner.club, wfraMembershipNumber: runner.wfraMembershipNumber, emergencyName: runner.emergencyContactName, emergencyPhone: runner.emergencyContactPhone };
+  const mapping = { firstName: runner.firstName, lastName: runner.lastName, email: runner.email, phone: runner.phone, addressLine1: runner.addressLine1, addressLine2: runner.addressLine2, city: runner.city, postcode: runner.postcode, genderCategory: runner.raceCategory, gender: runner.gender, dateOfBirth: runner.dateOfBirth, club: runner.club, wfraMembershipNumber: runner.wfraMembershipNumber, emergencyName: runner.emergencyContactName, emergencyPhone: runner.emergencyContactPhone };
   for (const [name, value] of Object.entries(mapping)) if (form.elements[name]) form.elements[name].value = value ?? "";
   form.elements.wfraMember.value = runner.wfraMember ? "yes" : "no";
   const complete = item.declaration.status === "complete"; const guardian = guardianRequired();
