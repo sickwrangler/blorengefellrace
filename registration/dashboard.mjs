@@ -633,7 +633,7 @@ document.querySelector("#export-csv")?.addEventListener("click", async () => {
     if (typeof result !== "string" && !result.ok) {
       const missing = result.incomplete?.map(({ reference, fields }) => `${reference} (${fields.join(", ")})`).join("; ");
       showNotice(missing ? `Complete timing details before exporting: ${missing}`
-        : result.code === "NO_CLEARED_ENTRIES" ? "No entries are cleared for timing export."
+        : result.code === "NO_CONFIRMED_ENTRIES" ? "No confirmed paid or fee-waived places are available for timing export."
         : "The race-day CSV could not be downloaded.", true);
       return;
     }
