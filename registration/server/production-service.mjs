@@ -179,7 +179,7 @@ export class ProductionRegistrationService {
       const { payment } = entities(state, registration);
       if (payment?.status === "refunded" || payment?.refundedRegistrationIds?.includes(registration.id)) continue;
       const entry = registrationView(state, registration);
-      if (!entry.clearedToStart || !["successful", "fee_waived"].includes(entry.paymentStatus)) continue;
+      if (!["successful", "fee_waived"].includes(entry.paymentStatus)) continue;
       const { runner } = entry;
       const category = runner.raceCategory ?? runner.genderCategory;
       const missing = [];
@@ -195,7 +195,7 @@ export class ProductionRegistrationService {
       }
     }
     if (incomplete.length) return { ok: false, code: "INCOMPLETE_TIMING_DETAILS", incomplete };
-    if (!rows.length) return { ok: false, code: "NO_CLEARED_ENTRIES" };
+    if (!rows.length) return { ok: false, code: "NO_CONFIRMED_ENTRIES" };
     return {
       ok: true,
       filename: "blorenge-race-day.csv",

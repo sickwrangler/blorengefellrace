@@ -366,15 +366,17 @@ test("backup policy schedules one daily operational snapshot without embedding d
   assert.equal(PRODUCTION_BACKUP_POLICY.automaticDeletion, false);
 });
 
-test("race-day CSV preserves recorded timing details and includes cleared legacy entries", async () => {
+test("race-day CSV includes confirmed places even when declarations are pending", async () => {
   const state = createProductionBootstrap();
   const cases = [
     { id: "standard", gender: "female", category: "Female" },
     { id: "wait-list-converted", gender: "male", category: "Male / Open" },
-    { id: "transfer", gender: undefined, category: "Male / Open" },
+    { id: "transfer", gender: undefined, category: "Male / Open", declarationStatus: "pending" },
     { id: "withdrawn", entryStatus: "withdrawn" },
     { id: "waiting", entryStatus: "waiting_list", placeStatus: "waiting" },
-    { id: "pending", declarationStatus: "pending" },
+    { id: "fee-waived", gender: "open", category: "Male / Open", feeWaived: true, declarationStatus: "pending" },
+    { id: "cancelled", entryStatus: "cancelled" },
+    { id: "released", entryStatus: "place_released" },
     { id: "refunded", paymentStatus: "refunded" },
     { id: "unpaid", paymentStatus: "processing" }
   ];
@@ -384,9 +386,10 @@ test("race-day CSV preserves recorded timing details and includes cleared legacy
     state.registrations.push({
       id, testReference: `TEST-${id}`, runnerId: id,
       entryStatus: entry.entryStatus ?? "accepted", placeStatus: entry.placeStatus ?? "confirmed",
-      declarationStatus: entry.declarationStatus ?? "complete"
+      declarationStatus: entry.declarationStatus ?? "complete",
+      ...(entry.feeWaived ? { entryFeeWaiver: { reason: "Synthetic organiser place" } } : {})
     });
-    state.payments.push({ registrationId: id, status: entry.paymentStatus ?? "paid" });
+    if (!entry.feeWaived) state.payments.push({ registrationId: id, status: entry.paymentStatus ?? "paid" });
   }
 
   const repository = createMemoryRepository(state);
@@ -418,6 +421,7 @@ test("race-day CSV preserves recorded timing details and includes cleared legacy
     '"entry_reference","race_number","first_name","last_name","club","category","entry_status","payment_status","gender","date_of_birth"',
     '"TEST-standard","","standard","Synthetic","","Female","accepted","successful","female","1986-11-28"',
     '"TEST-wait-list-converted","","wait-list-converted","Synthetic","","Male / Open","accepted","successful","male","1986-11-28"',
-    '"TEST-transfer","","transfer","Synthetic","","Male / Open","accepted","successful","open","1986-11-28"'
+    '"TEST-transfer","","transfer","Synthetic","","Male / Open","accepted","successful","open","1986-11-28"',
+    '"TEST-fee-waived","","fee-waived","Synthetic","","Male / Open","accepted","fee_waived","open","1986-11-28"'
   ].join("\n"));
 });
