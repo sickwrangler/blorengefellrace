@@ -204,26 +204,22 @@ test("runner transfer preserves the paid place, rotates access, resets declarati
   assert.equal(final.payments[0].status, "paid");
 });
 
-test("transfer validation and replacement-link delivery failures do not partially change entry ownership or payment", async () => {
-  const invalid = paidEntry();
-  const invalidService = serviceFor(invalid.state);
-  const beforeInvalid = await invalidService.repository.read();
-  const rejected = await invalidService.service.transfer(invalid.created.managementToken, { runner: runner(2, { email: "not-an-email" }) }, beforeCutoff);
-  assert.equal(rejected.code, "VALIDATION_ERROR");
-  assert.deepEqual(await invalidService.repository.read(), beforeInvalid);
-
-  const failing = paidEntry();
-  const failureService = serviceFor(failing.state, { emailAdapter: { kind: "test", async send() { return { delivery: "failed", externalCall: true, failureCategory: "synthetic_failure" }; } } });
-  const beforeFailure = await failureService.repository.read();
-  const failed = await failureService.service.transfer(failing.created.managementToken, { runner: runner(3) }, beforeCutoff);
-  assert.equal(failed.code, "TRANSFER_DELIVERY_FAILED");
-  assert.deepEqual(await failureService.repository.read(), beforeFailure);
-
-  const throwing = paidEntry();
-  const throwingService = serviceFor(throwing.state, { emailAdapter: { kind: "test", async send() { throw new Error("synthetic delivery exception"); } } });
-  const beforeThrow = await throwingService.repository.read();
-  await assert.rejects(() => throwingService.service.transfer(throwing.created.managementToken, { runner: runner(4) }, beforeCutoff), /synthetic delivery exception/);
-  assert.deepEqual(await throwingService.repository.read(), beforeThrow);
+test("validation leaves the old entry intact and a failed email reports a committed transfer separately", async () => {
+  const { state, created } = paidEntry();
+  const { service, repository } = serviceFor(state, { emailAdapter: {
+    async send() { throw new Error("synthetic delivery exception"); }
+  } });
+  const before = await repository.read();
+  assert.equal((await service.transfer(created.managementToken, { runner: runner(2, { email: "not-an-email" }) }, beforeCutoff)).code, "VALIDATION_ERROR");
+  assert.deepEqual(await repository.read(), before);
+  const result = await service.transfer(created.managementToken, { runner: runner(3) }, beforeCutoff);
+  assert.equal(result.committed, true);
+  assert.equal(result.replacementNotification, "failed");
+  assert.equal((await service.managementEntry(created.managementToken, beforeCutoff)).code, "MANAGEMENT_TOKEN_EXPIRED");
+  const after = await repository.read();
+  assert.deepEqual(after.payments, before.payments);
+  assert.deepEqual(capacitySummary(after), capacitySummary(before));
+  assert.equal(after.emailOutbox.find((item) => item.purpose === "transfer_replacement").status, "failed");
 });
 
 test("failure to notify the previous runner does not revoke the replacement runner's delivered access", async () => {
@@ -280,7 +276,7 @@ test("confirmation and transfer emails explain self-service transfer and keep ma
   assert.doesNotMatch(transfer.html, /declaration-token">Manage your entry/);
 });
 
-test("runner can retry a failed delivery and duplicate or expired requests leave the entry intact", async () => {
+test("transfer notification can retry without repeating the transfer and invalid requests leave the entry intact", async () => {
   const { state, created } = paidEntry();
   const other = beginProductionRegistration(state, { runner: runner(2), declaration: declaration(2) }, { at: beforeCutoff });
   assert.equal(other.ok, true);
@@ -290,7 +286,7 @@ test("runner can retry a failed delivery and duplicate or expired requests leave
   const { service, repository } = serviceFor(state, { emailAdapter: {
     async send(message) {
       sent.push(message.template);
-      return { delivery: available ? "sent" : "failed", externalCall: true };
+      return { delivery: available ? "sent" : "failed", externalCall: true, failureCategory: "network" };
     }
   } });
   const before = await repository.read();
@@ -300,11 +296,13 @@ test("runner can retry a failed delivery and duplicate or expired requests leave
   assert.equal((await transfer({})).code, "VALIDATION_ERROR");
   assert.equal((await transfer(runner(3), new Date("2026-11-23T12:00:00Z"))).code, "MANAGEMENT_TOKEN_EXPIRED");
   assert.deepEqual(sent, []);
-  assert.equal((await transfer(runner(3))).code, "TRANSFER_DELIVERY_FAILED");
   assert.deepEqual(await repository.read(), before);
+  assert.equal((await transfer(runner(3))).replacementNotification, "failed");
   available = true;
-  assert.equal((await transfer(runner(3))).ok, true);
-  assert.deepEqual(sent, ["entry_transferred", "entry_transferred", "entry_transferred_previous_runner"]);
+  const actor = { authenticated: true, role: "organiser" };
+  assert.equal((await service.retryDueWithdrawalNotifications(actor, { includeTransfers: true }, beforeCutoff)).sent, 2);
+  assert.equal((await transfer(runner(3))).code, "MANAGEMENT_TOKEN_EXPIRED");
+  assert.deepEqual(sent, ["entry_transferred", "entry_transferred_previous_runner", "entry_transferred", "entry_transferred_previous_runner"]);
 });
 
 test("a Table conflict does not replay a transfer email or notify the current runner of an uncommitted transfer", async () => {
@@ -317,7 +315,7 @@ test("a Table conflict does not replay a transfer email or notify the current ru
       writes++;
       throw Object.assign(new Error("Synthetic conflict"), { statusCode: 412 });
     },
-    retryDelay: async () => {}
+    maximumAttempts: 2, retryDelay: async () => {}
   });
   const service = new Phase3IntegrationService({ repository, publicBaseUrl: "https://development.example", emailAdapter: {
     async send(message) {
@@ -326,7 +324,36 @@ test("a Table conflict does not replay a transfer email or notify the current ru
     }
   } });
   await assert.rejects(() => service.transfer(created.managementToken, { runner: runner(2) }, beforeCutoff), /Synthetic conflict/);
-  assert.equal(writes, 1);
-  assert.deepEqual(sent, ["entry_transferred"]);
+  assert.equal(writes, 2);
+  assert.deepEqual(sent, []);
   assert.equal((await service.managementEntry(created.managementToken, beforeCutoff)).registration.runner.email, runner().email);
+});
+
+test("ETag retry commits one transfer before delivering any replacement link", async () => {
+  const seeded = paidEntry();
+  let state = seeded.state;
+  let writes = 0;
+  const links = [];
+  const repository = createAzureTableRepository({
+    async loadPartition() { return { state, etag: String(writes) }; },
+    async submitTransaction({ after }) {
+      if (++writes === 1) throw Object.assign(new Error("Synthetic conflict"), { statusCode: 412 });
+      state = after;
+    },
+    retryDelay: async () => {}
+  });
+  const service = new Phase3IntegrationService({ repository, publicBaseUrl: "https://development.example", emailAdapter: {
+    async send(message) {
+      if (message.template === "entry_transferred") {
+        const token = new URLSearchParams(new URL(message.data.managementUrl).hash.slice(1)).get("token");
+        assert.equal((await service.managementEntry(token, beforeCutoff)).registration.runner.email, runner(2).email);
+        links.push(message.deliveryIdempotencyKey);
+      }
+      return { delivery: "sent", externalCall: true };
+    }
+  } });
+  const result = await service.transfer(seeded.created.managementToken, { runner: runner(2) }, beforeCutoff);
+  assert.equal(result.replacementNotification, "sent");
+  assert.equal(links.length, 1);
+  assert.equal(state.auditEvents.filter((event) => event.action === "entry_transferred").length, 1);
 });

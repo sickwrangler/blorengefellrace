@@ -33,14 +33,28 @@ const handle = createProductionApi({ service: new ProductionRegistrationService(
 
 const handler = async (request, context) => {
   let pathname = "";
-  let transferJourney;
+  let operation;
+  const started = Date.now();
+  const clientRequestId = request.headers.get("x-registration-request-id");
+  const requestId = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(clientRequestId ?? "")
+    ? clientRequestId : context.invocationId;
+  function logOutcome(status, result) {
+    if (!operation) return;
+    context.log("registration_operation_result", {
+      operation, status, requestId, durationMs: Date.now() - started,
+      code: result?.code ?? "OK", committed: result?.committed ?? (status >= 500 ? "unknown" : false),
+      notification: result?.replacementNotification ?? result?.notificationDelivery ?? null
+    });
+  }
   try {
     const contentLength = Number(request.headers.get("content-length") || 0);
     if (contentLength > 65_536) return { status: 413, jsonBody: { ok: false, code: "PAYLOAD_TOO_LARGE" } };
     const headers = Object.fromEntries(request.headers.entries()); const url = new URL(request.url); pathname = url.pathname; let body = {};
     if (request.method === "POST") {
-      if (pathname === "/api/v3/management/transfer") transferJourney = "runner";
-      else if (/^\/api\/v4\/organiser\/registrations\/[^/]+\/transfer$/.test(pathname)) transferJourney = "organiser";
+      const runner = pathname.match(/^\/api\/v3\/management\/(transfer|withdraw)$/);
+      const organiser = pathname.match(/^\/api\/v[34]\/organiser\/registrations\/[^/]+\/(transfer|withdraw)$/);
+      if (runner) operation = `runner_${runner[1]}`;
+      if (organiser) operation = `organiser_${organiser[1]}`;
       const rawBody = await request.text();
       if (Buffer.byteLength(rawBody, "utf8") > 65_536) return { status: 413, jsonBody: { ok: false, code: "PAYLOAD_TOO_LARGE" } };
       if (url.pathname === "/api/v3/stripe/webhook") body = { rawBody };
@@ -48,15 +62,18 @@ const handler = async (request, context) => {
     }
     const result = await handle({ method: request.method, pathname: url.pathname, headers, body, hostname: url.hostname, query: Object.fromEntries(url.searchParams) });
     if (pathname === "/api/v3/stripe/webhook" && result.status >= 400) context.warn("stripe_payment_reconciliation_failed", { environment: "production", status: result.status, code: result.body?.code ?? "UNKNOWN" });
-    if (transferJourney) {
-      context.log("registration_transfer_result", { journey: transferJourney, status: result.status, code: result.body?.code ?? "OK" });
-    }
-    return { status: result.status, headers: result.headers, body: Buffer.isBuffer(result.body) || result.body instanceof Uint8Array ? result.body : JSON.stringify(result.body) };
+    logOutcome(result.status, result.body);
+    const responseHeaders = operation ? { ...result.headers, "x-registration-request-id": requestId } : result.headers;
+    return { status: result.status, headers: responseHeaders, body: Buffer.isBuffer(result.body) || result.body instanceof Uint8Array ? result.body : JSON.stringify(result.body) };
   } catch (error) {
     if (request.method === "POST" && pathname === "/api/v4/orders") context.error("registration_order_creation_5xx", { environment: "production" });
-    if (transferJourney) context.error("registration_transfer_result", { journey: transferJourney, status: 503, code: "PRODUCTION_STATE_UNAVAILABLE" });
+    const conflict = operation && [409, 412].includes(error?.statusCode);
+    const status = conflict ? 409 : 503;
+    const code = conflict ? "REGISTRATION_WRITE_CONFLICT" : "PRODUCTION_STATE_UNAVAILABLE";
+    logOutcome(status, { code, committed: conflict ? false : "unknown" });
     context.error("Production registration request failed", { category: error?.name ?? "Error" });
-    return { status: 503, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }, body: JSON.stringify({ ok: false, code: "PRODUCTION_STATE_UNAVAILABLE" }) };
+    return { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store",
+      ...(operation ? { "x-registration-request-id": requestId } : {}) }, body: JSON.stringify({ ok: false, code }) };
   }
 };
 

@@ -183,15 +183,36 @@ for (const dialog of [editDialog, transferDialog, withdrawDialog]) {
   dialog.addEventListener("close", () => dialog.returnFocusTo?.focus());
 }
 
+function uncertainOutcome(result) {
+  return ["OPERATION_OUTCOME_UNKNOWN", "TRANSFER_OUTCOME_UNKNOWN", "API_UNAVAILABLE", "PRODUCTION_STATE_UNAVAILABLE", "MANAGEMENT_UNAVAILABLE"].includes(result.code);
+}
+
+function requestReference(result) {
+  return result.requestId ? ` Request ID ${result.requestId}.` : "";
+}
+
 document.querySelector("#confirm-withdraw-entry").addEventListener("click", async (event) => {
   const button = event.currentTarget; const message = document.querySelector("#withdraw-message");
   button.disabled = true; message.hidden = true;
-  const result = await prototype.withdrawEntry();
+  let result;
+  try { result = await prototype.withdrawEntry(); }
+  catch { result = { ok: false, code: "OPERATION_OUTCOME_UNKNOWN" }; }
+  if (!result.ok && uncertainOutcome(result)) {
+    const verified = await prototype.managementEntry().catch(() => null);
+    if (verified?.registration?.entryStatus === "withdrawn") {
+      result = { ok: true, notificationDelivery: "unverified", requestId: result.requestId };
+    } else {
+      message.textContent = "The withdrawal outcome is unconfirmed. Refresh the entry or contact the organiser before retrying." + requestReference(result);
+      message.hidden = false;
+      message.focus();
+      return;
+    }
+  }
   button.disabled = false;
-  if (!result.ok) { message.textContent = runnerMessageForCode(result.code); message.hidden = false; message.focus(); return; }
-  withdrawDialog.close(); await render();
-  actionMessage.textContent = result.notificationDeliveryFailed
-    ? "You have withdrawn from the race. Your place is released; an email notification is awaiting retry."
+  if (!result.ok) { message.textContent = runnerMessageForCode(result.code) + requestReference(result); message.hidden = false; message.focus(); return; }
+  withdrawDialog.close(); await render().catch(() => {});
+  actionMessage.textContent = result.notificationDeliveryFailed || result.notificationDelivery && result.notificationDelivery !== "sent"
+    ? "You have withdrawn from the race and your place is released. Email delivery needs review."
     : "You have withdrawn from the race. Your place has been released.";
 });
 
@@ -220,8 +241,20 @@ transferForm.addEventListener("submit", async (event) => {
   } finally {
     submit.disabled = false;
   }
-  if (!result.ok) { message.textContent = Object.values(result.errors ?? {})[0] ?? runnerMessageForCode(result.code); message.hidden = false; message.focus(); return; }
-  transferDialog.close(); prototype.forgetManagementToken(); history.replaceState(null, "", "manage.html"); entryPanel.hidden = true; accessPanel.hidden = false; accessMessage.textContent = "Entry transferred. This previous secure link has been revoked and the new runner has been sent their own links.";
+  if (!result.ok && uncertainOutcome(result)) {
+    submit.disabled = true;
+    const verified = await prototype.managementEntry().catch(() => null);
+    message.textContent = (verified?.ok
+      ? "Your entry is still visible, but the transfer request may still be running. Refresh and check the entry before retrying."
+      : "The previous link can no longer confirm the outcome. Contact the organiser to check current ownership before retrying.") + requestReference(result);
+    message.hidden = false;
+    message.focus();
+    return;
+  }
+  if (!result.ok) { message.textContent = (Object.values(result.errors ?? {})[0] ?? runnerMessageForCode(result.code)) + requestReference(result); message.hidden = false; message.focus(); return; }
+  transferDialog.close(); prototype.forgetManagementToken(); history.replaceState(null, "", "manage.html"); entryPanel.hidden = true; accessPanel.hidden = false; accessMessage.textContent = result.replacementNotification && result.replacementNotification !== "sent"
+    ? "Entry transferred and this secure link was revoked. Delivery of the new runner’s links needs review. Contact the organiser if links do not arrive."
+    : "Entry transferred. This previous secure link has been revoked and the new runner has been sent their own links.";
 });
 
 await render();

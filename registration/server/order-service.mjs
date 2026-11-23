@@ -216,7 +216,10 @@ function tokenSetStillValid(state, attempt, at = new Date()) {
     && !waitingInvitation.revokedAt
     && waitingInvitation.uses < waitingInvitation.maximumUses
     && new Date(waitingInvitation.expiresAt) > new Date(at));
-  return managementValid && declarationValid && waitingOfferValid;
+  const transferActive = attempt.purpose !== "transfer_replacement" || state.registrations.some((item) =>
+    item.id === attempt.registrationId && !item.deletedAt && item.placeStatus === "confirmed"
+    && !["cancelled", "place_released", "withdrawn"].includes(item.entryStatus));
+  return managementValid && declarationValid && waitingOfferValid && transferActive;
 }
 
 function prepareOutboxAttempt(state, { registrationId = null, orderId = null, waitingListId = null, waitingListOfferId = null, waitingListInvitationId = null, sourceEventId = null, purpose, idempotencyKey, message, managementTokenId = null, declarationTokenId = null, invalidatePriorTokensOnSuccess = false }, at = new Date()) {
@@ -288,6 +291,7 @@ export class OrderRegistrationService {
       if (attempt.retryAfterAt && new Date(attempt.retryAfterAt) > new Date(at)) return { ok: true, duplicate: true, retryNotDue: true, sent: 0, attemptId };
       if (!attempt.message || !tokenSetStillValid(state, attempt, at)) {
         attempt.status = "superseded"; attempt.updatedAt = iso(at);
+        if (attempt.purpose === "transfer_replacement") attempt.message = null;
         audit(state, "email_outbox_superseded", attempt.registrationId ?? attempt.orderId, { purpose: attempt.purpose }, at, { actorType: "system" });
         return { ok: true, superseded: true, sent: 0, attemptId };
       }
@@ -318,7 +322,7 @@ export class OrderRegistrationService {
           for (const token of state.managementTokens.filter((item) => item.registrationId === attempt.registrationId && item.id !== attempt.managementTokenId && !item.invalidatedAt)) token.invalidatedAt = iso(at);
           for (const token of state.declarationTokens.filter((item) => item.registrationId === attempt.registrationId && item.id !== attempt.declarationTokenId && !item.revokedAt)) { token.revokedAt = iso(at); token.revokedReason = "superseded"; }
         }
-        if (attempt.purpose === "initial_confirmation" && attempt.declarationTokenId) {
+        if (["initial_confirmation", "transfer_replacement"].includes(attempt.purpose) && attempt.declarationTokenId) {
           const registration = state.registrations.find((item) => item.id === attempt.registrationId); if (registration) registration.declarationInitialSentAt = iso(at);
         }
         audit(state, "email_outbox_sent", attempt.registrationId ?? attempt.orderId, { purpose: attempt.purpose, template: attempt.message.template }, at, { actorType: "system" });
@@ -329,8 +333,10 @@ export class OrderRegistrationService {
         attempt.retryAfterAt = Number.isFinite(delivered.retryAfterMs) ? iso(new Date(new Date(at).valueOf() + delivered.retryAfterMs)) : null;
         const retryable = ["throttled", "provider_5xx", "request_timeout", "network", "email_provider_error", "Error"].includes(attempt.failureCategory);
         if (!retryable) {
-          for (const token of state.managementTokens.filter((item) => item.id === attempt.managementTokenId && !item.invalidatedAt)) token.invalidatedAt = iso(at);
-          for (const token of state.declarationTokens.filter((item) => item.id === attempt.declarationTokenId && !item.revokedAt)) { token.revokedAt = iso(at); token.revokedReason = "delivery_failed"; }
+          if (attempt.purpose !== "transfer_replacement") {
+            for (const token of state.managementTokens.filter((item) => item.id === attempt.managementTokenId && !item.invalidatedAt)) token.invalidatedAt = iso(at);
+            for (const token of state.declarationTokens.filter((item) => item.id === attempt.declarationTokenId && !item.revokedAt)) { token.revokedAt = iso(at); token.revokedReason = "delivery_failed"; }
+          }
           attempt.message = null;
         }
         audit(state, "email_outbox_failed", attempt.registrationId ?? attempt.orderId, { purpose: attempt.purpose, template: attempt.message?.template ?? claimed.message.template, failureCategory: attempt.failureCategory }, at, { actorType: "system" });

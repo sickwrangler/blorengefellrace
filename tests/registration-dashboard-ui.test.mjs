@@ -71,7 +71,7 @@ test("organiser dashboard presents and exports a separate filterable waiting lis
   assert.match(source, /prototype\.withdrawWaitingPlace\(pending\.waitingListId, reason\)/);
   assert.match(source, /prototype\.cancelWaitingPlaceOffer\(pending\.waitingListId, reason\)/);
   assert.match(source, /prototype\.retryWaitingPlaceOfferEmail\(item\.waitingListId\)/);
-  assert.match(source, /prototype\.organiserWithdrawEntry\(registrationId, reason, runner\.email\)/);
+  assert.match(source, /prototype\.organiserWithdrawEntry\(registrationId, reason, runner\.email, runnerId\)/);
   assert.match(html, /id="waiting-list-action-dialog"/);
   assert.match(html, /id="withdraw-entry-dialog"/);
   for (const method of ["offerWaitingPlace", "withdrawWaitingPlace", "cancelWaitingPlaceOffer", "retryWaitingPlaceOfferEmail", "organiserWithdrawEntry"]) assert.match(productionClient, new RegExp(`${method}\\(`));
@@ -108,9 +108,9 @@ test("organiser transfer preserves the form and target on failure and submits th
     return calls.length === 1 ? { ok: false, code: "ORGANISER_OVERRIDE_REQUIRED" } : { ok: true };
   } };
   const FormData = function () { return [["firstName", "Replacement"], ["wfraMember", "no"]]; };
-  const install = new Function("document", "prototype", "FormData", "window", "render", "showNotice", "runnerMessageForCode",
+  const install = new Function("document", "prototype", "FormData", "window", "render", "showNotice", "runnerMessageForCode", "uncertainOperation", "operationReference",
     `let pendingTransfer = { id: "entry", runnerId: "original" }; ${handler}`);
-  install(document, prototype, FormData, { confirm: () => true }, async () => {}, () => {}, (code) => code);
+  install(document, prototype, FormData, { confirm: () => true }, async () => {}, () => {}, (code) => code, () => false, () => "");
   const event = { preventDefault() {}, currentTarget: form };
   await onSubmit(event);
   assert.equal(dialog.closed, false);

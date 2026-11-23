@@ -278,3 +278,60 @@ test("withdrawn race numbers remain historical, cannot be reassigned, and export
   assert.match(csv.csv, /"TEST-WITHDRAWAL","81"/);
   assert.match(csv.csv, /"withdrawn","successful"/);
 });
+
+test("organiser withdrawal returns the committed result after an outbox claim or refresh failure", async () => {
+  const { repository, service, created, sent } = setup();
+  const transaction = repository.transaction.bind(repository);
+  const read = repository.read.bind(repository);
+  let writes = 0;
+  repository.transaction = (operation) => {
+    if (++writes === 2) throw new Error("Synthetic notification claim failure");
+    return transaction(operation);
+  };
+  repository.read = async () => { throw new Error("Synthetic post-commit read failure"); };
+  const result = await service.organiserWithdraw(organiser, created.registration.id, {
+    expectedRunnerId: created.registration.runnerId,
+    expectedEmail: runner().email
+  }, beforeRefundCutoff);
+  assert.equal(result.committed, true);
+  assert.equal(result.registration.entryStatus, "withdrawn");
+  assert.equal(result.notificationDelivery, "unverified");
+  const committed = await read();
+  assert.equal(committed.registrations[0].raceNumber, 81);
+  assert.equal(committed.auditEvents.filter((item) => item.action === "entry_withdrawn").length, 1);
+  assert.equal(committed.emailOutbox.find((item) => item.purpose === "runner_withdrawal_confirmation").status, "prepared");
+  repository.read = read;
+  assert.equal((await service.retryDueWithdrawalNotifications(organiser, {}, beforeRefundCutoff)).sent, 1);
+  assert.equal(sent.length, 2);
+});
+
+test("organiser cannot withdraw a stale runner selection even when the replacement shares the same email", async () => {
+  const { repository, service, created } = setup();
+  const result = await service.organiserWithdraw(organiser, created.registration.id, {
+    expectedRunnerId: "superseded-runner-id",
+    expectedEmail: runner().email
+  }, beforeRefundCutoff);
+  assert.equal(result.code, "WITHDRAWAL_ENTRY_MISMATCH");
+  assert.equal((await repository.read()).registrations[0].placeStatus, "confirmed");
+});
+
+test("withdrawal remains committed when ACS accepted the message but receipt finalisation failed", async () => {
+  const { repository, service, created, sent } = setup({ organiserEmail: null });
+  const transaction = repository.transaction.bind(repository);
+  let writes = 0;
+  repository.transaction = (operation) => {
+    if (++writes === 3) throw new Error("Synthetic receipt write failure");
+    return transaction(operation);
+  };
+  const first = await service.organiserWithdraw(organiser, created.registration.id, {}, beforeRefundCutoff);
+  assert.equal(first.registration.entryStatus, "withdrawn");
+  assert.equal(first.notificationDelivery, "unverified");
+  assert.equal(sent.length, 1);
+  const replay = await service.organiserWithdraw(organiser, created.registration.id, {}, beforeRefundCutoff);
+  assert.equal(replay.duplicate, true);
+  assert.equal(replay.notificationDelivery, "pending");
+  assert.equal(sent.length, 1);
+  const state = await repository.read();
+  assert.equal(state.emailOutbox[0].status, "sending");
+  assert.equal(state.auditEvents.filter((item) => item.action === "entry_withdrawn").length, 1);
+});

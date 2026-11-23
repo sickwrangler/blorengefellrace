@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { authorize } from "./auth.mjs";
 import { acceptedWaitingListRegistration, acceptWaitingListOffer, authorizePrivateInvitation, cancelWaitingListOffer, capacitySummary, createNextWaitingListOffer, createWaitingListOffer, decideRefund, declineWaitingListOffer, hasWaivedEntryFee, inspectPrivateInvitation, issueManagementToken, managementTokenIsExpired, PHASE3_EVENT, publicWaitingListAvailable, registrationEmergencyContact, registrationReference, requestRefund, validateProductionRunner, withdrawRegistration, withdrawWaitingListEntry } from "./phase3-domain.mjs";
 import { findPaymentForStripeEvent, beginStripeCheckout, completeApprovedStripeRefund, failApprovedStripeRefund, prepareApprovedStripeRefund, processScheduledRegistrationWork, reconcileStripeEvent, runnerPaymentState } from "./phase3-integrations.mjs";
-import { deliverRegistrationCommunication, recordRegistrationCommunication } from "./communications.mjs";
+import { deliverRegistrationCommunication } from "./communications.mjs";
 import { OrderRegistrationService, issueDeclarationToken, prepareRegistrationEmailOutboxAttempt } from "./order-service.mjs";
 import { reconcileEmailHealth } from "./email-health.mjs";
 
@@ -15,6 +15,7 @@ const runnerFor = (state, registration) => state.runners.find((item) => item.id 
 const paymentFor = (state, registration) => state.payments.find((item) => item.registrationId === registration?.id || item.registrationIds?.includes(registration?.id));
 const refundFor = (state, registration) => [...state.refundRequests].reverse().find((item) => item.registrationId === registration?.id);
 const WITHDRAWAL_NOTIFICATION_PURPOSES = new Set(["runner_withdrawal_confirmation", "organiser_withdrawal_notification"]);
+const LIFECYCLE_NOTIFICATION_PURPOSES = new Set([...WITHDRAWAL_NOTIFICATION_PURPOSES, "transfer_replacement", "transfer_previous_runner"]);
 const CHECKABLE_WAITING_LIST_PAYMENTS = new Set(["checkout_pending", "processing", "expired", "failed"]);
 
 function waitingListPaymentWithCheckout(state, registration) {
@@ -288,54 +289,62 @@ export class Phase3IntegrationService {
     const prepared = await this.repository.transaction((state) => {
       const access = managementAccess(state, managementToken, at);
       if (!access.ok) return access;
-      return prepareWithdrawal(state, access.registration.id, { actorType: "runner" }, at, { organiserEmail: this.organiserEmail, publicBaseUrl: this.publicBaseUrl });
+      return this.prepareWithdrawalResponse(state, access.registration.id, { actorType: "runner" }, at);
+    });
+    return this.finishLifecycleOperation(prepared, at);
+  }
+
+  prepareWithdrawalResponse(state, registrationId, actor, at, reason) {
+    const prepared = prepareWithdrawal(state, registrationId, actor, at, {
+      organiserEmail: this.organiserEmail, publicBaseUrl: this.publicBaseUrl, reason
     });
     if (!prepared.ok) return prepared;
-    const notifications = [];
-    for (const attemptId of prepared.outboxAttemptIds) notifications.push(await this.orders.deliverPreparedOutboxAttempt(attemptId, at));
-    const state = await this.repository.read();
-    const registration = state.registrations.find((item) => item.id === prepared.registrationId);
+    const registration = state.registrations.find((item) => item.id === registrationId);
+    return { ...prepared, ...managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }) };
+  }
+
+  async finishLifecycleOperation(prepared, at) {
+    if (!prepared.ok) return prepared;
+    const { outboxAttemptIds, replacementNotificationQueued, ...result } = prepared;
+    const states = [];
+    for (const attemptId of outboxAttemptIds) {
+      try {
+        const delivery = await this.orders.deliverPreparedOutboxAttempt(attemptId, at);
+        states.push(!delivery.ok || delivery.permanentFailure || delivery.superseded ? "failed"
+          : delivery.inProgress || delivery.retryNotDue ? "pending" : "sent");
+      } catch {
+        // Storage may have failed after the business operation committed or after ACS accepted the email.
+        states.push("unverified");
+      }
+    }
     return {
-      ...managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }),
-      duplicate: prepared.duplicate,
-      organiserNotificationConfigured: prepared.organiserNotificationConfigured,
-      notificationDeliveryFailed: notifications.some((item) => item.ok === false)
+      ...result,
+      committed: true,
+      notificationDeliveryFailed: states.includes("failed"),
+      notificationDelivery: states.includes("unverified") ? "unverified" : states.includes("failed") ? "failed" : states.includes("pending") ? "pending" : "sent",
+      ...(replacementNotificationQueued ? { replacementNotification: states[0] } : {})
     };
   }
 
-  async organiserWithdraw(actor, registrationId, { reason = null, expectedEmail = null } = {}, at = new Date()) {
+  async organiserWithdraw(actor, registrationId, { reason = null, expectedEmail = null, expectedRunnerId = null } = {}, at = new Date()) {
     if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
     if (String(reason ?? "").trim().length > 250) return { ok: false, code: "WITHDRAWAL_REASON_TOO_LONG" };
     const prepared = await this.repository.transaction((state) => {
       const registration = state.registrations.find((item) => item.id === registrationId && !item.deletedAt);
-      if (expectedEmail !== null && (!registration || !normalizeEmail(expectedEmail) ||
-        normalizeEmail(runnerFor(state, registration)?.email) !== normalizeEmail(expectedEmail))) {
+      if ((expectedRunnerId !== null && registration?.runnerId !== expectedRunnerId) ||
+        (expectedEmail !== null && (!registration || !normalizeEmail(expectedEmail) ||
+          normalizeEmail(runnerFor(state, registration)?.email) !== normalizeEmail(expectedEmail)))) {
         return { ok: false, code: "WITHDRAWAL_ENTRY_MISMATCH" };
       }
-      return prepareWithdrawal(state, registrationId, actor, at, {
-        organiserEmail: this.organiserEmail,
-        publicBaseUrl: this.publicBaseUrl,
-        reason
-      });
+      return this.prepareWithdrawalResponse(state, registrationId, actor, at, reason);
     });
-    if (!prepared.ok) return prepared;
-    const notifications = [];
-    for (const attemptId of prepared.outboxAttemptIds) notifications.push(await this.orders.deliverPreparedOutboxAttempt(attemptId, at));
-    const state = await this.repository.read();
-    const registration = state.registrations.find((item) => item.id === prepared.registrationId);
-    return {
-      ok: true,
-      registrationId: prepared.registrationId,
-      registration: managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }).registration,
-      duplicate: prepared.duplicate,
-      organiserNotificationConfigured: prepared.organiserNotificationConfigured,
-      notificationDeliveryFailed: notifications.some((item) => item.ok === false)
-    };
+    return this.finishLifecycleOperation(prepared, at);
   }
 
   async transferRegistration({ managementToken = null, registrationId = null, input, actor, allowCutoffOverride = false }, at = new Date()) {
     const selfService = actor.actorType === "runner";
-    const result = await this.repository.transaction(async (state) => {
+    input ??= {};
+    const prepared = await this.repository.transaction((state) => {
       const access = selfService ? managementAccess(state, managementToken, at) : null;
       if (selfService && !access.ok) return access;
       const registration = selfService ? access.registration : state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
@@ -348,6 +357,11 @@ export class Phase3IntegrationService {
       const transferCutoff = state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc;
       const afterCutoff = new Date(at) > new Date(transferCutoff);
       if (afterCutoff && !allowCutoffOverride) return { ok: false, code: selfService ? "TRANSFER_CUTOFF_PASSED" : "ORGANISER_OVERRIDE_REQUIRED" };
+      if (this.emailAdapter?.kind === "disabled") return { ok: false, code: "TRANSFER_DELIVERY_FAILED" };
+      if ((state.emailOutbox ?? []).some((attempt) => attempt.registrationId === registration.id &&
+        attempt.purpose === "transfer_replacement" && attempt.status === "sending")) {
+        return { ok: false, code: "TRANSFER_NOTIFICATION_IN_PROGRESS" };
+      }
       const next = input.runner ?? {};
       const errors = validateProductionRunner(next, { raceDate: state.event.raceDate, under18EntriesEnabled: state.event.under18EntriesEnabled !== false });
       if (["local", "development"].includes(state.environment) && !syntheticEmail.test(normalizeEmail(next.email))) errors.email = "Use synthetic information only in development.";
@@ -357,6 +371,8 @@ export class Phase3IntegrationService {
       const runner = { ...next, id: `runner_${crypto.randomUUID()}`, email: normalizeEmail(next.email), firstName: String(next.firstName).trim(), lastName: String(next.lastName).trim(), wfraMembershipNumber: next.wfraMember === true ? String(next.wfraMembershipNumber ?? "").trim() || null : null, wfraMembershipVerified: false, wfraDiscountApplied: false, transferredAt: iso(at) };
       state.runners.push(runner); registration.runnerId = runner.id; registration.updatedAt = iso(at);
       registration.declarationStatus = "pending"; registration.declarationCompletionMethod = null;
+      registration.declarationInitialSentAt = null;
+      registration.declarationReminderSentAt = null;
       for (const priorDeclaration of (state.declarations ?? []).filter((item) => item.registrationId === registration.id && !item.revokedAt)) priorDeclaration.revokedAt = iso(at);
       for (const consent of state.consents.filter((item) => item.registrationId === registration.id && item.declaration)) {
         state.declarations ??= []; state.declarations.push({ ...consent.declaration, id: `declaration_${crypto.randomUUID()}`, registrationId: registration.id, runnerId: previous.id, completionMethod: "digital_during_entry", revokedAt: iso(at), revocationReason: "entry_transferred" }); consent.declaration = null;
@@ -369,28 +385,31 @@ export class Phase3IntegrationService {
       const declarationToken = issueDeclarationToken(state, registration.id, at);
       const action = selfService ? "entry_transferred" : "organiser_entry_transferred";
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType, actorId: actor.id ?? null, action, subjectId: registration.id, before: { runnerId: previous.id }, after: { runnerId: runner.id, declarationStatus: "pending", cutoffOverride: Boolean(afterCutoff && allowCutoffOverride) }, environment: state.environment });
-      const replacementDelivery = await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, managementUrl: this.managementUrl(issued.token), managementExpiresAt: issued.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: transferCutoff, secureUrl: this.orders.declarationUrl(declarationToken, issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${issued.tokenId}`, at);
-      const delivery = replacementDelivery.receipt?.delivery;
-      const syntheticDelivery = state.environment !== "production" && ["captured_only", "redirected_safe_recipient", "test"].includes(delivery);
-      if (delivery !== "sent" && !syntheticDelivery) return { ok: false, code: "TRANSFER_DELIVERY_FAILED" };
+      const replacement = prepareRegistrationEmailOutboxAttempt(state, {
+        registrationId: registration.id,
+        purpose: "transfer_replacement",
+        idempotencyKey: `registration:${registration.id}:transfer-new:${issued.tokenId}`,
+        managementTokenId: issued.tokenId,
+        declarationTokenId: state.declarationTokens.at(-1).id,
+        message: { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: {
+          runnerName: `${runner.firstName} ${runner.lastName}`,
+          managementUrl: this.managementUrl(issued.token), managementExpiresAt: issued.expiresAt,
+          managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: transferCutoff,
+          secureUrl: this.orders.declarationUrl(declarationToken, issued.token), status: "Declaration required before race day"
+        } }
+      }, at);
+      const previousNotification = prepareRegistrationEmailOutboxAttempt(state, {
+        registrationId: registration.id, purpose: "transfer_previous_runner",
+        idempotencyKey: `registration:${registration.id}:transfer-old:${runner.id}`,
+        message: { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} }
+      }, at);
       return {
         ...managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }),
-        previousMessage: { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} },
-        previousKey: `registration:${registration.id}:transfer-old:${runner.id}`
+        replacementNotificationQueued: true,
+        outboxAttemptIds: [replacement.id, previousNotification.id]
       };
-    }, { retryConflicts: false });
-    if (!result.ok) return result;
-
-    const { previousMessage, previousKey, ...view } = result;
-    try {
-      const delivery = await this.emailAdapter.send({ ...previousMessage, deliveryIdempotencyKey: previousKey })
-        .catch((error) => ({ delivery: "failed", externalCall: true, failureCategory: String(error?.name || "email_provider_error").slice(0, 80) }));
-      await this.repository.transaction((state) => recordRegistrationCommunication(state, previousMessage, delivery, { idempotencyKey: previousKey, at }));
-    } catch {
-      // The transfer already committed. A notification receipt failure cannot undo it.
-      return { ...view, previousNotificationUnverified: true };
-    }
-    return view;
+    });
+    return this.finishLifecycleOperation(prepared, at);
   }
 
   transfer(managementToken, input, at = new Date()) {
@@ -399,7 +418,7 @@ export class Phase3IntegrationService {
 
   organiserTransfer(actor, registrationId, input, at = new Date()) {
     if (!authorize(actor, "manage")) return Promise.resolve({ ok: false, code: "FORBIDDEN" });
-    return this.transferRegistration({ registrationId, input, actor, allowCutoffOverride: input.overrideCutoff === true }, at);
+    return this.transferRegistration({ registrationId, input, actor, allowCutoffOverride: input?.overrideCutoff === true }, at);
   }
 
   resendManagementLink(actor, registrationId, at = new Date()) {
@@ -756,11 +775,12 @@ export class Phase3IntegrationService {
     });
   }
 
-  async retryDueWithdrawalNotifications(actor, { maxMessages = 4 } = {}, at = new Date()) {
+  async retryDueWithdrawalNotifications(actor, { maxMessages = 4, includeTransfers = false } = {}, at = new Date()) {
     if (!authorize(actor, "manage")) return { ok: false, code: "FORBIDDEN" };
     if (!Number.isInteger(maxMessages) || maxMessages < 1 || maxMessages > 4) return { ok: false, code: "INVALID_RETRY_BATCH_SIZE" };
+    const purposes = includeTransfers ? LIFECYCLE_NOTIFICATION_PURPOSES : WITHDRAWAL_NOTIFICATION_PURPOSES;
     const due = ((await this.repository.read()).emailOutbox ?? [])
-      .filter((item) => WITHDRAWAL_NOTIFICATION_PURPOSES.has(item.purpose)
+      .filter((item) => purposes.has(item.purpose)
         && ["prepared", "failed"].includes(item.status)
         && item.message
         && (!item.retryAfterAt || new Date(item.retryAfterAt) <= new Date(at)))
@@ -770,11 +790,11 @@ export class Phase3IntegrationService {
     let sent = 0;
     let failed = 0;
     for (const attemptId of due) {
-      const result = await this.orders.deliverPreparedOutboxAttempt(attemptId, at);
+      const result = await this.orders.deliverPreparedOutboxAttempt(attemptId, at).catch(() => ({ ok: false }));
       if (result.sent === 1) sent += 1;
       else if (result.ok === false) failed += 1;
     }
-    const remaining = ((await this.repository.read()).emailOutbox ?? []).filter((item) => WITHDRAWAL_NOTIFICATION_PURPOSES.has(item.purpose)
+    const remaining = ((await this.repository.read()).emailOutbox ?? []).filter((item) => purposes.has(item.purpose)
       && ["prepared", "failed"].includes(item.status)
       && item.message).length;
     return { ok: true, attempted: due.length, sent, failed, remaining };
@@ -800,7 +820,7 @@ export class Phase3IntegrationService {
     }).then(async (result) => {
       if (!result.ok) return result;
       const orderResult = await this.orders.runScheduledWork(at);
-      const withdrawalNotificationRetries = await this.retryDueWithdrawalNotifications(actor, { maxMessages: 4 }, at);
+      const withdrawalNotificationRetries = await this.retryDueWithdrawalNotifications(actor, { maxMessages: 4, includeTransfers: true }, at);
       const emailHealth = reconcileEmailHealth(await this.repository.read(), at);
       return { ...result, declarationReminders: orderResult.declarationReminders, abandonedOrders: orderResult.abandonedOrders, withdrawalNotificationRetries, emailHealth: { failed: emailHealth.initialConfirmations.failed, missing: emailHealth.initialConfirmations.missing, backlog: emailHealth.failedCommunicationBacklog, oldestFailedAgeMinutes: emailHealth.oldestFailedCommunicationAgeMinutes } };
     });
