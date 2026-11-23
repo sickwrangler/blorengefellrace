@@ -72,7 +72,7 @@ function actionReason(label, action) {
     PAYMENT_NOT_AVAILABLE: "Payment cannot be continued from the entry’s current state.",
     DECLARATION_COMPLETE: "The race declaration is already complete.",
     DECLARATION_AFTER_PAYMENT: "The declaration link becomes available after payment confirms the place.",
-    TRANSFER_PAYMENT_REQUIRED: "A transfer becomes available after payment has confirmed the race place.",
+    TRANSFER_PAYMENT_REQUIRED: "A transfer requires a confirmed place with a paid or waived entry fee.",
     TRANSFER_CUTOFF_PASSED: `Runner transfers closed on ${deadline}. Contact the organiser if an exceptional change is needed.`,
     REFUND_CUTOFF_PASSED: `Online refund requests closed on ${deadline}. Contact the organiser if you need help.`,
     REFUND_NOT_READY: "A refund can only be requested after payment is confirmed.",
@@ -204,10 +204,22 @@ amendForm.addEventListener("submit", async (event) => {
 });
 
 transferForm.addEventListener("submit", async (event) => {
-  event.preventDefault(); if (!transferForm.checkValidity()) return transferForm.reportValidity();
+  event.preventDefault();
+  const submit = transferForm.querySelector('button[type="submit"]');
+  if (submit.disabled) return;
+  if (!transferForm.checkValidity()) return transferForm.reportValidity();
   if (!confirm("Transfer this race place to the new runner? Your current secure link will stop working.")) return;
   const message = document.querySelector("#transfer-message"); message.hidden = true;
-  const data = Object.fromEntries(new FormData(transferForm)); const result = await prototype.transferEntry({ runner: { ...data } });
+  const data = Object.fromEntries(new FormData(transferForm));
+  submit.disabled = true;
+  let result;
+  try {
+    result = await prototype.transferEntry({ runner: data });
+  } catch {
+    result = { ok: false, code: "TRANSFER_OUTCOME_UNKNOWN" };
+  } finally {
+    submit.disabled = false;
+  }
   if (!result.ok) { message.textContent = Object.values(result.errors ?? {})[0] ?? runnerMessageForCode(result.code); message.hidden = false; message.focus(); return; }
   transferDialog.close(); prototype.forgetManagementToken(); history.replaceState(null, "", "manage.html"); entryPanel.hidden = true; accessPanel.hidden = false; accessMessage.textContent = "Entry transferred. This previous secure link has been revoked and the new runner has been sent their own links.";
 });

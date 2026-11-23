@@ -105,7 +105,7 @@
   <dialog id="transfer-entry-dialog" class="confirmation-dialog" aria-labelledby="transfer-entry-title">
     <form id="organiser-transfer-form">
       <h2 id="transfer-entry-title">Transfer entry</h2>
-      <p>Transfer entry replaces the runner while retaining the existing paid race place. It is separate from correcting phone or club details.</p>
+      <p>Transfer entry replaces the runner while retaining the confirmed race place. It is separate from correcting phone or club details.</p>
       <div class="form-grid">
         <label>First name<input name="firstName" required></label><label>Last name<input name="lastName" required></label>
         <label>Email<input name="email" type="email" required></label><label>Phone<input name="phone" required></label>
@@ -119,6 +119,7 @@
         <label>Emergency-contact name<input name="emergencyContactName" required></label><label>Emergency-contact phone<input name="emergencyContactPhone" required></label>
       </div>
       <label class="checkbox-field"><input name="overrideCutoff" type="checkbox"> Explicitly use the organiser cutoff override if the normal transfer period has ended.</label>
+      <p id="organiser-transfer-error" class="form-alert" role="alert" tabindex="-1" hidden></p>
       <div class="form-actions"><button id="close-transfer-entry" class="button button--quiet" type="button">Cancel</button><button class="button" type="submit">Transfer entry</button></div>
     </form>
   </dialog>

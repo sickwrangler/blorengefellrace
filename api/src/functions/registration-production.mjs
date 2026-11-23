@@ -33,11 +33,14 @@ const handle = createProductionApi({ service: new ProductionRegistrationService(
 
 const handler = async (request, context) => {
   let pathname = "";
+  let transferJourney;
   try {
     const contentLength = Number(request.headers.get("content-length") || 0);
     if (contentLength > 65_536) return { status: 413, jsonBody: { ok: false, code: "PAYLOAD_TOO_LARGE" } };
     const headers = Object.fromEntries(request.headers.entries()); const url = new URL(request.url); pathname = url.pathname; let body = {};
     if (request.method === "POST") {
+      if (pathname === "/api/v3/management/transfer") transferJourney = "runner";
+      else if (/^\/api\/v4\/organiser\/registrations\/[^/]+\/transfer$/.test(pathname)) transferJourney = "organiser";
       const rawBody = await request.text();
       if (Buffer.byteLength(rawBody, "utf8") > 65_536) return { status: 413, jsonBody: { ok: false, code: "PAYLOAD_TOO_LARGE" } };
       if (url.pathname === "/api/v3/stripe/webhook") body = { rawBody };
@@ -45,9 +48,13 @@ const handler = async (request, context) => {
     }
     const result = await handle({ method: request.method, pathname: url.pathname, headers, body, hostname: url.hostname, query: Object.fromEntries(url.searchParams) });
     if (pathname === "/api/v3/stripe/webhook" && result.status >= 400) context.warn("stripe_payment_reconciliation_failed", { environment: "production", status: result.status, code: result.body?.code ?? "UNKNOWN" });
+    if (transferJourney) {
+      context.log("registration_transfer_result", { journey: transferJourney, status: result.status, code: result.body?.code ?? "OK" });
+    }
     return { status: result.status, headers: result.headers, body: Buffer.isBuffer(result.body) || result.body instanceof Uint8Array ? result.body : JSON.stringify(result.body) };
   } catch (error) {
     if (request.method === "POST" && pathname === "/api/v4/orders") context.error("registration_order_creation_5xx", { environment: "production" });
+    if (transferJourney) context.error("registration_transfer_result", { journey: transferJourney, status: 503, code: "PRODUCTION_STATE_UNAVAILABLE" });
     context.error("Production registration request failed", { category: error?.name ?? "Error" });
     return { status: 503, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }, body: JSON.stringify({ ok: false, code: "PRODUCTION_STATE_UNAVAILABLE" }) };
   }

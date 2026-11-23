@@ -87,3 +87,41 @@ test("Azure Function entry modules lazy-load private workbook generation", () =>
     assert.match(source, /privateWorkbookExporter\s*\}/, filename);
   }
 });
+
+test("organiser transfer preserves the form and target on failure and submits the explicit override on retry", async () => {
+  const source = fs.readFileSync("registration/dashboard.mjs", "utf8");
+  const handler = source.slice(source.indexOf('document.querySelector("#organiser-transfer-form")?.addEventListener'), source.indexOf("prototype.subscribe"));
+  const submit = { disabled: false };
+  const close = {};
+  const error = { hidden: true, focus() {} };
+  const dialog = { closed: false, close() { this.closed = true; }, addEventListener() {}, removeEventListener() {} };
+  const form = {
+    elements: { overrideCutoff: { checked: false } },
+    querySelector(selector) { return { 'button[type="submit"]': submit, "#close-transfer-entry": close, "#organiser-transfer-error": error }[selector]; },
+    closest() { return dialog; }
+  };
+  const calls = [];
+  let onSubmit;
+  const document = { querySelector() { return { addEventListener(_event, callback) { onSubmit = callback; } }; } };
+  const prototype = { async organiserTransfer(id, data) {
+    calls.push({ id, ...data });
+    return calls.length === 1 ? { ok: false, code: "ORGANISER_OVERRIDE_REQUIRED" } : { ok: true };
+  } };
+  const FormData = function () { return [["firstName", "Replacement"], ["wfraMember", "no"]]; };
+  const install = new Function("document", "prototype", "FormData", "window", "render", "showNotice", "runnerMessageForCode",
+    `let pendingTransfer = { id: "entry", runnerId: "original" }; ${handler}`);
+  install(document, prototype, FormData, { confirm: () => true }, async () => {}, () => {}, (code) => code);
+  const event = { preventDefault() {}, currentTarget: form };
+  await onSubmit(event);
+  assert.equal(dialog.closed, false);
+  assert.equal(error.hidden, false);
+  assert.match(error.textContent, /cutoff has passed/);
+  assert.equal(submit.disabled, false);
+  form.elements.overrideCutoff.checked = true;
+  await onSubmit(event);
+  assert.equal(dialog.closed, true);
+  assert.deepEqual(calls, [
+    { id: "entry", runner: { firstName: "Replacement", wfraMember: false }, overrideCutoff: false, expectedRunnerId: "original" },
+    { id: "entry", runner: { firstName: "Replacement", wfraMember: false }, overrideCutoff: true, expectedRunnerId: "original" }
+  ]);
+});

@@ -125,3 +125,44 @@ test("editing a confirmed place validates the entire change and rejects stale de
   assert.equal((await call("POST", correct, { expected, club: "Stale club" })).body.code, "ENTRY_CHANGED");
   assert.equal((await repository.read()).runners.at(-1).club, "New club");
 });
+
+test("organiser can transfer a confirmed fee waiver and self-service can transfer it again", async () => {
+  const { repository, call, principal, sent, phase3Integrations } = setup({ signed: true });
+  assert.equal((await call("POST", directEntries, restoreInput)).status, 201);
+  await repository.transaction((state) => { state.registrations.at(-1).raceNumber = 99; });
+  const before = await repository.read();
+  const registration = before.registrations.at(-1);
+  const route = `/api/v4/organiser/registrations/${registration.id}/transfer`;
+  const organiserTransfer = phase3Integrations.organiserTransfer.bind(phase3Integrations);
+  phase3Integrations.organiserTransfer = (actor, id, input) =>
+    organiserTransfer(actor, id, input, new Date("2026-11-27T12:00:00Z"));
+  const input = {
+    runner: { ...firstRunner, firstName: "Second", email: "second@example.com", gender: "female" },
+    expectedRunnerId: registration.runnerId, overrideCutoff: true
+  };
+  assert.equal((await call("POST", route, input, principal(["authenticated"]))).status, 403);
+  assert.equal((await call("POST", route, input)).status, 200);
+  assert.equal((await call("POST", route, input)).body.code, "TRANSFER_ENTRY_CHANGED");
+  const token = new URLSearchParams(new URL(sent[0].data.managementUrl).hash.slice(1)).get("token");
+  const at = new Date("2026-11-27T23:59:00Z");
+  assert.equal((await phase3Integrations.managementEntry(token, at)).registration.transferEligible, true);
+  assert.equal((await phase3Integrations.transfer(token, {
+    runner: { ...input.runner, firstName: "Third", email: "third@example.com" }
+  }, at)).ok, true);
+  assert.equal((await phase3Integrations.managementEntry(token, at)).code, "MANAGEMENT_TOKEN_EXPIRED");
+
+  const after = await repository.read();
+  assert.deepEqual(after.payments, before.payments);
+  assert.deepEqual(after.refundRequests, before.refundRequests);
+  assert.deepEqual(capacitySummary(after), capacitySummary(before));
+  assert.deepEqual(after.registrations.at(-1).entryFeeWaiver, registration.entryFeeWaiver);
+  assert.equal(after.registrations.at(-1).raceNumber, 99);
+  assert.equal(after.registrations.at(-1).testReference, registration.testReference);
+  assert.equal(after.registrations.at(-1).declarationStatus, "pending");
+  assert.ok(after.auditEvents.some((event) => event.action === "organiser_entry_transferred"));
+  assert.ok(after.auditEvents.some((event) => event.action === "entry_transferred"));
+  assert.deepEqual((await call("GET", "/api/v4/start-list")).body.entries.map((entry) => entry.runnerName), ["Third Runner"]);
+  const timing = await call("GET", "/api/v2/organiser/export/timing");
+  assert.match(timing.body.csv, /"99","Third","Runner"/);
+  assert.doesNotMatch(timing.body.csv, /Second|Replacement/);
+});
