@@ -1,5 +1,6 @@
 import { prototype, canTest, supportsManagedApi } from "./prototype-client.mjs";
 import { queryRegistrations } from "./preview-repository.mjs";
+import { runnerMessageForCode } from "./runner-errors.mjs";
 import { availableOrganiserActions } from "./organiser-view.mjs";
 
 let currentState;
@@ -384,7 +385,7 @@ function renderActions(item) {
   }
   if (item.placeStatus === "confirmed") {
     actions.append(actionButton("Edit runner details", () => openCorrection(item)));
-    actions.append(actionButton("Transfer entry", () => openTransferDialog(item)));
+    if (["successful", "fee_waived"].includes(item.paymentStatus)) actions.append(actionButton("Transfer entry", () => openTransferDialog(item)));
     actions.append(actionButton("Resend management link", async () => { const result = await prototype.resendManagementLink(item.id); showNotice(result.ok ? "A new management link was sent through the controlled development channel." : `Management link unavailable: ${result.code}`, !result.ok); await render(); }));
   }
   if (canWithdrawPlace(item)) {
@@ -431,10 +432,12 @@ function renderActions(item) {
 }
 
 function openTransferDialog(item) {
-  pendingTransfer = item.id; const form = document.querySelector("#organiser-transfer-form");
-  const runner = item.runner; const values = { gender: "", firstName: runner.firstName, lastName: runner.lastName, email: runner.email, phone: runner.phone, addressLine1: runner.addressLine1, addressLine2: runner.addressLine2, city: runner.city, postcode: runner.postcode, dateOfBirth: runner.dateOfBirth, raceCategory: runner.genderCategory, club: runner.club, wfraMember: runner.wfraMember ? "yes" : "no", wfraMembershipNumber: runner.wfraMembershipNumber, emergencyContactName: runner.emergencyName, emergencyContactPhone: runner.emergencyPhone };
+  pendingTransfer = { id: item.id, runnerId: item.runnerId }; const form = document.querySelector("#organiser-transfer-form");
+  const runner = item.runner; const values = { gender: "", firstName: runner.firstName, lastName: runner.lastName, email: runner.email, phone: runner.phone, addressLine1: runner.addressLine1, addressLine2: runner.addressLine2, city: runner.city, postcode: runner.postcode, dateOfBirth: runner.dateOfBirth, raceCategory: runner.raceCategory ?? runner.genderCategory, club: runner.club, wfraMember: runner.wfraMember ? "yes" : "no", wfraMembershipNumber: runner.wfraMembershipNumber, emergencyContactName: runner.emergencyName, emergencyContactPhone: runner.emergencyPhone };
   for (const [name, value] of Object.entries(values)) if (form.elements[name]) form.elements[name].value = value ?? "";
-  form.elements.overrideCutoff.checked = false; document.querySelector("#transfer-entry-dialog").showModal();
+  form.elements.overrideCutoff.checked = false;
+  document.querySelector("#organiser-transfer-error").hidden = true;
+  document.querySelector("#transfer-entry-dialog").showModal();
 }
 async function cancelEntry(id, releaseRaceNumber) {
   const result = await prototype.cancel(id, releaseRaceNumber);
@@ -725,10 +728,45 @@ document.querySelector("#entry-correction-form")?.addEventListener("submit", asy
   }
 });
 document.querySelector("#organiser-transfer-form")?.addEventListener("submit", async (event) => {
-  event.preventDefault(); if (!pendingTransfer || !window.confirm("Transfer this paid race place to the replacement runner? The previous runner's secure links and declaration will be revoked.")) return;
-  const form = event.currentTarget; const data = Object.fromEntries(new FormData(form)); data.wfraMember = data.wfraMember === "yes"; const overrideCutoff = form.elements.overrideCutoff.checked; delete data.overrideCutoff;
-  const registrationId = pendingTransfer; pendingTransfer = null; const result = await prototype.organiserTransfer(registrationId, { runner: data, overrideCutoff });
-  if (result.ok) document.querySelector("#transfer-entry-dialog").close();
-  showNotice(result.ok ? `Entry transferred. The paid place was retained and the replacement runner now requires their own declaration.${overrideCutoff ? " The organiser cutoff override was audited." : ""}` : result.code === "ORGANISER_OVERRIDE_REQUIRED" ? "The normal transfer cutoff has passed. Review the details and explicitly select the organiser cutoff override to proceed." : `Transfer unavailable: ${result.code}`, !result.ok); await render();
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  if (!pendingTransfer || submit.disabled || !window.confirm("Transfer this race place to the replacement runner? The previous runner’s secure links and declaration will be revoked.")) return;
+
+  const dialog = form.closest("dialog");
+  const close = form.querySelector("#close-transfer-entry");
+  const error = form.querySelector("#organiser-transfer-error");
+  const { id, runnerId } = pendingTransfer;
+  const data = Object.fromEntries(new FormData(form));
+  data.wfraMember = data.wfraMember === "yes";
+  const overrideCutoff = form.elements.overrideCutoff.checked;
+  delete data.overrideCutoff;
+
+  error.hidden = true;
+  submit.disabled = close.disabled = true;
+  const preventClose = (event) => event.preventDefault();
+  dialog.addEventListener("cancel", preventClose);
+  let result;
+  try {
+    result = await prototype.organiserTransfer(id, { runner: data, overrideCutoff, expectedRunnerId: runnerId });
+  } catch {
+    result = { ok: false, code: "TRANSFER_OUTCOME_UNKNOWN" };
+  } finally {
+    submit.disabled = close.disabled = false;
+    dialog.removeEventListener("cancel", preventClose);
+  }
+  if (!result.ok) {
+    error.textContent = Object.values(result.errors ?? {})[0] ?? (result.code === "ORGANISER_OVERRIDE_REQUIRED"
+      ? "The normal transfer cutoff has passed. Review the details and explicitly select the organiser cutoff override to proceed."
+      : runnerMessageForCode(result.code));
+    error.hidden = false;
+    error.focus();
+    return;
+  }
+
+  pendingTransfer = null;
+  dialog.close();
+  showNotice("Entry transferred. The race place was retained and the replacement runner now needs to sign their declaration.");
+  await render().catch(() => showNotice("Entry transferred. Reload the dashboard to see the updated entry.", true));
 });
 prototype.subscribe(() => render());

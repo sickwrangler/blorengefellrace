@@ -5,7 +5,7 @@ import { beginProductionRegistration, capacitySummary, createPhase3State, issueM
 import { createApi } from "../registration/server/api.mjs";
 import { renderRegistrationEmail } from "../registration/server/email-templates.mjs";
 import { Phase3IntegrationService, managementActionEligibility } from "../registration/server/phase3-service.mjs";
-import { createMemoryRepository } from "../registration/server/repositories.mjs";
+import { createAzureTableRepository, createMemoryRepository } from "../registration/server/repositories.mjs";
 
 const beforeCutoff = new Date("2026-10-28T22:00:00.000Z");
 const afterRefundCutoff = new Date("2026-10-29T12:00:00.000Z");
@@ -278,4 +278,55 @@ test("confirmation and transfer emails explain self-service transfer and keep ma
   assert.match(transfer.html, /href="https:\/\/development\.example\/registration\/declaration\.html#token=declaration-token">Sign your race declaration/);
   assert.match(transfer.html, /href="https:\/\/development\.example\/registration\/manage\.html#token=management-token">Manage your entry/);
   assert.doesNotMatch(transfer.html, /declaration-token">Manage your entry/);
+});
+
+test("runner can retry a failed delivery and duplicate or expired requests leave the entry intact", async () => {
+  const { state, created } = paidEntry();
+  const other = beginProductionRegistration(state, { runner: runner(2), declaration: declaration(2) }, { at: beforeCutoff });
+  assert.equal(other.ok, true);
+  other.registration.placeStatus = "confirmed";
+  const sent = [];
+  let available = false;
+  const { service, repository } = serviceFor(state, { emailAdapter: {
+    async send(message) {
+      sent.push(message.template);
+      return { delivery: available ? "sent" : "failed", externalCall: true };
+    }
+  } });
+  const before = await repository.read();
+  const transfer = (replacement, at = beforeCutoff) => service.transfer(created.managementToken, { runner: replacement }, at);
+  assert.equal((await service.transfer(null, { runner: runner(3) }, beforeCutoff)).code, "MANAGEMENT_TOKEN_INVALID");
+  assert.equal((await transfer(runner(2, { email: "RUNNER-2@example.com" }))).code, "DUPLICATE_ACTIVE_ENTRY");
+  assert.equal((await transfer({})).code, "VALIDATION_ERROR");
+  assert.equal((await transfer(runner(3), new Date("2026-11-23T12:00:00Z"))).code, "MANAGEMENT_TOKEN_EXPIRED");
+  assert.deepEqual(sent, []);
+  assert.equal((await transfer(runner(3))).code, "TRANSFER_DELIVERY_FAILED");
+  assert.deepEqual(await repository.read(), before);
+  available = true;
+  assert.equal((await transfer(runner(3))).ok, true);
+  assert.deepEqual(sent, ["entry_transferred", "entry_transferred", "entry_transferred_previous_runner"]);
+});
+
+test("a Table conflict does not replay a transfer email or notify the current runner of an uncommitted transfer", async () => {
+  const { state, created } = paidEntry();
+  const sent = [];
+  let writes = 0;
+  const repository = createAzureTableRepository({
+    async loadPartition() { return { state, etag: "unchanged" }; },
+    async submitTransaction() {
+      writes++;
+      throw Object.assign(new Error("Synthetic conflict"), { statusCode: 412 });
+    },
+    retryDelay: async () => {}
+  });
+  const service = new Phase3IntegrationService({ repository, publicBaseUrl: "https://development.example", emailAdapter: {
+    async send(message) {
+      sent.push(message.template);
+      return { delivery: "sent", externalCall: true };
+    }
+  } });
+  await assert.rejects(() => service.transfer(created.managementToken, { runner: runner(2) }, beforeCutoff), /Synthetic conflict/);
+  assert.equal(writes, 1);
+  assert.deepEqual(sent, ["entry_transferred"]);
+  assert.equal((await service.managementEntry(created.managementToken, beforeCutoff)).registration.runner.email, runner().email);
 });

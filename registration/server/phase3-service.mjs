@@ -36,6 +36,11 @@ function managementAccess(state, token, at = new Date()) {
 function unavailable(code, deadline = null) { return { available: false, code, deadline }; }
 function available() { return { available: true, code: null, deadline: null }; }
 
+function transferablePlace(registration, payment) {
+  return registration.placeStatus === "confirmed" && (hasWaivedEntryFee(registration)
+    || (payment?.status === "paid" && !payment.refundedRegistrationIds?.includes(registration.id)));
+}
+
 export function managementActionEligibility(state, registration, { at = new Date(), paymentsAvailable = true } = {}) {
   const payment = paymentFor(state, registration);
   const refund = refundFor(state, registration);
@@ -69,7 +74,7 @@ export function managementActionEligibility(state, registration, { at = new Date
   const amend = active ? available() : unavailable("ENTRY_INACTIVE");
   let transfer = available();
   if (!active) transfer = unavailable("ENTRY_INACTIVE");
-  else if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") transfer = unavailable("TRANSFER_PAYMENT_REQUIRED");
+  else if (!transferablePlace(registration, payment)) transfer = unavailable("TRANSFER_PAYMENT_REQUIRED");
   else if (!beforeTransferCutoff) transfer = unavailable("TRANSFER_CUTOFF_PASSED", transferCutoff);
 
   let requestRefundAction = available();
@@ -328,17 +333,21 @@ export class Phase3IntegrationService {
     };
   }
 
-  transferRegistration({ managementToken = null, registrationId = null, input, actor, allowCutoffOverride = false }, at = new Date()) {
-    return this.repository.transaction(async (state) => {
-      const access = managementToken ? managementAccess(state, managementToken, at) : null;
-      if (managementToken && !access.ok) return access;
-      const registration = managementToken ? access.registration : state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
-      if (!registration || !activeRegistration(registration)) return { ok: false, code: managementToken ? "ENTRY_INACTIVE" : "NOT_FOUND" };
+  async transferRegistration({ managementToken = null, registrationId = null, input, actor, allowCutoffOverride = false }, at = new Date()) {
+    const selfService = actor.actorType === "runner";
+    const result = await this.repository.transaction(async (state) => {
+      const access = selfService ? managementAccess(state, managementToken, at) : null;
+      if (selfService && !access.ok) return access;
+      const registration = selfService ? access.registration : state.registrations.find((item) => item.id === registrationId && activeRegistration(item));
+      if (!registration || !activeRegistration(registration)) return { ok: false, code: selfService ? "ENTRY_INACTIVE" : "NOT_FOUND" };
+      if (!selfService && input.expectedRunnerId !== undefined && input.expectedRunnerId !== registration.runnerId) {
+        return { ok: false, code: "TRANSFER_ENTRY_CHANGED" };
+      }
       const payment = paymentFor(state, registration);
-      if (payment?.status !== "paid" || registration.placeStatus !== "confirmed") return { ok: false, code: "TRANSFER_PAYMENT_REQUIRED" };
+      if (!transferablePlace(registration, payment)) return { ok: false, code: "TRANSFER_PAYMENT_REQUIRED" };
       const transferCutoff = state.event.transferCutoffUtc ?? state.event.transferRefundCutoffUtc;
       const afterCutoff = new Date(at) > new Date(transferCutoff);
-      if (afterCutoff && !allowCutoffOverride) return { ok: false, code: managementToken ? "TRANSFER_CUTOFF_PASSED" : "ORGANISER_OVERRIDE_REQUIRED" };
+      if (afterCutoff && !allowCutoffOverride) return { ok: false, code: selfService ? "TRANSFER_CUTOFF_PASSED" : "ORGANISER_OVERRIDE_REQUIRED" };
       const next = input.runner ?? {};
       const errors = validateProductionRunner(next, { raceDate: state.event.raceDate, under18EntriesEnabled: state.event.under18EntriesEnabled !== false });
       if (["local", "development"].includes(state.environment) && !syntheticEmail.test(normalizeEmail(next.email))) errors.email = "Use synthetic information only in development.";
@@ -358,16 +367,30 @@ export class Phase3IntegrationService {
       else state.emergencyContacts.push({ id: `emergency_${crypto.randomUUID()}`, registrationId: registration.id, name: String(next.emergencyContactName).trim(), phone: String(next.emergencyContactPhone).trim(), deleteAfterEvent: true });
       const issued = issueManagementToken(state, registration.id, actor, at);
       const declarationToken = issueDeclarationToken(state, registration.id, at);
-      const action = actor.actorType === "organiser" ? "organiser_entry_transferred" : "entry_transferred";
+      const action = selfService ? "entry_transferred" : "organiser_entry_transferred";
       state.auditEvents.push({ id: `audit_${crypto.randomUUID()}`, occurredAt: iso(at), actorType: actor.actorType, actorId: actor.id ?? null, action, subjectId: registration.id, before: { runnerId: previous.id }, after: { runnerId: runner.id, declarationStatus: "pending", cutoffOverride: Boolean(afterCutoff && allowCutoffOverride) }, environment: state.environment });
-      const replacementDelivery = await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, managementUrl: this.managementUrl(issued.token), managementExpiresAt: issued.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: transferCutoff, secureUrl: this.orders.declarationUrl(declarationToken, issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${registration.updatedAt}`, at);
-      if (["failed", "disabled"].includes(replacementDelivery.receipt?.delivery)) return { ok: false, code: "TRANSFER_DELIVERY_FAILED" };
-      const previousMessage = { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} };
-      const previousKey = `registration:${registration.id}:transfer-old:${registration.updatedAt}`;
-      try { await this.communicate(state, previousMessage, previousKey, at); }
-      catch (error) { recordRegistrationCommunication(state, previousMessage, { delivery: "failed", externalCall: true, failureCategory: String(error?.name || "email_provider_error").slice(0, 80) }, { idempotencyKey: previousKey, at }); }
-      return managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) });
-    });
+      const replacementDelivery = await this.communicate(state, { registrationId: registration.id, template: "entry_transferred", intendedRecipientAddress: runner.email, data: { runnerName: `${runner.firstName} ${runner.lastName}`, managementUrl: this.managementUrl(issued.token), managementExpiresAt: issued.expiresAt, managementRecoveryUrl: `${this.publicBaseUrl}/registration/manage.html`, transferDeadline: transferCutoff, secureUrl: this.orders.declarationUrl(declarationToken, issued.token), status: "Declaration required before race day" } }, `registration:${registration.id}:transfer-new:${issued.tokenId}`, at);
+      const delivery = replacementDelivery.receipt?.delivery;
+      const syntheticDelivery = state.environment !== "production" && ["captured_only", "redirected_safe_recipient", "test"].includes(delivery);
+      if (delivery !== "sent" && !syntheticDelivery) return { ok: false, code: "TRANSFER_DELIVERY_FAILED" };
+      return {
+        ...managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }),
+        previousMessage: { registrationId: registration.id, template: "entry_transferred_previous_runner", intendedRecipientAddress: previous.email, data: {} },
+        previousKey: `registration:${registration.id}:transfer-old:${runner.id}`
+      };
+    }, { retryConflicts: false });
+    if (!result.ok) return result;
+
+    const { previousMessage, previousKey, ...view } = result;
+    try {
+      const delivery = await this.emailAdapter.send({ ...previousMessage, deliveryIdempotencyKey: previousKey })
+        .catch((error) => ({ delivery: "failed", externalCall: true, failureCategory: String(error?.name || "email_provider_error").slice(0, 80) }));
+      await this.repository.transaction((state) => recordRegistrationCommunication(state, previousMessage, delivery, { idempotencyKey: previousKey, at }));
+    } catch {
+      // The transfer already committed. A notification receipt failure cannot undo it.
+      return { ...view, previousNotificationUnverified: true };
+    }
+    return view;
   }
 
   transfer(managementToken, input, at = new Date()) {

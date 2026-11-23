@@ -64,7 +64,7 @@ export function createAzureTableRepository({ loadPartition, submitTransaction, m
   return {
     kind: "azure-table-etag-transaction",
     async read() { const snapshot = await loadPartition(); return clone(snapshot.state); },
-    transaction(operation) {
+    transaction(operation, { retryConflicts = true } = {}) {
       const run = queue.then(async () => {
         for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
           const snapshot = await loadPartition();
@@ -76,7 +76,7 @@ export function createAzureTableRepository({ loadPartition, submitTransaction, m
             return clone(result);
           } catch (error) {
             const conflict = error?.statusCode === 409 || error?.statusCode === 412;
-            if (!conflict || attempt === maximumAttempts) throw error;
+            if (!conflict || !retryConflicts || attempt === maximumAttempts) throw error;
             telemetry?.info?.("registration_state_write_conflict_retry", { environment: "production", attempt });
             await retryDelay(attempt);
           }
