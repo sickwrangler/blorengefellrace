@@ -254,9 +254,9 @@ export const prototype = {
     try { return await phase3Api("/management/withdraw", { method: "POST", headers: { "x-management-token": token } }); }
     catch { return { ok: false, code: "MANAGEMENT_UNAVAILABLE" }; }
   },
-  async organiserWithdrawEntry(registrationId, reason = "") {
+  async organiserWithdrawEntry(registrationId, reason = "", expectedEmail, expectedRunnerId) {
     if (!usesApi) return { ok: false, code: "MANAGED_API_REQUIRED" };
-    try { return await phase3Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/withdraw`, { method: "POST", body: JSON.stringify({ reason }) }, true); }
+    try { return await phase3Api(`/organiser/registrations/${encodeURIComponent(registrationId)}/withdraw`, { method: "POST", body: JSON.stringify({ reason, expectedEmail, expectedRunnerId }) }, true); }
     catch { return { ok: false, code: "MANAGEMENT_UNAVAILABLE" }; }
   },
   async decideRefund(id, decision) {

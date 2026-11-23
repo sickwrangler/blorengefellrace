@@ -17,6 +17,28 @@ const v2 = (path, options) => request("v2", path, options);
 const v3 = (path, options) => request("v3", path, options);
 const v4 = (path, options) => request("v4", path, options);
 
+async function lifecycleRequest(version, path, options) {
+  const clientRequestId = crypto.randomUUID();
+  try {
+    const response = await fetch(`/api/${version}${path}`, {
+      method: "POST", ...options, cache: "no-store", redirect: "manual", signal: AbortSignal.timeout(25_000),
+      headers: { "content-type": "application/json", "x-registration-request-id": clientRequestId, ...options.headers }
+    });
+    const requestId = response.headers.get("x-registration-request-id") ?? clientRequestId;
+    if (response.type === "opaqueredirect" || [401, 403].includes(response.status) && !response.headers.get("content-type")?.includes("application/json")) {
+      return { ok: false, code: "FORBIDDEN", requestId };
+    }
+    try {
+      const body = await response.json();
+      return { ...body, requestId };
+    } catch {
+      return { ok: false, code: "OPERATION_OUTCOME_UNKNOWN", requestId };
+    }
+  } catch {
+    return { ok: false, code: "OPERATION_OUTCOME_UNKNOWN", requestId: clientRequestId };
+  }
+}
+
 async function privateWorkbook() {
   const response = await fetch("/api/v2/organiser/export/private-workbook", { cache: "no-store" });
   if (!response.ok) {
@@ -75,7 +97,7 @@ export const prototype = {
   completeDeclaration(token, input) { return v4("/declarations/complete", { method: "POST", body: JSON.stringify(input), headers: { "x-declaration-token": token } }); },
   resendDeclaration(id) { return v4(`/organiser/registrations/${encodeURIComponent(id)}/declaration/resend`, { method: "POST" }); },
   recordPaperDeclaration(id) { return v4(`/organiser/registrations/${encodeURIComponent(id)}/declaration/paper`, { method: "POST" }); },
-  organiserTransfer(id, input) { return v4(`/organiser/registrations/${encodeURIComponent(id)}/transfer`, { method: "POST", body: JSON.stringify(input) }); },
+  organiserTransfer(id, input) { return lifecycleRequest("v4", `/organiser/registrations/${encodeURIComponent(id)}/transfer`, { body: JSON.stringify(input) }); },
   emailHealth() { return v4("/organiser/email-health"); },
   previewEmailRecovery() { return v4("/organiser/email-recovery/preview"); },
   executeOneEmailRecovery(input) { return v4("/organiser/email-recovery/execute-one", { method: "POST", body: JSON.stringify(input) }); },
@@ -88,15 +110,15 @@ export const prototype = {
   managementEntry(token = this.managementToken()) { return token ? v3("/management/entry", { headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
   recoverManagementLink(email) { return v3("/management/recover", { method: "POST", body: JSON.stringify({ email }) }); },
   amendEntry(changes, token = this.managementToken()) { return v3("/management/amend", { method: "POST", body: JSON.stringify(changes), headers: { "x-management-token": token } }); },
-  transferEntry(input, token = this.managementToken()) { return v3("/management/transfer", { method: "POST", body: JSON.stringify(input), headers: { "x-management-token": token } }); },
-  withdrawEntry(token = this.managementToken()) { return token ? v3("/management/withdraw", { method: "POST", headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
+  transferEntry(input, token = this.managementToken()) { return lifecycleRequest("v3", "/management/transfer", { body: JSON.stringify(input), headers: { "x-management-token": token } }); },
+  withdrawEntry(token = this.managementToken()) { return token ? lifecycleRequest("v3", "/management/withdraw", { headers: { "x-management-token": token } }) : Promise.resolve({ ok: false, code: "MANAGEMENT_TOKEN_INVALID" }); },
   checkWaitingListPayment(id) { return v3(`/organiser/registrations/${encodeURIComponent(id)}/check-waiting-list-payment`, { method: "POST" }); },
   addDirectEntry(input) { return v4("/organiser/direct-entries", { method: "POST", body: JSON.stringify(input) }); },
-  organiserWithdrawEntry(id, reason = "", expectedEmail) { return v3(`/organiser/registrations/${encodeURIComponent(id)}/withdraw`, { method: "POST", body: JSON.stringify({ reason, expectedEmail }) }); },
+  organiserWithdrawEntry(id, reason = "", expectedEmail, expectedRunnerId) { return lifecycleRequest("v3", `/organiser/registrations/${encodeURIComponent(id)}/withdraw`, { body: JSON.stringify({ reason, expectedEmail, expectedRunnerId }) }); },
   decideRefund(id, decision) { return v3(`/organiser/refunds/${encodeURIComponent(id)}/${decision}`, { method: "POST" }); },
   executeRefund(id) { return v3(`/organiser/refunds/${encodeURIComponent(id)}/execute`, { method: "POST" }); },
   resendManagementLink(id) { return v3(`/organiser/registrations/${encodeURIComponent(id)}/resend-management`, { method: "POST" }); },
-  async all() { const result = await v2("/organiser/snapshot"); return { ...result, recovery: result.ok ? null : { required: true, message: "Registration data is unavailable." }, diagnostics: { environment: "production", storageType: "private server storage", schemaVersion: result.state?.version ?? "unavailable" } }; },
+  async all(options = {}) { const result = await v2("/organiser/snapshot", options); return { ...result, recovery: result.ok ? null : { required: true, message: "Registration data is unavailable." }, diagnostics: { environment: "production", storageType: "private server storage", schemaVersion: result.state?.version ?? "unavailable" } }; },
   cancel(id, releaseRaceNumber = false) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/cancel`, { method: "POST", body: JSON.stringify({ releaseRaceNumber }) }); },
   promote(id) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/promote`, { method: "POST" }); },
   assign(id, raceNumber) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/race-number`, { method: "POST", body: JSON.stringify({ raceNumber }) }); },

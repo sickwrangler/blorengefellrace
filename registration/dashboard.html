@@ -119,7 +119,7 @@
         <label>Emergency-contact name<input name="emergencyContactName" required></label><label>Emergency-contact phone<input name="emergencyContactPhone" required></label>
       </div>
       <label class="checkbox-field"><input name="overrideCutoff" type="checkbox"> Explicitly use the organiser cutoff override if the normal transfer period has ended.</label>
-      <p id="organiser-transfer-error" class="form-alert" role="alert" tabindex="-1" hidden></p>
+      <p id="organiser-transfer-error" class="form-alert operation-feedback" role="status" aria-atomic="true" tabindex="-1" hidden></p>
       <div class="form-actions"><button id="close-transfer-entry" class="button button--quiet" type="button">Cancel</button><button class="button" type="submit">Transfer entry</button></div>
     </form>
   </dialog>
@@ -184,13 +184,17 @@
       <div class="form-actions"><button id="close-waiting-list-action" class="button button--quiet" type="button">Cancel</button><button id="confirm-waiting-list-action" class="button" type="submit">Confirm</button></div>
     </form>
   </dialog>
+  <aside id="operation-notice" class="form-alert operation-feedback operation-notice" aria-label="Registration action outcome" hidden>
+    <p role="status" aria-atomic="true" tabindex="-1"></p>
+    <button id="dismiss-operation-notice" type="button" class="button button--quiet">Dismiss</button>
+  </aside>
   <dialog id="withdraw-entry-dialog" class="confirmation-dialog" aria-labelledby="withdraw-entry-title">
     <form id="withdraw-entry-form">
       <h2 id="withdraw-entry-title">Withdraw runner</h2>
       <p id="withdraw-entry-runner"></p>
       <p>This releases the race place and removes the runner from the active participant list. Payment and financial history are preserved, and no refund is issued automatically. The runner receives a withdrawal email.</p>
       <label>Reason (optional)<input id="withdraw-entry-reason" name="reason" maxlength="250" placeholder="For example, requested by email"></label>
-      <p id="withdraw-entry-error" class="form-alert" role="alert" hidden></p>
+      <p id="withdraw-entry-error" class="form-alert operation-feedback" role="status" aria-atomic="true" tabindex="-1" hidden></p>
       <div class="form-actions"><button id="close-withdraw-entry" class="button button--quiet" type="button">Cancel</button><button class="button danger-button" type="submit">Withdraw runner</button></div>
     </form>
   </dialog>
