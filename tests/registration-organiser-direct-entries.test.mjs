@@ -19,7 +19,7 @@ const restoreInput = {
 };
 const directEntries = "/api/v4/organiser/direct-entries";
 
-function setup({ existingStartList = 0, signed = false } = {}) {
+function setup({ existingStartList = 0, signed = false, environment, deliver } = {}) {
   const state = createProductionBootstrap();
   const [runnerId, registrationId] = ["runner_replacement", "registration_released"];
   state.runners.push({ ...firstRunner, id: runnerId });
@@ -44,9 +44,9 @@ function setup({ existingStartList = 0, signed = false } = {}) {
   }
   const repository = createMemoryRepository(state);
   const sent = [];
-  const emailAdapter = { async send(message) { sent.push(message); return { delivery: "sent", externalCall: false }; } };
+  const emailAdapter = { async send(message) { sent.push(message); return deliver ? deliver(message) : { delivery: "sent", externalCall: false }; } };
   const service = new ProductionRegistrationService({ repository, emailAdapter });
-  const phase3Integrations = new Phase3IntegrationService({ repository, emailAdapter, publicBaseUrl: "https://example.com" });
+  const phase3Integrations = new Phase3IntegrationService({ repository, emailAdapter, publicBaseUrl: "https://example.com", environment });
   const api = createProductionApi({ service, phase3Integrations, repository });
   const principal = (userRoles) => ({ "x-ms-client-principal": Buffer.from(JSON.stringify({
     userRoles, userId: "test-organiser"
@@ -165,4 +165,54 @@ test("organiser can transfer a confirmed fee waiver and self-service can transfe
   const timing = await call("GET", "/api/v2/organiser/export/timing");
   assert.match(timing.body.csv, /"99","Third","Runner"/);
   assert.doesNotMatch(timing.body.csv, /Second|Replacement/);
+});
+
+test("production returns committed transfer and withdrawal before trying email and the scheduler retries safely", async () => {
+  const at = new Date("2026-11-23T11:00:00Z");
+  const actor = { authenticated: true, role: "organiser", actorType: "organiser" };
+  let providerAvailable = false;
+  const { repository, call, sent, phase3Integrations } = setup({ signed: true, environment: "production", deliver: () =>
+    providerAvailable ? { delivery: "sent" } : { delivery: "failed", failureCategory: "throttled" }
+  });
+  assert.equal((await call("POST", directEntries, restoreInput)).status, 201);
+  const before = await repository.read();
+  const entry = before.registrations.at(-1);
+  const integrations = phase3Integrations;
+  const transfer = integrations.organiserTransfer.bind(integrations);
+  integrations.organiserTransfer = (actor, id, input) => transfer(actor, id, input, at);
+  const withdraw = integrations.organiserWithdraw.bind(integrations);
+  integrations.organiserWithdraw = (actor, id, input) => withdraw(actor, id, input, at);
+  const replacement = { ...firstRunner, email: "queued@example.com" };
+  const transferResponse = await call("POST", `/api/v4/organiser/registrations/${entry.id}/transfer`, {
+    runner: replacement, expectedRunnerId: entry.runnerId
+  });
+  assert.equal(transferResponse.status, 200);
+  assert.equal(transferResponse.body.committed, true);
+  assert.equal(transferResponse.body.replacementNotification, "queued");
+  assert.deepEqual(sent, []);
+  const afterTransfer = await repository.read();
+  assert.equal(afterTransfer.emailOutbox.filter((item) => item.status === "prepared").length, 2);
+  assert.deepEqual(capacitySummary(afterTransfer), capacitySummary(before));
+
+  const firstDelivery = await integrations.runScheduledWork(actor, at);
+  assert.equal(firstDelivery.withdrawalNotificationRetries.failed, 2);
+  assert.equal((await repository.read()).registrations.at(-1).runnerId, afterTransfer.registrations.at(-1).runnerId);
+  providerAvailable = true;
+  const retry = await integrations.runScheduledWork(actor, new Date(at.getTime() + 30 * 60_000));
+  assert.equal(retry.withdrawalNotificationRetries.sent, 2);
+  assert.equal(sent[0].deliveryIdempotencyKey, sent[2].deliveryIdempotencyKey);
+
+  const withdrawal = await call("POST", `/api/v3/organiser/registrations/${entry.id}/withdraw`, {
+    expectedRunnerId: afterTransfer.registrations.at(-1).runnerId
+  });
+  assert.equal(withdrawal.status, 200);
+  assert.equal(withdrawal.body.committed, true);
+  assert.equal(withdrawal.body.registration.entryStatus, "withdrawn");
+  assert.equal(withdrawal.body.notificationDelivery, "queued");
+  assert.equal(sent.length, 4);
+  const after = await repository.read();
+  assert.deepEqual(after.payments, before.payments);
+  assert.deepEqual(after.refundRequests, before.refundRequests);
+  assert.deepEqual(after.waitingList, before.waitingList);
+  assert.equal(capacitySummary(after).confirmed, capacitySummary(before).confirmed - 1);
 });

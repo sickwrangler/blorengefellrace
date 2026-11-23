@@ -165,7 +165,7 @@ function prepareWithdrawal(state, registrationId, actor, at, { organiserEmail, p
     ok: true,
     duplicate: result.duplicate,
     registrationId: registration.id,
-    outboxAttemptIds: [runnerAttempt.id, organiserAttempt?.id].filter(Boolean),
+    outboxAttempts: [runnerAttempt, organiserAttempt].filter(Boolean).map(({ id, status }) => ({ id, status })),
     organiserNotificationConfigured: Boolean(organiserAttempt)
   };
 }
@@ -305,9 +305,24 @@ export class Phase3IntegrationService {
 
   async finishLifecycleOperation(prepared, at) {
     if (!prepared.ok) return prepared;
-    const { outboxAttemptIds, replacementNotificationQueued, ...result } = prepared;
+    const { outboxAttempts, replacementNotificationQueued, ...result } = prepared;
+    const respond = (states) => ({
+      ...result,
+      committed: true,
+      notificationDeliveryFailed: states.includes("failed"),
+      notificationDelivery: states.includes("unverified") ? "unverified" : states.includes("failed") ? "failed"
+        : states.includes("pending") ? "pending" : states.includes("queued") ? "queued" : "sent",
+      ...(replacementNotificationQueued ? { replacementNotification: states[0] } : {})
+    });
+    // Production responses end at the commit. The scheduler claims the durable jobs.
+    // Development retains immediate delivery to its controlled or captured mail adapter.
+    if (this.environment === "production") {
+      return respond(outboxAttempts.map(({ status }) =>
+        ({ prepared: "queued", sent: "sent", sending: "unverified" })[status] ?? "failed"));
+    }
+
     const states = [];
-    for (const attemptId of outboxAttemptIds) {
+    for (const { id: attemptId } of outboxAttempts) {
       try {
         const delivery = await this.orders.deliverPreparedOutboxAttempt(attemptId, at);
         states.push(!delivery.ok || delivery.permanentFailure || delivery.superseded ? "failed"
@@ -317,13 +332,7 @@ export class Phase3IntegrationService {
         states.push("unverified");
       }
     }
-    return {
-      ...result,
-      committed: true,
-      notificationDeliveryFailed: states.includes("failed"),
-      notificationDelivery: states.includes("unverified") ? "unverified" : states.includes("failed") ? "failed" : states.includes("pending") ? "pending" : "sent",
-      ...(replacementNotificationQueued ? { replacementNotification: states[0] } : {})
-    };
+    return respond(states);
   }
 
   async organiserWithdraw(actor, registrationId, { reason = null, expectedEmail = null, expectedRunnerId = null } = {}, at = new Date()) {
@@ -406,7 +415,7 @@ export class Phase3IntegrationService {
       return {
         ...managementView(state, registration, at, { paymentsAvailable: Boolean(this.stripeGateway) }),
         replacementNotificationQueued: true,
-        outboxAttemptIds: [replacement.id, previousNotification.id]
+        outboxAttempts: [replacement, previousNotification].map(({ id, status }) => ({ id, status }))
       };
     });
     return this.finishLifecycleOperation(prepared, at);

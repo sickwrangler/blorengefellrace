@@ -118,7 +118,7 @@ export const prototype = {
   decideRefund(id, decision) { return v3(`/organiser/refunds/${encodeURIComponent(id)}/${decision}`, { method: "POST" }); },
   executeRefund(id) { return v3(`/organiser/refunds/${encodeURIComponent(id)}/execute`, { method: "POST" }); },
   resendManagementLink(id) { return v3(`/organiser/registrations/${encodeURIComponent(id)}/resend-management`, { method: "POST" }); },
-  async all() { const result = await v2("/organiser/snapshot"); return { ...result, recovery: result.ok ? null : { required: true, message: "Registration data is unavailable." }, diagnostics: { environment: "production", storageType: "private server storage", schemaVersion: result.state?.version ?? "unavailable" } }; },
+  async all(options = {}) { const result = await v2("/organiser/snapshot", options); return { ...result, recovery: result.ok ? null : { required: true, message: "Registration data is unavailable." }, diagnostics: { environment: "production", storageType: "private server storage", schemaVersion: result.state?.version ?? "unavailable" } }; },
   cancel(id, releaseRaceNumber = false) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/cancel`, { method: "POST", body: JSON.stringify({ releaseRaceNumber }) }); },
   promote(id) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/promote`, { method: "POST" }); },
   assign(id, raceNumber) { return v2(`/organiser/registrations/${encodeURIComponent(id)}/race-number`, { method: "POST", body: JSON.stringify({ raceNumber }) }); },

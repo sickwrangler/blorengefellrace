@@ -90,14 +90,14 @@ test("Azure Function entry modules lazy-load private workbook generation", () =>
 
 test("organiser transfer preserves the form and target on failure and submits the explicit override on retry", async () => {
   const source = fs.readFileSync("registration/dashboard.mjs", "utf8");
-  const handler = source.slice(source.indexOf('document.querySelector("#organiser-transfer-form")?.addEventListener'), source.indexOf("prototype.subscribe"));
+  const handler = source.slice(source.indexOf('document.querySelector("#organiser-transfer-form")?.addEventListener'), source.indexOf('document.querySelector("#dismiss-operation-notice")'));
   const submit = { disabled: false };
   const close = {};
-  const error = { hidden: true, focus() {} };
+  const error = { hidden: true, dataset: {}, focus() {} };
   const dialog = { closed: false, close() { this.closed = true; }, addEventListener() {}, removeEventListener() {} };
   const form = {
     elements: { overrideCutoff: { checked: false } },
-    querySelector(selector) { return { 'button[type="submit"]': submit, "#close-transfer-entry": close, "#organiser-transfer-error": error }[selector]; },
+    querySelector(selector) { return { 'button[type="submit"]': submit, 'button[type="button"]': close, "#organiser-transfer-error": error }[selector]; },
     closest() { return dialog; }
   };
   const calls = [];
@@ -105,12 +105,17 @@ test("organiser transfer preserves the form and target on failure and submits th
   const document = { querySelector() { return { addEventListener(_event, callback) { onSubmit = callback; } }; } };
   const prototype = { async organiserTransfer(id, data) {
     calls.push({ id, ...data });
-    return calls.length === 1 ? { ok: false, code: "ORGANISER_OVERRIDE_REQUIRED" } : { ok: true };
+    return calls.length === 1 ? { ok: false, code: "ORGANISER_OVERRIDE_REQUIRED" } : { ok: true, committed: true, registration: { placeStatus: "confirmed", runner: { email: "replacement@example.com", firstName: "Replacement", lastName: "Runner" } } };
   } };
-  const FormData = function () { return [["firstName", "Replacement"], ["wfraMember", "no"]]; };
-  const install = new Function("document", "prototype", "FormData", "window", "render", "showNotice", "runnerMessageForCode", "uncertainOperation", "operationReference",
-    `let pendingTransfer = { id: "entry", runnerId: "original" }; ${handler}`);
-  install(document, prototype, FormData, { confirm: () => true }, async () => {}, () => {}, (code) => code, () => false, () => "");
+  const FormData = function () { return [["firstName", "Replacement"], ["lastName", "Runner"], ["email", "replacement@example.com"], ["wfraMember", "no"]]; };
+  const feedback = source.slice(source.indexOf("function operationReference"), source.indexOf("async function render()"));
+  const install = new Function("document", "prototype", "FormData", "window", "render", "runnerMessageForCode",
+    `let pendingTransfer = { id: "entry", runnerId: "original" }; ${feedback} ${handler}`);
+  const noticeMessage = { dataset: {}, focus() {} };
+  const notice = { dataset: {}, querySelector: () => noticeMessage };
+  document.querySelector = (selector) => selector === "#operation-notice"
+    ? notice : { addEventListener(_event, callback) { onSubmit = callback; } };
+  install(document, prototype, FormData, { confirm: () => true }, async () => {}, (code) => code);
   const event = { preventDefault() {}, currentTarget: form };
   await onSubmit(event);
   assert.equal(dialog.closed, false);
@@ -120,8 +125,9 @@ test("organiser transfer preserves the form and target on failure and submits th
   form.elements.overrideCutoff.checked = true;
   await onSubmit(event);
   assert.equal(dialog.closed, true);
+  assert.equal(notice.dataset.tone, "success");
   assert.deepEqual(calls, [
-    { id: "entry", runner: { firstName: "Replacement", wfraMember: false }, overrideCutoff: false, expectedRunnerId: "original" },
-    { id: "entry", runner: { firstName: "Replacement", wfraMember: false }, overrideCutoff: true, expectedRunnerId: "original" }
+    { id: "entry", runner: { firstName: "Replacement", lastName: "Runner", email: "replacement@example.com", wfraMember: false }, overrideCutoff: false, expectedRunnerId: "original" },
+    { id: "entry", runner: { firstName: "Replacement", lastName: "Runner", email: "replacement@example.com", wfraMember: false }, overrideCutoff: true, expectedRunnerId: "original" }
   ]);
 });

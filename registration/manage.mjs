@@ -211,7 +211,7 @@ document.querySelector("#confirm-withdraw-entry").addEventListener("click", asyn
   button.disabled = false;
   if (!result.ok) { message.textContent = runnerMessageForCode(result.code) + requestReference(result); message.hidden = false; message.focus(); return; }
   withdrawDialog.close(); await render().catch(() => {});
-  actionMessage.textContent = result.notificationDeliveryFailed || result.notificationDelivery && result.notificationDelivery !== "sent"
+  actionMessage.textContent = result.notificationDeliveryFailed || result.notificationDelivery && !["queued", "sent"].includes(result.notificationDelivery)
     ? "You have withdrawn from the race and your place is released. Email delivery needs review."
     : "You have withdrawn from the race. Your place has been released.";
 });
@@ -252,7 +252,9 @@ transferForm.addEventListener("submit", async (event) => {
     return;
   }
   if (!result.ok) { message.textContent = (Object.values(result.errors ?? {})[0] ?? runnerMessageForCode(result.code)) + requestReference(result); message.hidden = false; message.focus(); return; }
-  transferDialog.close(); prototype.forgetManagementToken(); history.replaceState(null, "", "manage.html"); entryPanel.hidden = true; accessPanel.hidden = false; accessMessage.textContent = result.replacementNotification && result.replacementNotification !== "sent"
+  transferDialog.close(); prototype.forgetManagementToken(); history.replaceState(null, "", "manage.html"); entryPanel.hidden = true; accessPanel.hidden = false; accessMessage.textContent = result.replacementNotification === "queued"
+    ? "Entry transferred and this secure link was revoked. The replacement runner’s secure link email is queued."
+    : result.replacementNotification && result.replacementNotification !== "sent"
     ? "Entry transferred and this secure link was revoked. Delivery of the new runner’s links needs review. Contact the organiser if links do not arrive."
     : "Entry transferred. This previous secure link has been revoked and the new runner has been sent their own links.";
 });

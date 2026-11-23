@@ -25,26 +25,75 @@ function operationReference(result) {
   return result.requestId ? ` Request ID ${result.requestId}.` : "";
 }
 
-function uncertainOperation(result) {
-  return ["OPERATION_OUTCOME_UNKNOWN", "TRANSFER_OUTCOME_UNKNOWN", "API_UNAVAILABLE", "PRODUCTION_STATE_UNAVAILABLE", "MANAGEMENT_UNAVAILABLE"].includes(result.code);
+function setOperationFeedback(element, message, tone) {
+  element.textContent = message;
+  element.dataset.tone = tone;
+  element.hidden = false;
 }
 
-async function reconcileOrganiserOperation(id, matches, result, error, dialog, successMessage) {
+function showOperationNotice(message, tone) {
+  const notice = document.querySelector("#operation-notice");
+  setOperationFeedback(notice.querySelector("[role=status]"), message, tone);
+  notice.dataset.tone = tone;
+  notice.hidden = false;
+  notice.querySelector("[role=status]").focus({ preventScroll: true });
+}
+
+function uncertainOperation(result) {
+  return result.ok || ["OPERATION_OUTCOME_UNKNOWN", "TRANSFER_OUTCOME_UNKNOWN", "API_UNAVAILABLE", "PRODUCTION_STATE_UNAVAILABLE", "MANAGEMENT_UNAVAILABLE", "REGISTRATION_WRITE_CONFLICT", "TRANSFER_ENTRY_CHANGED", "WITHDRAWAL_ENTRY_MISMATCH"].includes(result.code);
+}
+
+function committedOperation(result, matches) {
+  return result.ok === true && result.committed === true && Boolean(result.registration && matches(result.registration));
+}
+
+function notificationNeedsReview(result) {
+  return result.notificationDeliveryFailed || [result.notificationDelivery, result.replacementNotification]
+    .some((status) => status && !["queued", "sent"].includes(status));
+}
+
+async function runOrganiserOperation(form, feedback, send) {
+  const submit = form.querySelector('button[type="submit"]');
+  const close = form.querySelector('button[type="button"]');
+  const dialog = form.closest("dialog");
+  const label = submit.textContent;
+  submit.disabled = close.disabled = true;
+  submit.textContent = "Processing…";
+  setOperationFeedback(feedback, "Processing…", "processing");
+  const preventClose = (event) => event.preventDefault();
+  dialog.addEventListener("cancel", preventClose);
   try {
-    await render();
-    const current = currentState.registrations.find((entry) => entry.id === id);
+    return await send();
+  } catch {
+    return { ok: false, code: "OPERATION_OUTCOME_UNKNOWN" };
+  } finally {
+    submit.textContent = label;
+    close.disabled = false;
+    dialog.removeEventListener("cancel", preventClose);
+  }
+}
+
+async function reconcileOrganiserOperation(id, matches, result, feedback, dialog, successMessage) {
+  setOperationFeedback(feedback, "Checking the current entry…", "processing");
+  let message = "The change is not visible in the refreshed entry. The original request may still be running. Recheck the entry before taking further action.";
+  if (["REGISTRATION_WRITE_CONFLICT", "TRANSFER_ENTRY_CHANGED", "WITHDRAWAL_ENTRY_MISMATCH"].includes(result.code)) {
+    message = runnerMessageForCode(result.code);
+  }
+  try {
+    const snapshot = await prototype.all({ signal: AbortSignal.timeout(10_000) });
+    if (!snapshot.state) throw new Error("Snapshot unavailable");
+    const current = snapshot.state.registrations.find((entry) => entry.id === id);
     if (current && matches(current)) {
       dialog.close();
-      showNotice(successMessage + operationReference(result), true);
+      showOperationNotice(successMessage + operationReference(result), "warning");
+      await render().catch(() => {});
       return;
     }
-    error.textContent = "The change is not visible in the refreshed entry. The original request may still be running. Close this dialog and recheck the entry before taking further action.";
   } catch {
-    error.textContent = "The outcome and current entry could not be verified. Close this dialog and refresh places before taking further action.";
+    message = "The outcome and current entry could not be verified. Refresh places before taking further action.";
   }
-  error.textContent += operationReference(result);
-  error.hidden = false;
-  error.focus();
+  setOperationFeedback(feedback, message + operationReference(result), "warning");
+  feedback.focus();
 }
 
 async function render() {
@@ -367,6 +416,7 @@ function openCorrection(item) {
 }
 
 function openWithdrawal(item) {
+  document.querySelector("#operation-notice").hidden = true;
   pendingOrganiserWithdrawal = item;
   document.querySelector('#withdraw-entry-form button[type="submit"]').disabled = false;
   document.querySelector("#withdraw-entry-runner").textContent = `${item.runner.firstName} ${item.runner.lastName} · ${item.testReference}`;
@@ -459,6 +509,7 @@ function renderActions(item) {
 }
 
 function openTransferDialog(item) {
+  document.querySelector("#operation-notice").hidden = true;
   pendingTransfer = { id: item.id, runnerId: item.runnerId }; const form = document.querySelector("#organiser-transfer-form");
   form.querySelector('button[type="submit"]').disabled = false;
   const runner = item.runner; const values = { gender: "", firstName: runner.firstName, lastName: runner.lastName, email: runner.email, phone: runner.phone, addressLine1: runner.addressLine1, addressLine2: runner.addressLine2, city: runner.city, postcode: runner.postcode, dateOfBirth: runner.dateOfBirth, raceCategory: runner.raceCategory ?? runner.genderCategory, club: runner.club, wfraMember: runner.wfraMember ? "yes" : "no", wfraMembershipNumber: runner.wfraMembershipNumber, emergencyContactName: runner.emergencyName, emergencyContactPhone: runner.emergencyPhone };
@@ -546,43 +597,31 @@ document.querySelector("#withdraw-entry-form")?.addEventListener("submit", async
   const submit = form.querySelector('button[type="submit"]');
   if (submit.disabled) return;
   const dialog = form.closest("dialog");
-  const close = form.querySelector("#close-withdraw-entry");
-  const error = form.querySelector("#withdraw-entry-error");
-  const reason = document.querySelector("#withdraw-entry-reason").value.trim();
-  error.hidden = true;
-  submit.disabled = close.disabled = true;
-  const preventClose = (event) => event.preventDefault();
-  dialog.addEventListener("cancel", preventClose);
-  let result;
-  try {
-    result = await prototype.organiserWithdrawEntry(registrationId, reason, runner.email, runnerId);
-  } catch {
-    result = { ok: false, code: "OPERATION_OUTCOME_UNKNOWN" };
-  } finally {
-    close.disabled = false;
-    dialog.removeEventListener("cancel", preventClose);
+  const feedback = form.querySelector("#withdraw-entry-error");
+  const reason = form.elements.reason.value.trim();
+  const result = await runOrganiserOperation(form, feedback,
+    () => prototype.organiserWithdrawEntry(registrationId, reason, runner.email, runnerId));
+
+  if (!committedOperation(result, (entry) => entry.entryStatus === "withdrawn" && entry.placeStatus === "none")) {
+    if (uncertainOperation(result)) {
+      pendingOrganiserWithdrawal = null;
+      await reconcileOrganiserOperation(registrationId, (item) => item.runnerId === runnerId && item.entryStatus === "withdrawn" && item.placeStatus === "none",
+        result, feedback, dialog, "Withdrawal confirmed. The place was released. Email delivery is unverified.");
+      return;
+    }
+    submit.disabled = false;
+    setOperationFeedback(feedback, "Withdrawal failed. " + runnerMessageForCode(result.code) + operationReference(result), "error");
+    feedback.focus();
+    return;
   }
 
-  if (!result.ok && uncertainOperation(result)) {
-    pendingOrganiserWithdrawal = null;
-    await reconcileOrganiserOperation(registrationId, (item) => item.runnerId === runnerId && item.entryStatus === "withdrawn",
-      result, error, dialog, "The current entry confirms the place was released. Email delivery is unverified.");
-    return;
-  }
-  submit.disabled = false;
-  if (!result.ok) {
-    error.textContent = runnerMessageForCode(result.code) + operationReference(result);
-    error.hidden = false;
-    error.focus();
-    return;
-  }
   pendingOrganiserWithdrawal = null;
   dialog.close();
-  const notificationWarning = result.notificationDelivery && result.notificationDelivery !== "sent" || result.notificationDeliveryFailed;
-  showNotice((notificationWarning
-    ? "Place released. Withdrawal notification delivery needs review."
-    : "Place released. The withdrawal is recorded and any refund can be handled separately.") + operationReference(result), notificationWarning);
-  await render().catch(() => showNotice("Place released. Refresh places to see the updated list." + operationReference(result), true));
+  const warning = notificationNeedsReview(result);
+  const message = "Runner withdrawn successfully. The place has been released. No refund has been issued."
+    + (warning ? " Notification delivery requires attention." : result.notificationDelivery === "queued" ? " Notification email queued." : "");
+  showOperationNotice(message + operationReference(result), warning ? "warning" : "success");
+  await render().catch(() => {});
 });
 function openDirectPlace(item = null) {
   restoreSource = item;
@@ -774,54 +813,42 @@ document.querySelector("#organiser-transfer-form")?.addEventListener("submit", a
   if (!pendingTransfer || submit.disabled || !window.confirm("Transfer this race place to the replacement runner? The previous runner’s secure links and declaration will be revoked.")) return;
 
   const dialog = form.closest("dialog");
-  const close = form.querySelector("#close-transfer-entry");
-  const error = form.querySelector("#organiser-transfer-error");
+  const feedback = form.querySelector("#organiser-transfer-error");
   const { id, runnerId } = pendingTransfer;
   const data = Object.fromEntries(new FormData(form));
   data.wfraMember = data.wfraMember === "yes";
   const overrideCutoff = form.elements.overrideCutoff.checked;
   delete data.overrideCutoff;
+  const result = await runOrganiserOperation(form, feedback,
+    () => prototype.organiserTransfer(id, { runner: data, overrideCutoff, expectedRunnerId: runnerId }));
 
-  error.hidden = true;
-  submit.disabled = close.disabled = true;
-  const preventClose = (event) => event.preventDefault();
-  dialog.addEventListener("cancel", preventClose);
-  let result;
-  try {
-    result = await prototype.organiserTransfer(id, { runner: data, overrideCutoff, expectedRunnerId: runnerId });
-  } catch {
-    result = { ok: false, code: "TRANSFER_OUTCOME_UNKNOWN" };
-  } finally {
-    submit.disabled = close.disabled = false;
-    dialog.removeEventListener("cancel", preventClose);
-  }
-  if (!result.ok && uncertainOperation(result)) {
-    submit.disabled = true;
-    pendingTransfer = null;
-    await reconcileOrganiserOperation(id, (item) => item.runnerId !== runnerId
-      && item.runner.email.toLowerCase() === data.email.trim().toLowerCase()
-      && item.runner.firstName === data.firstName.trim() && item.runner.lastName === data.lastName.trim(),
-    result, error, dialog, "The current entry shows the replacement runner. Email delivery is unverified.");
-    return;
-  }
-  if (!result.ok) {
-    error.textContent = (Object.values(result.errors ?? {})[0] ?? (result.code === "ORGANISER_OVERRIDE_REQUIRED"
+  const isReplacement = (item) => item.placeStatus === "confirmed"
+    && item.runner.email.toLowerCase() === data.email.trim().toLowerCase()
+    && item.runner.firstName === data.firstName.trim() && item.runner.lastName === data.lastName.trim();
+  if (!committedOperation(result, isReplacement)) {
+    if (uncertainOperation(result)) {
+      pendingTransfer = null;
+      await reconcileOrganiserOperation(id, (item) => item.runnerId !== runnerId && isReplacement(item),
+        result, feedback, dialog, "Transfer confirmed. The replacement runner holds the place. Email delivery is unverified.");
+      return;
+    }
+    submit.disabled = false;
+    const reason = Object.values(result.errors ?? {})[0] ?? (result.code === "ORGANISER_OVERRIDE_REQUIRED"
       ? "The normal transfer cutoff has passed. Review the details and explicitly select the organiser cutoff override to proceed."
-      : runnerMessageForCode(result.code))) + operationReference(result);
-    error.hidden = false;
-    error.focus();
+      : runnerMessageForCode(result.code));
+    setOperationFeedback(feedback, "Transfer failed. " + reason + operationReference(result), "error");
+    feedback.focus();
     return;
   }
 
   pendingTransfer = null;
   dialog.close();
-  const replacementNeedsReview = result.replacementNotification && result.replacementNotification !== "sent";
-  const notificationWarning = replacementNeedsReview || result.notificationDelivery && result.notificationDelivery !== "sent";
-  const message = replacementNeedsReview
-    ? "Entry transferred. Delivery of the replacement runner’s secure links needs review."
-    : notificationWarning ? "Entry transferred and replacement links sent. The previous runner’s notification needs review."
-      : "Entry transferred. The race place was retained and the replacement runner now needs to sign their declaration.";
-  showNotice(message + operationReference(result), notificationWarning);
+  const warning = notificationNeedsReview(result);
+  const message = "Entry transferred successfully. The replacement runner now holds the existing race place."
+    + (warning ? " Notification delivery requires attention."
+      : result.replacementNotification === "queued" ? " Confirmation email queued." : " The replacement runner now needs to sign their declaration.");
+  showOperationNotice(message + operationReference(result), warning ? "warning" : "success");
   await render().catch(() => {});
 });
+document.querySelector("#dismiss-operation-notice")?.addEventListener("click", () => { document.querySelector("#operation-notice").hidden = true; });
 prototype.subscribe(() => render());
